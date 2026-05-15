@@ -1,0 +1,44 @@
+# Binaries
+agentdisk
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets
+config.local.yaml
+.env
+.env.local
+.env.production
+*.env
+!.env.example
+
+# Build
+/bin/
+/dist/
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+*.tmp

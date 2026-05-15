@@ -1,0 +1,58 @@
+package repository
+
+import (
+	"github.com/agentdisk/agent-disk/internal/model"
+	"gorm.io/gorm"
+)
+
+// ShareRepo provides data access for share and share-access-log operations.
+type ShareRepo struct {
+	db *gorm.DB
+}
+
+// NewShareRepo creates a new ShareRepo.
+func NewShareRepo(db *gorm.DB) *ShareRepo {
+	return &ShareRepo{db: db}
+}
+
+// Create inserts a new share record.
+func (r *ShareRepo) Create(s *model.DiskShare) error {
+	return r.db.Create(s).Error
+}
+
+// GetByCode returns a share record by its share code.
+func (r *ShareRepo) GetByCode(code string) (*model.DiskShare, error) {
+	var s model.DiskShare
+	if err := r.db.Where("share_code = ?", code).First(&s).Error; err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// GetByID returns a share record by its primary key.
+func (r *ShareRepo) GetByID(id uint64) (*model.DiskShare, error) {
+	var s model.DiskShare
+	if err := r.db.Where("id = ?", id).First(&s).Error; err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// Update saves changes to an existing share record.
+func (r *ShareRepo) Update(s *model.DiskShare) error {
+	return r.db.Save(s).Error
+}
+
+// ListByUser returns all share records for a specific user.
+func (r *ShareRepo) ListByUser(userID string) ([]model.DiskShare, error) {
+	var shares []model.DiskShare
+	err := r.db.Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Find(&shares).Error
+	return shares, err
+}
+
+// LogAccess inserts a share access log record.
+func (r *ShareRepo) LogAccess(log *model.ShareAccessLog) error {
+	return r.db.Create(log).Error
+}

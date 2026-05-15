@@ -1,0 +1,60 @@
+package repository
+
+import (
+	"github.com/agentdisk/agent-disk/internal/model"
+	"gorm.io/gorm"
+)
+
+// FolderRepo provides data access for disk folder operations.
+type FolderRepo struct {
+	db *gorm.DB
+}
+
+// NewFolderRepo creates a new FolderRepo.
+func NewFolderRepo(db *gorm.DB) *FolderRepo {
+	return &FolderRepo{db: db}
+}
+
+// Create inserts a new folder record.
+func (r *FolderRepo) Create(folder *model.DiskFolder) error {
+	return r.db.Create(folder).Error
+}
+
+// GetByID returns a folder by its primary key.
+func (r *FolderRepo) GetByID(id uint64) (*model.DiskFolder, error) {
+	var folder model.DiskFolder
+	if err := r.db.Where("id = ?", id).First(&folder).Error; err != nil {
+		return nil, err
+	}
+	return &folder, nil
+}
+
+// ListByParent returns all non-deleted folders under a given parent for a specific user.
+func (r *FolderRepo) ListByParent(userID string, parentID uint64) ([]model.DiskFolder, error) {
+	var folders []model.DiskFolder
+	err := r.db.Where("user_id = ? AND parent_id = ? AND is_deleted = ?", userID, parentID, false).
+		Order("sort_order ASC").
+		Find(&folders).Error
+	return folders, err
+}
+
+// Update saves changes to an existing folder record.
+func (r *FolderRepo) Update(folder *model.DiskFolder) error {
+	return r.db.Save(folder).Error
+}
+
+// SoftDelete marks a folder as deleted by setting is_deleted = true.
+func (r *FolderRepo) SoftDelete(id uint64) error {
+	return r.db.Model(&model.DiskFolder{}).
+		Where("id = ?", id).
+		Update("is_deleted", true).Error
+}
+
+// ListSubFolders returns all direct sub-folders of the given parent (including deleted).
+func (r *FolderRepo) ListSubFolders(parentID uint64) ([]model.DiskFolder, error) {
+	var folders []model.DiskFolder
+	err := r.db.Where("parent_id = ?", parentID).
+		Order("sort_order ASC").
+		Find(&folders).Error
+	return folders, err
+}

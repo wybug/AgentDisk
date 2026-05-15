@@ -1,0 +1,524 @@
+openapi: 3.0.3
+info:
+  title: AgentDisk API
+  description: OpenAI-style API for multi-agent cloud disk middleware
+  version: 1.0.0
+  contact:
+    name: AgentDisk
+  license:
+    name: Apache 2.0
+
+servers:
+  - url: http://localhost:8080/v1/disk
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+paths:
+  /space:
+    get:
+      summary: Get user disk space info
+      operationId: getSpace
+      tags: [Space]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+
+  /folders:
+    post:
+      summary: Create folder
+      operationId: createFolder
+      tags: [Folder]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [folderName]
+              properties:
+                parentId:
+                  type: integer
+                  format: uint64
+                  default: 0
+                folderName:
+                  type: string
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List folders
+      operationId: listFolders
+      tags: [Folder]
+      parameters:
+        - name: parentId
+          in: query
+          schema:
+            type: integer
+            format: uint64
+            default: 0
+      responses:
+        "200":
+          description: OK
+
+  /folders/{id}:
+    delete:
+      summary: Delete folder
+      operationId: deleteFolder
+      tags: [Folder]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+
+  /files/upload:
+    post:
+      summary: Upload file
+      operationId: uploadFile
+      tags: [File]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, folderId]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                folderId:
+                  type: integer
+                  format: uint64
+                agentId:
+                  type: string
+      responses:
+        "201":
+          description: Created
+
+  /files:
+    get:
+      summary: List files in folder
+      operationId: listFiles
+      tags: [File]
+      parameters:
+        - name: folderId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+
+  /files/{id}:
+    get:
+      summary: Get file info with presigned URL
+      operationId: getFile
+      tags: [File]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+    put:
+      summary: Update file (creates version snapshot)
+      operationId: updateFile
+      tags: [File]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: OK
+    delete:
+      summary: Delete file (move to recycle bin)
+      operationId: deleteFile
+      tags: [File]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+
+  /permissions:
+    post:
+      summary: Grant permission to agent
+      operationId: grantPermission
+      tags: [Permission]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId, resourceId, resType, permission]
+              properties:
+                agentId:
+                  type: string
+                resourceId:
+                  type: integer
+                  format: uint64
+                resType:
+                  type: string
+                  enum: [file, folder]
+                permission:
+                  type: string
+                  enum: [owner, read, write, delete]
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List or check permissions
+      operationId: listPermissions
+      tags: [Permission]
+      parameters:
+        - name: agentId
+          in: query
+          schema:
+            type: string
+        - name: resourceId
+          in: query
+          schema:
+            type: integer
+            format: uint64
+        - name: resType
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    delete:
+      summary: Revoke permission
+      operationId: revokePermission
+      tags: [Permission]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId, resourceId, resType]
+              properties:
+                agentId:
+                  type: string
+                resourceId:
+                  type: integer
+                  format: uint64
+                resType:
+                  type: string
+      responses:
+        "200":
+          description: OK
+
+  /versions:
+    get:
+      summary: List file versions
+      operationId: listVersions
+      tags: [Version]
+      parameters:
+        - name: fileId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+
+  /versions/rollback:
+    post:
+      summary: Rollback to specific version
+      operationId: rollbackVersion
+      tags: [Version]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileId, version]
+              properties:
+                fileId:
+                  type: integer
+                  format: uint64
+                version:
+                  type: integer
+      responses:
+        "200":
+          description: OK
+
+  /recycle:
+    get:
+      summary: List recycle bin items
+      operationId: listRecycle
+      tags: [Recycle]
+      responses:
+        "200":
+          description: OK
+    delete:
+      summary: Permanently delete item
+      operationId: deletePermanent
+      tags: [Recycle]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recycleId]
+              properties:
+                recycleId:
+                  type: integer
+                  format: uint64
+      responses:
+        "200":
+          description: OK
+
+  /recycle/restore:
+    post:
+      summary: Restore item from recycle bin
+      operationId: restoreItem
+      tags: [Recycle]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recycleId]
+              properties:
+                recycleId:
+                  type: integer
+                  format: uint64
+      responses:
+        "200":
+          description: OK
+
+  /tags/bind:
+    post:
+      summary: Bind tag to file
+      operationId: bindTag
+      tags: [Tag]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileId, tagName]
+              properties:
+                fileId:
+                  type: integer
+                  format: uint64
+                tagName:
+                  type: string
+      responses:
+        "200":
+          description: OK
+
+  /tags/unbind:
+    post:
+      summary: Unbind tag from file
+      operationId: unbindTag
+      tags: [Tag]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileId, tagName]
+              properties:
+                fileId:
+                  type: integer
+                  format: uint64
+                tagName:
+                  type: string
+      responses:
+        "200":
+          description: OK
+
+  /tags/search:
+    get:
+      summary: Search files by tags
+      operationId: searchByTags
+      tags: [Tag]
+      parameters:
+        - name: tags
+          in: query
+          required: true
+          description: Comma-separated tag names
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /shares:
+    post:
+      summary: Create share link
+      operationId: createShare
+      tags: [Share]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceId, resType]
+              properties:
+                resourceId:
+                  type: integer
+                  format: uint64
+                resType:
+                  type: string
+                  enum: [file, folder]
+                extractCode:
+                  type: string
+                maxVisit:
+                  type: integer
+                  default: -1
+                expireHours:
+                  type: integer
+                  default: 72
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List user shares
+      operationId: listShares
+      tags: [Share]
+      responses:
+        "200":
+          description: OK
+    delete:
+      summary: Revoke share
+      operationId: revokeShare
+      tags: [Share]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId]
+              properties:
+                shareId:
+                  type: integer
+                  format: uint64
+      responses:
+        "200":
+          description: OK
+
+  /share/{code}:
+    get:
+      summary: Get share info (public, no auth)
+      operationId: getShare
+      tags: [Share]
+      security: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /share/access:
+    post:
+      summary: Access shared resource (public, no auth)
+      operationId: accessShare
+      tags: [Share]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                extractCode:
+                  type: string
+      responses:
+        "200":
+          description: OK
+
+  /preview/{id}:
+    get:
+      summary: Preview file content
+      operationId: previewFile
+      tags: [Preview]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Response:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: "0 means success"
+        message:
+          type: string
+        data:
+          type: object

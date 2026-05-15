@@ -1,0 +1,67 @@
+version: "3.8"
+
+services:
+  agentdisk:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - DB_HOST=mysql
+      - DB_PASSWORD=${DB_PASSWORD:-agentdisk123}
+      - OSS_ENDPOINT=minio:9000
+      - OSS_ACCESS_KEY=${OSS_ACCESS_KEY:-minioadmin}
+      - OSS_SECRET_KEY=${OSS_SECRET_KEY:-minioadmin}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+    volumes:
+      - ../config.yaml:/app/config.yaml
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-agentdisk123}
+      MYSQL_DATABASE: agentdisk
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${OSS_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${OSS_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    profiles:
+      - redis
+
+volumes:
+  mysql_data:
+  minio_data:

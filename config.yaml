@@ -1,0 +1,37 @@
+server:
+  port: 8080
+  mode: release  # debug / release / test
+
+database:
+  driver: mysql   # mysql / sqlite
+  host: 172.20.6.37
+  port: 3306
+  name: agentdisk
+  user: root
+  # password: 通过环境变量 DB_PASSWORD 注入
+  max_idle_conns: 10
+  max_open_conns: 100
+  log_level: warn  # silent / error / warn / info
+
+oss:
+  endpoint: "172.20.6.37:9000"
+  # access_key: 通过环境变量 OSS_ACCESS_KEY 注入
+  # secret_key: 通过环境变量 OSS_SECRET_KEY 注入
+  bucket: "agentdisk"
+  use_ssl: false
+  region: "default"
+
+redis:
+  enabled: false
+  addr: "127.0.0.1:6379"
+  # password: 通过环境变量 REDIS_PASSWORD 注入
+  db: 0
+
+jwt:
+  # secret: 通过环境变量 JWT_SECRET 注入
+  expire_hours: 72
+
+log:
+  level: info      # debug / info / warn / error
+  output: stdout   # stdout / file
+  file_path: logs/agentdisk.log
