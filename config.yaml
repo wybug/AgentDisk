@@ -35,3 +35,19 @@ log:
   level: info      # debug / info / warn / error
   output: stdout   # stdout / file
   file_path: logs/agentdisk.log
+
+oauth2:
+  enabled: false              # 启用 OAuth2 Web 登录
+  # client_id: 通过环境变量 OAUTH2_CLIENT_ID 注入
+  # client_secret: 通过环境变量 OAUTH2_CLIENT_SECRET 注入
+  auth_url: ""                # 网关授权端点, 例: https://gateway.example.com/oauth2/authorize
+  token_url: ""               # 网关令牌端点, 例: https://gateway.example.com/oauth2/token
+  userinfo_url: ""            # 网关用户信息端点, 例: https://gateway.example.com/oauth2/userinfo
+  redirect_url: ""            # AgentDisk 回调地址, 例: https://disk.example.com/auth/callback
+  scopes:
+    - openid
+    - profile
+
+download_token:
+  # secret: 通过环境变量 DL_TOKEN_SECRET 注入
+  expire_seconds: 300         # 下载令牌有效期（秒）

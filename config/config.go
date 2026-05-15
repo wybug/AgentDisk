@@ -10,12 +10,14 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	OSS      OSSConfig      `mapstructure:"oss"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	Log      LogConfig      `mapstructure:"log"`
+	Server        ServerConfig        `mapstructure:"server"`
+	Database      DatabaseConfig      `mapstructure:"database"`
+	OSS           OSSConfig           `mapstructure:"oss"`
+	Redis         RedisConfig         `mapstructure:"redis"`
+	JWT           JWTConfig           `mapstructure:"jwt"`
+	Log           LogConfig           `mapstructure:"log"`
+	OAuth2        OAuth2Config        `mapstructure:"oauth2"`
+	DownloadToken DownloadTokenConfig `mapstructure:"download_token"`
 }
 
 type ServerConfig struct {
@@ -60,6 +62,22 @@ type LogConfig struct {
 	Level    string `mapstructure:"level"`
 	Output   string `mapstructure:"output"`
 	FilePath string `mapstructure:"file_path"`
+}
+
+type OAuth2Config struct {
+	Enabled      bool     `mapstructure:"enabled"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	AuthURL      string   `mapstructure:"auth_url"`
+	TokenURL     string   `mapstructure:"token_url"`
+	UserInfoURL  string   `mapstructure:"userinfo_url"`
+	RedirectURL  string   `mapstructure:"redirect_url"`
+	Scopes       []string `mapstructure:"scopes"`
+}
+
+type DownloadTokenConfig struct {
+	Secret        string `mapstructure:"secret"`
+	ExpireSeconds int    `mapstructure:"expire_seconds"`
 }
 
 func Load(path string) (*Config, error) {
@@ -128,5 +146,14 @@ func overrideFromEnv(cfg *Config) {
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
+	}
+	if v := os.Getenv("OAUTH2_CLIENT_ID"); v != "" {
+		cfg.OAuth2.ClientID = v
+	}
+	if v := os.Getenv("OAUTH2_CLIENT_SECRET"); v != "" {
+		cfg.OAuth2.ClientSecret = v
+	}
+	if v := os.Getenv("DL_TOKEN_SECRET"); v != "" {
+		cfg.DownloadToken.Secret = v
 	}
 }

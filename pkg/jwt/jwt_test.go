@@ -2,6 +2,8 @@ package jwt
 
 import (
 	"testing"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 const testSecret = "test-secret-key-for-unit-test"
@@ -53,5 +55,48 @@ func TestParseToken_EmptyAgentID(t *testing.T) {
 	}
 	if claims.AgentID != "" {
 		t.Errorf("expected empty agentId, got %s", claims.AgentID)
+	}
+}
+
+func TestParseToken_UnexpectedSigningMethod(t *testing.T) {
+	// Create a token with NONE signing method (not HMAC)
+	claims := Claims{
+		UserID:  "user_hack",
+		AgentID: "agent_hack",
+		RegisteredClaims: jwt.RegisteredClaims{},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodNone, claims)
+	tokenStr, _ := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+
+	_, err := ParseToken(testSecret, tokenStr)
+	if err == nil {
+		t.Fatal("should reject non-HMAC signing method")
+	}
+}
+
+func TestParseToken_EmptyToken(t *testing.T) {
+	_, err := ParseToken(testSecret, "")
+	if err == nil {
+		t.Fatal("should fail on empty token")
+	}
+}
+
+func TestParseToken_ExpiredToken(t *testing.T) {
+	token, _ := GenerateToken(testSecret, "user_expired", "", -1)
+	_, err := ParseToken(testSecret, token)
+	if err == nil {
+		t.Fatal("should fail on expired token")
+	}
+}
+
+func TestGenerateToken_DifferentUsers(t *testing.T) {
+	t1, _ := GenerateToken(testSecret, "user_a", "agent_1", 1)
+	t2, _ := GenerateToken(testSecret, "user_b", "agent_1", 1)
+
+	c1, _ := ParseToken(testSecret, t1)
+	c2, _ := ParseToken(testSecret, t2)
+
+	if c1.UserID == c2.UserID {
+		t.Error("different users should have different claims")
 	}
 }

@@ -1,19 +1,23 @@
 package handler
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/service"
+	"github.com/agentdisk/agent-disk/pkg/download_token"
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
 type FileHandler struct {
-	svc *service.FileService
+	svc        *service.FileService
+	dlSecret   string
+	dlExpire   int
 }
 
-func NewFileHandler(svc *service.FileService) *FileHandler {
-	return &FileHandler{svc: svc}
+func NewFileHandler(svc *service.FileService, dlSecret string, dlExpire int) *FileHandler {
+	return &FileHandler{svc: svc, dlSecret: dlSecret, dlExpire: dlExpire}
 }
 
 func (h *FileHandler) UploadFile(c *gin.Context) {
@@ -100,4 +104,63 @@ func (h *FileHandler) ListFiles(c *gin.Context) {
 		return
 	}
 	response.OK(c, files)
+}
+
+func (h *FileHandler) CreateDownloadToken(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid id")
+		return
+	}
+	userID := c.GetString("userId")
+
+	file, _, err := h.svc.GetFile(c.Request.Context(), userID, id)
+	if err != nil {
+		response.Forbidden(c, "file not found or no permission")
+		return
+	}
+
+	expire := h.dlExpire
+	if expire <= 0 {
+		expire = 300
+	}
+
+	token, err := download_token.Generate(h.dlSecret, userID, strconv.FormatUint(file.ID, 10), expire)
+	if err != nil {
+		response.InternalError(c, "failed to generate download token")
+		return
+	}
+
+	response.OK(c, gin.H{
+		"downloadToken": token,
+		"expiresIn":     expire,
+	})
+}
+
+func (h *FileHandler) DownloadByToken(c *gin.Context) {
+	dlToken := c.Query("t")
+	if dlToken == "" {
+		response.BadRequest(c, "download token required")
+		return
+	}
+
+	claims, err := download_token.Verify(h.dlSecret, dlToken)
+	if err != nil {
+		response.Unauthorized(c, err.Error())
+		return
+	}
+
+	userID := claims.UserID
+	fileID, _ := strconv.ParseUint(claims.FileID, 10, 64)
+
+	file, url, err := h.svc.GetFile(c.Request.Context(), userID, fileID)
+	if err != nil {
+		response.Forbidden(c, "file not found or no permission")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"file":        file,
+		"downloadUrl": url,
+	})
 }

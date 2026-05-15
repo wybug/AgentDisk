@@ -6,6 +6,7 @@ import (
 	"github.com/agentdisk/agent-disk/internal/middleware"
 	"github.com/agentdisk/agent-disk/internal/repository"
 	"github.com/agentdisk/agent-disk/internal/service"
+	"github.com/agentdisk/agent-disk/pkg/oauth2client"
 	"github.com/agentdisk/agent-disk/pkg/oss"
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -39,6 +40,21 @@ func Setup(cfg *config.Config) *gin.Engine {
 		panic("failed to create OSS client: " + err.Error())
 	}
 
+	// OAuth2 client (optional)
+	var authH *handler.AuthHandler
+	if cfg.OAuth2.Enabled {
+		oauthClient := oauth2client.New(oauth2client.Config{
+			ClientID:     cfg.OAuth2.ClientID,
+			ClientSecret: cfg.OAuth2.ClientSecret,
+			AuthURL:      cfg.OAuth2.AuthURL,
+			TokenURL:     cfg.OAuth2.TokenURL,
+			UserInfoURL:  cfg.OAuth2.UserInfoURL,
+			RedirectURL:  cfg.OAuth2.RedirectURL,
+			Scopes:       cfg.OAuth2.Scopes,
+		})
+		authH = handler.NewAuthHandler(oauthClient)
+	}
+
 	// Repos
 	spaceRepo := repository.NewSpaceRepo(db)
 	folderRepo := repository.NewFolderRepo(db)
@@ -63,7 +79,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// Handlers
 	spaceH := handler.NewSpaceHandler(spaceSvc)
 	folderH := handler.NewFolderHandler(folderSvc)
-	fileH := handler.NewFileHandler(fileSvc)
+	fileH := handler.NewFileHandler(fileSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
 	permH := handler.NewPermissionHandler(permSvc)
 	versionH := handler.NewVersionHandler(versionSvc)
 	recycleH := handler.NewRecycleHandler(recycleSvc)
@@ -71,9 +87,16 @@ func Setup(cfg *config.Config) *gin.Engine {
 	shareH := handler.NewShareHandler(shareSvc)
 	previewH := handler.NewPreviewHandler(previewSvc)
 
-	// API v1 group with JWT auth
+	// OAuth2 auth routes (public)
+	if authH != nil {
+		r.GET("/auth/login", authH.Login)
+		r.GET("/auth/callback", authH.Callback)
+		r.POST("/auth/logout", authH.Logout)
+	}
+
+	// API v1 group with hybrid auth
 	v1 := r.Group("/v1/disk")
-	v1.Use(middleware.JWTAuth(cfg.JWT.Secret))
+	v1.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret))
 	{
 		// Space
 		v1.GET("/space", spaceH.GetSpace)
@@ -89,6 +112,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 		v1.PUT("/files/:id", fileH.UpdateFile)
 		v1.DELETE("/files/:id", fileH.DeleteFile)
 		v1.GET("/files", fileH.ListFiles)
+		v1.POST("/files/:id/download-token", fileH.CreateDownloadToken)
 
 		// Permissions
 		v1.POST("/permissions", permH.GrantPermission)
@@ -119,9 +143,10 @@ func Setup(cfg *config.Config) *gin.Engine {
 		v1.GET("/preview/:id", previewH.PreviewFile)
 	}
 
-	// Public share access (no auth required)
+	// Public routes (no auth required)
 	r.GET("/v1/disk/share/:code", shareH.GetShare)
 	r.POST("/v1/disk/share/access", shareH.AccessShare)
+	r.GET("/v1/disk/files/download", fileH.DownloadByToken)
 
 	return r
 }
