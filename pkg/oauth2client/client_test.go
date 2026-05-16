@@ -203,7 +203,7 @@ func TestExtractUserIDFromToken_WithUserID(t *testing.T) {
 }
 
 func TestGetUserInfo_Non200(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("invalid token"))
 	}))
@@ -226,7 +226,7 @@ func TestGetUserInfo_Non200(t *testing.T) {
 }
 
 func TestGetUserInfo_InvalidJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("not json"))
 	}))

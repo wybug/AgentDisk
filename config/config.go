@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Config represents a configuration.
 type Config struct {
 	Server        ServerConfig        `mapstructure:"server"`
 	Database      DatabaseConfig      `mapstructure:"database"`
@@ -20,11 +21,13 @@ type Config struct {
 	DownloadToken DownloadTokenConfig `mapstructure:"download_token"`
 }
 
+// ServerConfig represents a serverconfiguration.
 type ServerConfig struct {
 	Port string `mapstructure:"port"`
 	Mode string `mapstructure:"mode"`
 }
 
+// DatabaseConfig represents a databaseconfiguration.
 type DatabaseConfig struct {
 	Driver       string `mapstructure:"driver"`
 	Host         string `mapstructure:"host"`
@@ -37,6 +40,7 @@ type DatabaseConfig struct {
 	LogLevel     string `mapstructure:"log_level"`
 }
 
+// OSSConfig represents a ossconfiguration.
 type OSSConfig struct {
 	Endpoint  string `mapstructure:"endpoint"`
 	AccessKey string `mapstructure:"access_key"`
@@ -46,6 +50,7 @@ type OSSConfig struct {
 	Region    string `mapstructure:"region"`
 }
 
+// RedisConfig represents a redisconfiguration.
 type RedisConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	Addr     string `mapstructure:"addr"`
@@ -53,17 +58,20 @@ type RedisConfig struct {
 	DB       int    `mapstructure:"db"`
 }
 
+// JWTConfig represents a jwtconfiguration.
 type JWTConfig struct {
 	Secret      string `mapstructure:"secret"`
 	ExpireHours int    `mapstructure:"expire_hours"`
 }
 
+// LogConfig represents a logconfiguration.
 type LogConfig struct {
 	Level    string `mapstructure:"level"`
 	Output   string `mapstructure:"output"`
 	FilePath string `mapstructure:"file_path"`
 }
 
+// OAuth2Config represents a oauth2configuration.
 type OAuth2Config struct {
 	Enabled      bool     `mapstructure:"enabled"`
 	ClientID     string   `mapstructure:"client_id"`
@@ -75,11 +83,13 @@ type OAuth2Config struct {
 	Scopes       []string `mapstructure:"scopes"`
 }
 
+// DownloadTokenConfig represents a downloadtokenconfiguration.
 type DownloadTokenConfig struct {
 	Secret        string `mapstructure:"secret"`
 	ExpireSeconds int    `mapstructure:"expire_seconds"`
 }
 
+// Load handles HTTP requests.
 func Load(path string) (*Config, error) {
 	loadDotEnv()
 
@@ -107,7 +117,7 @@ func loadDotEnv() {
 	if err != nil {
 		return // .env is optional
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -122,7 +132,7 @@ func loadDotEnv() {
 		k = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
 		if os.Getenv(k) == "" { // real env vars take precedence over .env
-			os.Setenv(k, v)
+			_ = os.Setenv(k, v)
 		}
 	}
 	if err := scanner.Err(); err != nil {

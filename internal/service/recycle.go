@@ -10,6 +10,7 @@ import (
 	"github.com/agentdisk/agent-disk/pkg/oss"
 )
 
+// RecycleService represents a domain type.
 type RecycleService struct {
 	recycleRepo *repository.RecycleRepo
 	fileRepo    *repository.FileRepo
@@ -17,10 +18,12 @@ type RecycleService struct {
 	ossClient   *oss.Client
 }
 
+// NewRecycleService creates a new RecycleService.
 func NewRecycleService(recycleRepo *repository.RecycleRepo, fileRepo *repository.FileRepo, folderRepo *repository.FolderRepo, ossClient *oss.Client) *RecycleService {
 	return &RecycleService{recycleRepo: recycleRepo, fileRepo: fileRepo, folderRepo: folderRepo, ossClient: ossClient}
 }
 
+// MoveToRecycle handles the request.
 func (s *RecycleService) MoveToRecycle(userID string, resourceID uint64, resType, operator string) error {
 	var name, origPath string
 	switch resType {
@@ -51,10 +54,12 @@ func (s *RecycleService) MoveToRecycle(userID string, resourceID uint64, resType
 	return s.recycleRepo.Create(record)
 }
 
+// ListRecycle handles the request.
 func (s *RecycleService) ListRecycle(userID string) ([]model.DiskRecycleBin, error) {
 	return s.recycleRepo.ListByUser(userID)
 }
 
+// Restore handles the request.
 func (s *RecycleService) Restore(userID string, recycleID uint64) error {
 	item, err := s.recycleRepo.GetByID(recycleID)
 	if err != nil {
@@ -67,6 +72,7 @@ func (s *RecycleService) Restore(userID string, recycleID uint64) error {
 	return s.recycleRepo.Delete(recycleID)
 }
 
+// PermanentlyDelete handles the request.
 func (s *RecycleService) PermanentlyDelete(ctx context.Context, userID string, recycleID uint64) error {
 	item, err := s.recycleRepo.GetByID(recycleID)
 	if err != nil {
@@ -79,7 +85,7 @@ func (s *RecycleService) PermanentlyDelete(ctx context.Context, userID string, r
 	if item.ResType == "file" {
 		f, err := s.fileRepo.GetByID(item.ResourceID)
 		if err == nil {
-			_ = s.ossClient.Delete(ctx, f.OSSKey)
+			_ = s.ossClient.Delete(ctx, f.OSSKey) // best-effort physical delete
 		}
 	}
 	return s.recycleRepo.Delete(recycleID)

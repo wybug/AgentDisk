@@ -8,20 +8,24 @@ import (
 	"github.com/agentdisk/agent-disk/pkg/oss"
 )
 
+// PreviewService represents a domain type.
 type PreviewService struct {
 	fileSvc   *FileService
 	ossClient *oss.Client
 }
 
+// NewPreviewService creates a new PreviewService.
 func NewPreviewService(fileSvc *FileService, ossClient *oss.Client) *PreviewService {
 	return &PreviewService{fileSvc: fileSvc, ossClient: ossClient}
 }
 
+// PreviewResult represents a domain type.
 type PreviewResult struct {
 	FileType string `json:"fileType"`
 	URL      string `json:"url"`
 }
 
+// Preview handles the request.
 func (s *PreviewService) Preview(ctx context.Context, userID string, fileID uint64) (*PreviewResult, error) {
 	file, url, err := s.fileSvc.GetFile(ctx, userID, fileID)
 	if err != nil {

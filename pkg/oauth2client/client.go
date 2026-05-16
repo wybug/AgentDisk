@@ -13,16 +13,19 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// UserInfo represents a userinfo.
 type UserInfo struct {
 	UserID   string `json:"userId"`
 	UserName string `json:"userName,omitempty"`
 }
 
+// OAuthClient represents a oauthclient.
 type OAuthClient struct {
-	config     *oauth2.Config
+	config      *oauth2.Config
 	userInfoURL string
 }
 
+// Config represents a configuration.
 type Config struct {
 	ClientID     string
 	ClientSecret string
@@ -33,6 +36,7 @@ type Config struct {
 	Scopes       []string
 }
 
+// New creates a new  instance.
 func New(cfg Config) *OAuthClient {
 	scopes := cfg.Scopes
 	if len(scopes) == 0 {
@@ -54,6 +58,7 @@ func New(cfg Config) *OAuthClient {
 	}
 }
 
+// AuthCodeURL handles the AuthCodeURL endpoint.
 func (c *OAuthClient) AuthCodeURL(state, codeVerifier string, promptNone bool) string {
 	opts := []oauth2.AuthCodeOption{
 		oauth2.SetAuthURLParam("code_challenge", codeVerifier),
@@ -65,19 +70,21 @@ func (c *OAuthClient) AuthCodeURL(state, codeVerifier string, promptNone bool) s
 	return c.config.AuthCodeURL(state, opts...)
 }
 
+// Exchange handles the Exchange endpoint.
 func (c *OAuthClient) Exchange(ctx context.Context, code, codeVerifier string) (*oauth2.Token, error) {
 	return c.config.Exchange(ctx, code,
 		oauth2.SetAuthURLParam("code_verifier", codeVerifier),
 	)
 }
 
+// GetUserInfo handles the GetUserInfo endpoint.
 func (c *OAuthClient) GetUserInfo(ctx context.Context, token *oauth2.Token) (*UserInfo, error) {
 	client := c.config.Client(ctx, token)
 	resp, err := client.Get(c.userInfoURL)
 	if err != nil {
 		return nil, fmt.Errorf("get userinfo: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -91,6 +98,7 @@ func (c *OAuthClient) GetUserInfo(ctx context.Context, token *oauth2.Token) (*Us
 	return &ui, nil
 }
 
+// GenerateCodeVerifier handles HTTP requests.
 func GenerateCodeVerifier() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -99,11 +107,13 @@ func GenerateCodeVerifier() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// GenerateCodeChallenge handles HTTP requests.
 func GenerateCodeChallenge(verifier string) string {
 	h := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 
+// GenerateState handles HTTP requests.
 func GenerateState() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -112,6 +122,7 @@ func GenerateState() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// ExtractUserIDFromToken handles HTTP requests.
 func ExtractUserIDFromToken(token *oauth2.Token) string {
 	if token == nil {
 		return ""

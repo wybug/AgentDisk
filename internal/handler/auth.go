@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Session is a core domain type.
 type Session struct {
 	UserID    string `json:"userId"`
 	UserName  string `json:"userName,omitempty"`
@@ -20,13 +21,15 @@ type Session struct {
 	ExpiresAt int64  `json:"expiresAt"`
 }
 
+// AuthHandler is a core domain type.
 type AuthHandler struct {
-	oauthClient *oauth2client.OAuthClient
-	sessions    map[string]*Session // In production, use Redis
-	cookieName  string
+	oauthClient  *oauth2client.OAuthClient
+	sessions     map[string]*Session // In production, use Redis
+	cookieName   string
 	cookieMaxAge int
 }
 
+// NewAuthHandler creates and returns a new AuthHandler.
 func NewAuthHandler(oauthClient *oauth2client.OAuthClient) *AuthHandler {
 	return &AuthHandler{
 		oauthClient:  oauthClient,
@@ -36,6 +39,7 @@ func NewAuthHandler(oauthClient *oauth2client.OAuthClient) *AuthHandler {
 	}
 }
 
+// Login executes the Login use case.
 func (h *AuthHandler) Login(c *gin.Context) {
 	if h.oauthClient == nil {
 		response.InternalError(c, "OAuth2 not configured")
@@ -56,21 +60,24 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	promptNone := c.Query("prompt") == "none" || c.Query("from") == "gateway"
 
-	challenge := oauth2client.GenerateCodeChallenge(verifier)
-	_ = challenge
-
+	_ = oauth2client.GenerateCodeChallenge(verifier)
 	authURL := h.oauthClient.AuthCodeURL(state, verifier, promptNone)
 
 	// Store state and verifier in short-lived cookie for CSRF protection
-	stateData, _ := json.Marshal(map[string]string{
+	stateData, err := json.Marshal(map[string]string{
 		"state":    state,
 		"verifier": verifier,
 	})
+	if err != nil {
+		response.InternalError(c, "failed to encode state")
+		return
+	}
 	c.SetCookie("oauth2_state", base64.RawURLEncoding.EncodeToString(stateData), 600, "/", "", false, true)
 
 	c.Redirect(http.StatusFound, authURL)
 }
 
+// Callback handles the request.
 func (h *AuthHandler) Callback(c *gin.Context) {
 	if h.oauthClient == nil {
 		response.InternalError(c, "OAuth2 not configured")
@@ -95,18 +102,22 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 
 	stateParam := c.Query("state")
-	stateCookie, err := c.Cookie("oauth2_state")
-	if err != nil {
+	stateCookie, cookieErr := c.Cookie("oauth2_state")
+	if cookieErr != nil {
 		response.BadRequest(c, "missing state cookie")
 		return
 	}
 
-	stateDataBytes, _ := base64.RawURLEncoding.DecodeString(stateCookie)
+	stateDataBytes, err := base64.RawURLEncoding.DecodeString(stateCookie)
+	if err != nil {
+		response.BadRequest(c, "invalid state cookie")
+		return
+	}
 	var stateData struct {
 		State    string `json:"state"`
 		Verifier string `json:"verifier"`
 	}
-	if err := json.Unmarshal(stateDataBytes, &stateData); err != nil {
+	if jsonErr := json.Unmarshal(stateDataBytes, &stateData); jsonErr != nil {
 		response.BadRequest(c, "invalid state data")
 		return
 	}
@@ -144,6 +155,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/")
 }
 
+// Logout handles the request.
 func (h *AuthHandler) Logout(c *gin.Context) {
 	sessionID, err := c.Cookie(h.cookieName)
 	if err == nil && sessionID != "" {
@@ -153,6 +165,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	response.OK(c, gin.H{"message": "logged out"})
 }
 
+// GetSession handles the request.
 func (h *AuthHandler) GetSession(sessionID string) *Session {
 	sess, ok := h.sessions[sessionID]
 	if !ok {
@@ -167,6 +180,8 @@ func (h *AuthHandler) GetSession(sessionID string) *Session {
 
 func generateSessionID() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }

@@ -9,14 +9,17 @@ import (
 	"github.com/agentdisk/agent-disk/internal/repository"
 )
 
+// ShareService represents a domain type.
 type ShareService struct {
 	repo *repository.ShareRepo
 }
 
+// NewShareService creates a new ShareService.
 func NewShareService(repo *repository.ShareRepo) *ShareService {
 	return &ShareService{repo: repo}
 }
 
+// CreateShare handles the request.
 func (s *ShareService) CreateShare(userID string, resourceID uint64, resType, extractCode string, maxVisit, expireHours int) (*model.DiskShare, error) {
 	code, err := generateShareCode()
 	if err != nil {
@@ -38,6 +41,7 @@ func (s *ShareService) CreateShare(userID string, resourceID uint64, resType, ex
 	return share, nil
 }
 
+// GetShareByCode handles the request.
 func (s *ShareService) GetShareByCode(code string) (*model.DiskShare, error) {
 	share, err := s.repo.GetByCode(code)
 	if err != nil {
@@ -49,6 +53,7 @@ func (s *ShareService) GetShareByCode(code string) (*model.DiskShare, error) {
 	return share, nil
 }
 
+// AccessShare handles the request.
 func (s *ShareService) AccessShare(code, extractCode, visitorIP, ua string) (*model.DiskShare, error) {
 	share, err := s.GetShareByCode(code)
 	if err != nil {
@@ -61,16 +66,21 @@ func (s *ShareService) AccessShare(code, extractCode, visitorIP, ua string) (*mo
 		return nil, fmt.Errorf("max visit limit reached")
 	}
 	share.VisitCount++
-	_ = s.repo.Update(share)
-	_ = s.repo.LogAccess(&model.ShareAccessLog{
+	if err := s.repo.Update(share); err != nil {
+		return nil, fmt.Errorf("update share visit count: %w", err)
+	}
+	if err := s.repo.LogAccess(&model.ShareAccessLog{
 		ShareID:   share.ID,
 		VisitorIP: visitorIP,
 		UserAgent: ua,
 		Action:    "access",
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("log access: %w", err)
+	}
 	return share, nil
 }
 
+// RevokeShare handles the request.
 func (s *ShareService) RevokeShare(userID string, shareID uint64) error {
 	share, err := s.repo.GetByID(shareID)
 	if err != nil {
@@ -83,6 +93,7 @@ func (s *ShareService) RevokeShare(userID string, shareID uint64) error {
 	return s.repo.Update(share)
 }
 
+// ListShares handles the request.
 func (s *ShareService) ListShares(userID string) ([]model.DiskShare, error) {
 	return s.repo.ListByUser(userID)
 }

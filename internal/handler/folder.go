@@ -8,19 +8,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// FolderHandler is a core domain type.
 type FolderHandler struct {
 	svc *service.FolderService
 }
 
+// NewFolderHandler creates and returns a new FolderHandler.
 func NewFolderHandler(svc *service.FolderService) *FolderHandler {
 	return &FolderHandler{svc: svc}
 }
 
+// CreateFolderReq is a core domain type.
 type CreateFolderReq struct {
 	ParentID   uint64 `json:"parentId"`
 	FolderName string `json:"folderName" binding:"required"`
 }
 
+// CreateFolder executes the CreateFolder use case.
 func (h *FolderHandler) CreateFolder(c *gin.Context) {
 	var req CreateFolderReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -36,9 +40,13 @@ func (h *FolderHandler) CreateFolder(c *gin.Context) {
 	response.Created(c, folder)
 }
 
+// ListFolders executes the ListFolders use case.
 func (h *FolderHandler) ListFolders(c *gin.Context) {
 	userID := c.GetString("userId")
-	parentID, _ := strconv.ParseUint(c.DefaultQuery("parentId", "0"), 10, 64)
+	parentID, err := strconv.ParseUint(c.DefaultQuery("parentId", "0"), 10, 64)
+	if err != nil {
+		parentID = 0
+	}
 	folders, err := h.svc.ListFolders(userID, parentID)
 	if err != nil {
 		response.InternalError(c, err.Error())
@@ -47,6 +55,7 @@ func (h *FolderHandler) ListFolders(c *gin.Context) {
 	response.OK(c, folders)
 }
 
+// DeleteFolder executes the DeleteFolder use case.
 func (h *FolderHandler) DeleteFolder(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {

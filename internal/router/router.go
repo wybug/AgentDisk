@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Setup handles the operation.
 func Setup(cfg *config.Config) *gin.Engine {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
@@ -97,51 +98,49 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// API v1 group with hybrid auth
 	v1 := r.Group("/v1/disk")
 	v1.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret))
-	{
-		// Space
-		v1.GET("/space", spaceH.GetSpace)
+	// Space
+	v1.GET("/space", spaceH.GetSpace)
 
-		// Folders
-		v1.POST("/folders", folderH.CreateFolder)
-		v1.GET("/folders", folderH.ListFolders)
-		v1.DELETE("/folders/:id", folderH.DeleteFolder)
+	// Folders
+	v1.POST("/folders", folderH.CreateFolder)
+	v1.GET("/folders", folderH.ListFolders)
+	v1.DELETE("/folders/:id", folderH.DeleteFolder)
 
-		// Files
-		v1.POST("/files/upload", fileH.UploadFile)
-		v1.GET("/files/:id", fileH.GetFile)
-		v1.PUT("/files/:id", fileH.UpdateFile)
-		v1.DELETE("/files/:id", fileH.DeleteFile)
-		v1.GET("/files", fileH.ListFiles)
-		v1.POST("/files/:id/download-token", fileH.CreateDownloadToken)
+	// Files
+	v1.POST("/files/upload", fileH.UploadFile)
+	v1.GET("/files/:id", fileH.GetFile)
+	v1.PUT("/files/:id", fileH.UpdateFile)
+	v1.DELETE("/files/:id", fileH.DeleteFile)
+	v1.GET("/files", fileH.ListFiles)
+	v1.POST("/files/:id/download-token", fileH.CreateDownloadToken)
 
-		// Permissions
-		v1.POST("/permissions", permH.GrantPermission)
-		v1.GET("/permissions/check", permH.CheckPermission)
-		v1.DELETE("/permissions", permH.RevokePermission)
-		v1.GET("/permissions", permH.ListPermissions)
+	// Permissions
+	v1.POST("/permissions", permH.GrantPermission)
+	v1.GET("/permissions/check", permH.CheckPermission)
+	v1.DELETE("/permissions", permH.RevokePermission)
+	v1.GET("/permissions", permH.ListPermissions)
 
-		// Versions
-		v1.GET("/versions", versionH.ListVersions)
-		v1.POST("/versions/rollback", versionH.RollbackVersion)
+	// Versions
+	v1.GET("/versions", versionH.ListVersions)
+	v1.POST("/versions/rollback", versionH.RollbackVersion)
 
-		// Recycle bin
-		v1.GET("/recycle", recycleH.ListRecycle)
-		v1.POST("/recycle/restore", recycleH.RestoreItem)
-		v1.DELETE("/recycle", recycleH.DeletePermanent)
+	// Recycle bin
+	v1.GET("/recycle", recycleH.ListRecycle)
+	v1.POST("/recycle/restore", recycleH.RestoreItem)
+	v1.DELETE("/recycle", recycleH.DeletePermanent)
 
-		// Tags
-		v1.POST("/tags/bind", tagH.BindTag)
-		v1.POST("/tags/unbind", tagH.UnbindTag)
-		v1.GET("/tags/search", tagH.SearchByTags)
+	// Tags
+	v1.POST("/tags/bind", tagH.BindTag)
+	v1.POST("/tags/unbind", tagH.UnbindTag)
+	v1.GET("/tags/search", tagH.SearchByTags)
 
-		// Shares
-		v1.POST("/shares", shareH.CreateShare)
-		v1.GET("/shares", shareH.ListShares)
-		v1.DELETE("/shares", shareH.RevokeShare)
+	// Shares
+	v1.POST("/shares", shareH.CreateShare)
+	v1.GET("/shares", shareH.ListShares)
+	v1.DELETE("/shares", shareH.RevokeShare)
 
-		// Preview
-		v1.GET("/preview/:id", previewH.PreviewFile)
-	}
+	// Preview
+	v1.GET("/preview/:id", previewH.PreviewFile)
 
 	// Public routes (no auth required)
 	r.GET("/v1/disk/share/:code", shareH.GetShare)

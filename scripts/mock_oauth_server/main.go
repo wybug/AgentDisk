@@ -24,8 +24,7 @@ func main() {
 		log.Printf("[mock] authorize: prompt=%s state=%s", prompt, state)
 
 		if prompt == "none" {
-			// Simulate: user not logged in
-			// Change to test the happy path by commenting out the error return
+			log.Printf("[mock] prompt=none: auto-approve (user not logged in simulation)")
 		}
 
 		code := "mock_code_for_" + *defaultUserID
@@ -34,7 +33,7 @@ func main() {
 	})
 
 	// /oauth2/token — return mock access token
-	mux.HandleFunc("/oauth2/token", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/oauth2/token", func(w http.ResponseWriter, _ *http.Request) {
 		log.Printf("[mock] token exchange")
 
 		w.Header().Set("Content-Type", "application/json")
@@ -47,7 +46,7 @@ func main() {
 	})
 
 	// /oauth2/userinfo — return mock user info
-	mux.HandleFunc("/oauth2/userinfo", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/oauth2/userinfo", func(w http.ResponseWriter, _ *http.Request) {
 		log.Printf("[mock] userinfo")
 
 		w.Header().Set("Content-Type", "application/json")

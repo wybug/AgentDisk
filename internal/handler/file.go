@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/service"
@@ -10,19 +9,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// FileHandler represents a domain type.
 type FileHandler struct {
-	svc        *service.FileService
-	dlSecret   string
-	dlExpire   int
+	svc      *service.FileService
+	dlSecret string
+	dlExpire int
 }
 
+// NewFileHandler creates a new FileHandler.
 func NewFileHandler(svc *service.FileService, dlSecret string, dlExpire int) *FileHandler {
 	return &FileHandler{svc: svc, dlSecret: dlSecret, dlExpire: dlExpire}
 }
 
+// UploadFile handles the request.
 func (h *FileHandler) UploadFile(c *gin.Context) {
 	userID := c.GetString("userId")
-	folderID, _ := strconv.ParseUint(c.PostForm("folderId"), 10, 64)
+	folderID, err := strconv.ParseUint(c.PostForm("folderId"), 10, 64)
+	if err != nil {
+		folderID = 0
+	}
 	agentID := c.PostForm("agentId")
 
 	file, header, err := c.Request.FormFile("file")
@@ -30,7 +35,7 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 		response.BadRequest(c, "file required")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	result, err := h.svc.UploadFile(c.Request.Context(), userID, folderID, header.Filename, file, header.Size, header.Header.Get("Content-Type"), agentID)
 	if err != nil {
@@ -40,6 +45,7 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 	response.Created(c, result)
 }
 
+// GetFile handles the request.
 func (h *FileHandler) GetFile(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -55,6 +61,7 @@ func (h *FileHandler) GetFile(c *gin.Context) {
 	response.OK(c, gin.H{"file": file, "url": url})
 }
 
+// UpdateFile handles the request.
 func (h *FileHandler) UpdateFile(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -67,7 +74,7 @@ func (h *FileHandler) UpdateFile(c *gin.Context) {
 		response.BadRequest(c, "file required")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	result, err := h.svc.UpdateFile(c.Request.Context(), userID, id, file, header.Size, header.Header.Get("Content-Type"))
 	if err != nil {
@@ -77,6 +84,7 @@ func (h *FileHandler) UpdateFile(c *gin.Context) {
 	response.OK(c, result)
 }
 
+// DeleteFile handles the request.
 func (h *FileHandler) DeleteFile(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -91,6 +99,7 @@ func (h *FileHandler) DeleteFile(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// ListFiles handles the request.
 func (h *FileHandler) ListFiles(c *gin.Context) {
 	userID := c.GetString("userId")
 	folderID, err := strconv.ParseUint(c.Query("folderId"), 10, 64)
@@ -106,6 +115,7 @@ func (h *FileHandler) ListFiles(c *gin.Context) {
 	response.OK(c, files)
 }
 
+// CreateDownloadToken handles the request.
 func (h *FileHandler) CreateDownloadToken(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -137,8 +147,9 @@ func (h *FileHandler) CreateDownloadToken(c *gin.Context) {
 	})
 }
 
+// DownloadByToken handles the request.
 func (h *FileHandler) DownloadByToken(c *gin.Context) {
-	dlToken := c.Query("t")
+	dlToken := c.Query("token")
 	if dlToken == "" {
 		response.BadRequest(c, "download token required")
 		return
@@ -151,7 +162,11 @@ func (h *FileHandler) DownloadByToken(c *gin.Context) {
 	}
 
 	userID := claims.UserID
-	fileID, _ := strconv.ParseUint(claims.FileID, 10, 64)
+	fileID, err := strconv.ParseUint(claims.FileID, 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid file ID in token")
+		return
+	}
 
 	file, url, err := h.svc.GetFile(c.Request.Context(), userID, fileID)
 	if err != nil {
@@ -159,7 +174,7 @@ func (h *FileHandler) DownloadByToken(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.OK(c, gin.H{
 		"file":        file,
 		"downloadUrl": url,
 	})

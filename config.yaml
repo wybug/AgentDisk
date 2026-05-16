@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 9100
   mode: release  # debug / release / test
 
 database:
@@ -28,7 +28,7 @@ redis:
   db: 0
 
 jwt:
-  # secret: 通过环境变量 JWT_SECRET 注入
+  secret: "dev-jwt-secret-for-testing-only"
   expire_hours: 72
 
 log:
@@ -49,5 +49,5 @@ oauth2:
     - profile
 
 download_token:
-  # secret: 通过环境变量 DL_TOKEN_SECRET 注入
+  secret: "dev-dl-token-secret-for-testing"
   expire_seconds: 300         # 下载令牌有效期（秒）

@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// Claims represents a claims.
 type Claims struct {
 	UserID   string `json:"uid"`
 	FileID   string `json:"fid"`
@@ -21,12 +22,17 @@ type Claims struct {
 }
 
 var (
-	ErrInvalidToken   = errors.New("invalid download token")
-	ErrExpiredToken   = errors.New("download token expired")
-	ErrInvalidFormat  = errors.New("invalid token format")
+	// ErrInvalidToken is a sentinel error.
+	ErrInvalidToken = errors.New("invalid download token")
+	// ErrExpiredToken is a sentinel error.
+	ErrExpiredToken = errors.New("download token expired")
+	// ErrInvalidFormat is a sentinel error.
+	ErrInvalidFormat = errors.New("invalid token format")
+	// ErrInvalidSignature is a sentinel error.
 	ErrInvalidSignature = errors.New("invalid token signature")
 )
 
+// Generate handles HTTP requests.
 func Generate(secret, userID, fileID string, expireSeconds int) (string, error) {
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
@@ -53,6 +59,7 @@ func Generate(secret, userID, fileID string, expireSeconds int) (string, error) 
 	return payloadB64 + "." + sig, nil
 }
 
+// Verify handles HTTP requests.
 func Verify(secret, token string) (*Claims, error) {
 	parts := strings.SplitN(token, ".", 2)
 	if len(parts) != 2 {

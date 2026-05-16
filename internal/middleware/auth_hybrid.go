@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// HybridAuth provides core functionality.
 func HybridAuth(
 	jwtSecret string,
 	authHandler *handler.AuthHandler,

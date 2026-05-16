@@ -9,16 +9,19 @@ import (
 	"github.com/agentdisk/agent-disk/pkg/oss"
 )
 
+// VersionService represents a domain type.
 type VersionService struct {
 	versionRepo *repository.VersionRepo
 	fileRepo    *repository.FileRepo
 	ossClient   *oss.Client
 }
 
+// NewVersionService creates a new VersionService.
 func NewVersionService(versionRepo *repository.VersionRepo, fileRepo *repository.FileRepo, ossClient *oss.Client) *VersionService {
 	return &VersionService{versionRepo: versionRepo, fileRepo: fileRepo, ossClient: ossClient}
 }
 
+// ListVersions handles the request.
 func (s *VersionService) ListVersions(userID string, fileID uint64) ([]model.DiskFileVersion, error) {
 	file, err := s.fileRepo.GetByID(fileID)
 	if err != nil {
@@ -30,6 +33,7 @@ func (s *VersionService) ListVersions(userID string, fileID uint64) ([]model.Dis
 	return s.versionRepo.ListByFile(fileID)
 }
 
+// Rollback handles the request.
 func (s *VersionService) Rollback(ctx context.Context, userID string, fileID uint64, targetVersion int) error {
 	file, err := s.fileRepo.GetByID(fileID)
 	if err != nil {

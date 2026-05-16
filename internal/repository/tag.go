@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+
 	"github.com/agentdisk/agent-disk/internal/model"
 	"gorm.io/gorm"
 )
@@ -21,13 +23,13 @@ func (r *TagRepo) CreateTag(tag *model.DiskTag) error {
 }
 
 // FindOrCreate returns an existing tag for the user with the given name, or creates one.
-func (r *TagRepo) FindOrCreate(userID string, name string) (*model.DiskTag, error) {
+func (r *TagRepo) FindOrCreate(userID, name string) (*model.DiskTag, error) {
 	var tag model.DiskTag
 	err := r.db.Where("user_id = ? AND tag_name = ?", userID, name).First(&tag).Error
 	if err == nil {
 		return &tag, nil
 	}
-	if err != gorm.ErrRecordNotFound {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 
@@ -59,8 +61,8 @@ func (r *TagRepo) UnbindFile(tagID, fileID uint64) error {
 // ListByFile returns all tags associated with a given file.
 func (r *TagRepo) ListByFile(fileID uint64) ([]model.DiskTag, error) {
 	var tags []model.DiskTag
-	err := r.db.Joins("JOIN disk_tag_relations ON disk_tag_relations.tag_id = disk_tags.id").
-		Where("disk_tag_relations.file_id = ?", fileID).
+	err := r.db.Joins("JOIN disk_tag_relation ON disk_tag_relation.tag_id = disk_tag.id").
+		Where("disk_tag_relation.file_id = ?", fileID).
 		Find(&tags).Error
 	return tags, err
 }
@@ -78,10 +80,10 @@ func (r *TagRepo) ListByUser(userID string) ([]model.DiskTag, error) {
 // and belong to the specified user.
 func (r *TagRepo) SearchFiles(userID string, tagIDs []uint64) ([]model.DiskFile, error) {
 	var files []model.DiskFile
-	err := r.db.Joins("JOIN disk_tag_relations ON disk_tag_relations.file_id = disk_files.id").
-		Where("disk_files.user_id = ? AND disk_files.is_deleted = ? AND disk_tag_relations.tag_id IN ?", userID, false, tagIDs).
-		Group("disk_files.id").
-		Having("COUNT(DISTINCT disk_tag_relations.tag_id) = ?", len(tagIDs)).
+	err := r.db.Joins("JOIN disk_tag_relation ON disk_tag_relation.file_id = disk_file.id").
+		Where("disk_file.user_id = ? AND disk_file.is_deleted = ? AND disk_tag_relation.tag_id IN ?", userID, false, tagIDs).
+		Group("disk_file.id").
+		Having("COUNT(DISTINCT disk_tag_relation.tag_id) = ?", len(tagIDs)).
 		Find(&files).Error
 	return files, err
 }

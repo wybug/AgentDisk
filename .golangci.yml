@@ -1,0 +1,118 @@
+version: "2"
+
+run:
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - bodyclose
+    - errorlint
+    - errname
+    - nilerr
+    - unconvert
+    - unparam
+    - gocritic
+    - gocognit
+    - revive
+    - misspell
+    - whitespace
+    - gosec
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Printf
+        - fmt.Sprintf
+        - (io.Closer).Close
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+
+    gocognit:
+      min-complexity: 30
+
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - "checkPrivateReceivers"
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: var-naming
+        - name: increment-decrement
+
+    gosec:
+      excludes:
+        - G104
+      config:
+        global:
+          audit: true
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    misspell:
+      locale: US
+
+    unparam:
+      check-exported: false
+
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - unparam
+          - gocritic
+          - govet
+      - path: scripts/
+        linters:
+          - errcheck
+          - gosec
+      - linters:
+          - gosec
+        text: "G201:"
+
+formatters:
+  enable:
+    - goimports
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 5
+
+severity:
+  default: warning
+  rules:
+    - linters:
+        - gosec
+      severity: error
+    - linters:
+        - errcheck
+      severity: error
+    - linters:
+        - govet
+      severity: error

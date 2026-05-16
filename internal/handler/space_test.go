@@ -6,20 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/agentdisk/agent-disk/pkg/jwt"
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
-const testJWTSecret = "test-jwt-secret-for-handler"
-
 func init() {
 	gin.SetMode(gin.TestMode)
-}
-
-func authToken(userID string) string {
-	t, _ := jwt.GenerateToken(testJWTSecret, userID, "agent001", 72)
-	return t
 }
 
 func TestSpaceHandler_GetSpace_NotFound(t *testing.T) {

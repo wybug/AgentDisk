@@ -61,8 +61,8 @@ func TestParseToken_EmptyAgentID(t *testing.T) {
 func TestParseToken_UnexpectedSigningMethod(t *testing.T) {
 	// Create a token with NONE signing method (not HMAC)
 	claims := Claims{
-		UserID:  "user_hack",
-		AgentID: "agent_hack",
+		UserID:           "user_hack",
+		AgentID:          "agent_hack",
 		RegisteredClaims: jwt.RegisteredClaims{},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodNone, claims)

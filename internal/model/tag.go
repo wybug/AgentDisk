@@ -10,6 +10,7 @@ type DiskTag struct {
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"createdAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskTag) TableName() string { return "disk_tag" }
 
 // DiskTagRelation 标签-文件关联表
@@ -20,4 +21,5 @@ type DiskTagRelation struct {
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"createdAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskTagRelation) TableName() string { return "disk_tag_relation" }

@@ -1,6 +1,7 @@
 package download_token
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -43,14 +44,14 @@ func TestVerify_ExpiredToken(t *testing.T) {
 	}
 
 	_, err = Verify(secret, token)
-	if err != ErrExpiredToken {
+	if !errors.Is(err, ErrExpiredToken) {
 		t.Errorf("Verify expired token error = %v, want ErrExpiredToken", err)
 	}
 }
 
 func TestVerify_InvalidFormat(t *testing.T) {
 	_, err := Verify("secret", "no_dot_here")
-	if err != ErrInvalidFormat {
+	if !errors.Is(err, ErrInvalidFormat) {
 		t.Errorf("Verify no-dot token error = %v, want ErrInvalidFormat", err)
 	}
 }
@@ -60,7 +61,7 @@ func TestVerify_InvalidSignature(t *testing.T) {
 	token, _ := Generate(secret, "user_001", "12345", 300)
 
 	_, err := Verify("wrong_secret", token)
-	if err != ErrInvalidSignature {
+	if !errors.Is(err, ErrInvalidSignature) {
 		t.Errorf("Verify wrong secret error = %v, want ErrInvalidSignature", err)
 	}
 }

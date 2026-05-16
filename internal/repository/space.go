@@ -24,7 +24,7 @@ func (r *SpaceRepo) GetByUserID(userID string) (*model.UserDisk, error) {
 	return &ud, nil
 }
 
-// CreateQuota initialises a new UserDisk quota entry for the given user.
+// CreateQuota initializes a new UserDisk quota entry for the given user.
 func (r *SpaceRepo) CreateQuota(userID string, quota int64) error {
 	ud := model.UserDisk{
 		UserID:     userID,

@@ -6,14 +6,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ShareHandler is a core domain type.
 type ShareHandler struct {
 	svc *service.ShareService
 }
 
+// NewShareHandler creates and returns a new ShareHandler.
 func NewShareHandler(svc *service.ShareService) *ShareHandler {
 	return &ShareHandler{svc: svc}
 }
 
+// CreateShareReq is a core domain type.
 type CreateShareReq struct {
 	ResourceID  uint64 `json:"resourceId" binding:"required"`
 	ResType     string `json:"resType" binding:"required"`
@@ -22,6 +25,7 @@ type CreateShareReq struct {
 	ExpireHours int    `json:"expireHours"`
 }
 
+// CreateShare executes the CreateShare use case.
 func (h *ShareHandler) CreateShare(c *gin.Context) {
 	var req CreateShareReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -43,6 +47,7 @@ func (h *ShareHandler) CreateShare(c *gin.Context) {
 	response.Created(c, share)
 }
 
+// GetShare executes the GetShare use case.
 func (h *ShareHandler) GetShare(c *gin.Context) {
 	code := c.Param("code")
 	share, err := h.svc.GetShareByCode(code)
@@ -53,11 +58,13 @@ func (h *ShareHandler) GetShare(c *gin.Context) {
 	response.OK(c, share)
 }
 
+// AccessShareReq is a core domain type.
 type AccessShareReq struct {
 	Code        string `json:"code" binding:"required"`
 	ExtractCode string `json:"extractCode"`
 }
 
+// AccessShare handles the request.
 func (h *ShareHandler) AccessShare(c *gin.Context) {
 	var req AccessShareReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -72,10 +79,12 @@ func (h *ShareHandler) AccessShare(c *gin.Context) {
 	response.OK(c, share)
 }
 
+// RevokeShareReq represents a domain type.
 type RevokeShareReq struct {
 	ShareID uint64 `json:"shareId" binding:"required"`
 }
 
+// RevokeShare handles the request.
 func (h *ShareHandler) RevokeShare(c *gin.Context) {
 	var req RevokeShareReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -90,6 +99,7 @@ func (h *ShareHandler) RevokeShare(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// ListShares handles the request.
 func (h *ShareHandler) ListShares(c *gin.Context) {
 	userID := c.GetString("userId")
 	shares, err := h.svc.ListShares(userID)

@@ -15,4 +15,5 @@ type DiskFolder struct {
 	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskFolder) TableName() string { return "disk_folder" }

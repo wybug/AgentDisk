@@ -13,4 +13,5 @@ type UserDisk struct {
 	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (UserDisk) TableName() string { return "user_disk" }

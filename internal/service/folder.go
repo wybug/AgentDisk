@@ -8,15 +8,18 @@ import (
 	"github.com/agentdisk/agent-disk/pkg/oss"
 )
 
+// FolderService represents a domain type.
 type FolderService struct {
 	folderRepo *repository.FolderRepo
 	ossClient  *oss.Client
 }
 
+// NewFolderService creates a new FolderService.
 func NewFolderService(folderRepo *repository.FolderRepo, ossClient *oss.Client) *FolderService {
 	return &FolderService{folderRepo: folderRepo, ossClient: ossClient}
 }
 
+// CreateFolder handles the request.
 func (s *FolderService) CreateFolder(userID string, parentID uint64, name string) (*model.DiskFolder, error) {
 	var fullPath string
 	if parentID == 0 {
@@ -41,10 +44,12 @@ func (s *FolderService) CreateFolder(userID string, parentID uint64, name string
 	return folder, nil
 }
 
+// ListFolders handles the request.
 func (s *FolderService) ListFolders(userID string, parentID uint64) ([]model.DiskFolder, error) {
 	return s.folderRepo.ListByParent(userID, parentID)
 }
 
+// DeleteFolder handles the request.
 func (s *FolderService) DeleteFolder(userID string, folderID uint64) error {
 	folder, err := s.folderRepo.GetByID(folderID)
 	if err != nil {
@@ -53,7 +58,9 @@ func (s *FolderService) DeleteFolder(userID string, folderID uint64) error {
 	if folder.UserID != userID {
 		return fmt.Errorf("permission denied")
 	}
-	_ = s.deleteRecursive(folderID)
+	if err := s.deleteRecursive(folderID); err != nil {
+		return fmt.Errorf("delete recursive: %w", err)
+	}
 	return s.folderRepo.SoftDelete(folderID)
 }
 
@@ -63,8 +70,12 @@ func (s *FolderService) deleteRecursive(parentID uint64) error {
 		return err
 	}
 	for _, sub := range subs {
-		_ = s.deleteRecursive(sub.ID)
-		_ = s.folderRepo.SoftDelete(sub.ID)
+		if err := s.deleteRecursive(sub.ID); err != nil {
+			return err
+		}
+		if err := s.folderRepo.SoftDelete(sub.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

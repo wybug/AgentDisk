@@ -8,10 +8,11 @@ type DiskPermission struct {
 	UserID     string    `gorm:"index;size:64;not null" json:"userId"`
 	AgentID    string    `gorm:"index;size:64;not null" json:"agentId"`
 	ResourceID uint64    `gorm:"index;not null" json:"resourceId"`
-	ResType    string    `gorm:"size:16;not null" json:"resType"` // file / folder
+	ResType    string    `gorm:"size:16;not null" json:"resType"`    // file / folder
 	Permission string    `gorm:"size:16;not null" json:"permission"` // owner / read / write / delete
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskPermission) TableName() string { return "disk_permission" }

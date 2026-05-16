@@ -1,0 +1,48 @@
+stages:
+  - lint
+  - test
+  - build
+
+variables:
+  GOLANGCI_LINT_VERSION: v1.64.8
+
+lint:
+  stage: lint
+  image: golang:1.24-alpine
+  before_script:
+    - apk add --no-cache git curl gcc musl-dev
+    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin ${GOLANGCI_LINT_VERSION}
+  script:
+    - golangci-lint run --timeout 5m ./...
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+test:
+  stage: test
+  image: golang:1.24-alpine
+  services:
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    REDIS_HOST: redis
+  before_script:
+    - apk add --no-cache gcc musl-dev
+  script:
+    - go test -v -cover ./...
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+build:
+  stage: build
+  image: golang:1.24-alpine
+  before_script:
+    - apk add --no-cache gcc musl-dev
+  script:
+    - go build -o bin/agentdisk .
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "master"'

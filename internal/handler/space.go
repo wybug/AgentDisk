@@ -6,14 +6,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// SpaceHandler is a core domain type.
 type SpaceHandler struct {
 	svc *service.SpaceService
 }
 
+// NewSpaceHandler creates and returns a new SpaceHandler.
 func NewSpaceHandler(svc *service.SpaceService) *SpaceHandler {
 	return &SpaceHandler{svc: svc}
 }
 
+// GetSpace executes the GetSpace use case.
 func (h *SpaceHandler) GetSpace(c *gin.Context) {
 	userID := c.GetString("userId")
 	space, err := h.svc.GetSpace(userID)

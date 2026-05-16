@@ -51,7 +51,7 @@ func (r *FileRepo) SoftDelete(id uint64) error {
 }
 
 // GetByMD5 returns all non-deleted files matching the given MD5 hash for a specific user.
-func (r *FileRepo) GetByMD5(userID string, md5 string) ([]model.DiskFile, error) {
+func (r *FileRepo) GetByMD5(userID, md5 string) ([]model.DiskFile, error) {
 	var files []model.DiskFile
 	err := r.db.Where("user_id = ? AND md5 = ? AND is_deleted = ?", userID, md5, false).
 		Find(&files).Error

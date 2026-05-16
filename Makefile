@@ -1,4 +1,6 @@
-.PHONY: build run test clean lint docker
+GOLANGCI_LINT_VERSION := v1.64.8
+
+.PHONY: build run test clean lint lint-install docker
 
 APP_NAME := agentdisk
 
@@ -19,7 +21,15 @@ clean:
 	rm -rf bin/ coverage.txt coverage.html
 
 lint:
-	golangci-lint run ./...
+	@if ! command -v golangci-lint > /dev/null 2>&1; then \
+		echo "golangci-lint is not installed. Run 'make lint-install' or visit https://golangci-lint.run/usage/install/"; \
+		exit 1; \
+	fi
+	golangci-lint run --timeout 5m ./...
+
+lint-install:
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
 
 docker:
 	docker build -f docker/Dockerfile -t $(APP_NAME):latest .

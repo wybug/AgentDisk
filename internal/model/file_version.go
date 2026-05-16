@@ -15,4 +15,5 @@ type DiskFileVersion struct {
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"createdAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskFileVersion) TableName() string { return "disk_file_version" }

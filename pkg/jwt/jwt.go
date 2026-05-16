@@ -7,12 +7,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Claims represents a claims.
 type Claims struct {
 	UserID  string `json:"userId"`
 	AgentID string `json:"agentId,omitempty"`
 	jwt.RegisteredClaims
 }
 
+// GenerateToken handles HTTP requests.
 func GenerateToken(secret, userID, agentID string, expireHours int) (string, error) {
 	claims := Claims{
 		UserID:  userID,
@@ -26,6 +28,7 @@ func GenerateToken(secret, userID, agentID string, expireHours int) (string, err
 	return token.SignedString([]byte(secret))
 }
 
+// ParseToken handles HTTP requests.
 func ParseToken(secret, tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

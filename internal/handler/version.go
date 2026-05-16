@@ -8,14 +8,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// VersionHandler is a core domain type.
 type VersionHandler struct {
 	svc *service.VersionService
 }
 
+// NewVersionHandler creates and returns a new VersionHandler.
 func NewVersionHandler(svc *service.VersionService) *VersionHandler {
 	return &VersionHandler{svc: svc}
 }
 
+// ListVersions executes the ListVersions use case.
 func (h *VersionHandler) ListVersions(c *gin.Context) {
 	userID := c.GetString("userId")
 	fileID, err := strconv.ParseUint(c.Query("fileId"), 10, 64)
@@ -31,11 +34,13 @@ func (h *VersionHandler) ListVersions(c *gin.Context) {
 	response.OK(c, versions)
 }
 
+// RollbackReq is a core domain type.
 type RollbackReq struct {
 	FileID  uint64 `json:"fileId" binding:"required"`
 	Version int    `json:"version" binding:"required"`
 }
 
+// RollbackVersion executes the RollbackVersion use case.
 func (h *VersionHandler) RollbackVersion(c *gin.Context) {
 	var req RollbackReq
 	if err := c.ShouldBindJSON(&req); err != nil {
