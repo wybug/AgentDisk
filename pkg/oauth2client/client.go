@@ -61,7 +61,7 @@ func New(cfg Config) *OAuthClient {
 // AuthCodeURL handles the AuthCodeURL endpoint.
 func (c *OAuthClient) AuthCodeURL(state, codeVerifier string, promptNone bool) string {
 	opts := []oauth2.AuthCodeOption{
-		oauth2.SetAuthURLParam("code_challenge", codeVerifier),
+		oauth2.SetAuthURLParam("code_challenge", GenerateCodeChallenge(codeVerifier)),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	}
 	if promptNone {

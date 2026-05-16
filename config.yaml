@@ -37,13 +37,14 @@ log:
   file_path: logs/agentdisk.log
 
 oauth2:
-  enabled: false              # 启用 OAuth2 Web 登录
-  # client_id: 通过环境变量 OAUTH2_CLIENT_ID 注入
-  # client_secret: 通过环境变量 OAUTH2_CLIENT_SECRET 注入
-  auth_url: ""                # 网关授权端点, 例: https://gateway.example.com/oauth2/authorize
-  token_url: ""               # 网关令牌端点, 例: https://gateway.example.com/oauth2/token
-  userinfo_url: ""            # 网关用户信息端点, 例: https://gateway.example.com/oauth2/userinfo
-  redirect_url: ""            # AgentDisk 回调地址, 例: https://disk.example.com/auth/callback
+  enabled: true               # 启用 OAuth2 Web 登录
+  client_id: "agentdisk"
+  client_secret: "agentdisk-secret"
+  auth_url: "http://localhost:3000/oauth2/authorize"
+  token_url: "http://localhost:3000/oauth2/token"
+  userinfo_url: "http://localhost:3000/oauth2/userinfo"
+  redirect_url: "http://localhost:9100/auth/callback"
+  frontend_url: "http://localhost:5173"
   scopes:
     - openid
     - profile

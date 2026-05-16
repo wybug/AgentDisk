@@ -1,6 +1,6 @@
 GOLANGCI_LINT_VERSION := v1.64.8
 
-.PHONY: build run test clean lint lint-install docker
+.PHONY: build run test clean lint lint-install docker dev-start dev-stop dev-status
 
 APP_NAME := agentdisk
 
@@ -39,3 +39,12 @@ docker-up:
 
 docker-down:
 	docker compose -f docker/docker-compose.yaml down
+
+dev-start:
+	bash scripts/dev.sh start
+
+dev-stop:
+	bash scripts/dev.sh stop
+
+dev-status:
+	bash scripts/dev.sh status

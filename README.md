@@ -22,13 +22,29 @@ AgentDisk 是一款面向 AI 智能体生态的专用云盘，解决多智能体
 
 ## 🛠 技术栈
 
+### 后端
+
 - 语言：Golang
 - 框架：Gin
 - 数据库：MySQL 8.0 / SQLite
 - 存储：MinIO SDK（全OSS兼容）
-- 鉴权：JWT（Bearer Token）
+- 鉴权：JWT（Bearer Token） + OAuth2（Web 登录）
 - 缓存：Redis（可选关闭）
 - 部署：Docker / 单二进制文件
+
+### 测试网关
+
+- 运行时：Node.js + TypeScript
+- 框架：Express
+- 功能：OAuth2 Provider（授权/令牌/用户信息端点）、PKCE 支持、测试用户管理
+
+### Web 前端
+
+- 框架：React 18 + Vite + TypeScript
+- UI 库：Ant Design 5
+- 状态管理：Zustand + TanStack React Query
+- 预览渲染：react-markdown、react-syntax-highlighter
+- 路由：React Router v6
 
 ## 🚀 快速部署
 
@@ -45,15 +61,64 @@ make build
 make docker-up
 ```
 
-### 3. 开发模式
+### 3. 本地开发（前后端联调）
+
+需要同时启动三个服务：
+
+#### 步骤 1：启动后端
+
+确保 MySQL 和 MinIO 已启动，然后配置 OAuth2（使用测试网关）：
+
+```yaml
+# config.yaml 中 oauth2 部分
+oauth2:
+  enabled: true
+  client_id: "agentdisk"
+  client_secret: "agentdisk-secret"
+  auth_url: "http://localhost:3000/oauth2/authorize"
+  token_url: "http://localhost:3000/oauth2/token"
+  userinfo_url: "http://localhost:3000/oauth2/userinfo"
+  redirect_url: "http://localhost:5173/auth/callback"
+  scopes:
+    - openid
+    - profile
+```
+
+启动后端：
 
 ```bash
-# 启动依赖服务
-docker compose -f docker/docker-compose.yaml up -d mysql minio
-
-# 本地运行
-make run
+make run   # 端口 9100
 ```
+
+#### 步骤 2：启动测试网关
+
+```bash
+cd gateway
+npm install
+npm run dev   # 端口 3000
+```
+
+网关预置测试账号：
+
+| 用户 ID | 用户名 | 密码 |
+|---------|--------|------|
+| user001 | 张三 | test123 |
+| user002 | 李四 | test123 |
+| user003 | 王五 | test123 |
+
+#### 步骤 3：启动 Web 前端
+
+```bash
+cd web
+npm install
+npm run dev   # 端口 5173
+```
+
+前端通过 Vite 代理将 `/v1`、`/auth`、`/health` 请求转发到后端 9100 端口，确保 Cookie 同源。
+
+#### 访问
+
+打开浏览器访问 http://localhost:5173，将自动跳转到网关登录页。
 
 ## 📁 项目结构
 
@@ -65,7 +130,7 @@ agent-disk/
 ├── config/                # 配置加载
 ├── internal/
 │   ├── model/             # 数据模型（8张表）
-│   ├── middleware/         # 中间件（JWT/CORS/Logger）
+│   ├── middleware/         # 中间件（JWT/CORS/Logger/HybridAuth）
 │   ├── handler/           # API处理器
 │   ├── service/           # 业务逻辑层
 │   ├── repository/        # 数据访问层
@@ -73,10 +138,28 @@ agent-disk/
 ├── pkg/
 │   ├── oss/               # OSS客户端封装
 │   ├── response/          # 统一响应体
-│   └── jwt/               # JWT工具
+│   ├── jwt/               # JWT工具
+│   ├── oauth2client/      # OAuth2客户端
+│   └── download_token/    # 下载令牌工具
 ├── sql/                   # 数据库建表脚本
 ├── docker/                # Docker部署文件
-├── docs/                  # OpenAPI文档
+├── docs/                  # OpenAPI文档 + 认证集成指南
+├── gateway/               # 测试网关（Node.js OAuth2 Provider）
+│   ├── src/
+│   │   ├── index.ts       # Express 入口
+│   │   ├── oauth2/        # OAuth2 端点实现
+│   │   ├── store/         # 内存数据存储
+│   │   └── views/         # 内嵌 HTML 页面
+│   └── package.json
+├── web/                   # Web 前端（React）
+│   ├── src/
+│   │   ├── api/           # API 客户端层
+│   │   ├── components/    # UI 组件
+│   │   ├── pages/         # 页面
+│   │   ├── router/        # 路由 + 登录守卫
+│   │   ├── store/         # 状态管理
+│   │   └── utils/         # 工具函数
+│   └── package.json
 └── test/                  # 测试
 ```
 

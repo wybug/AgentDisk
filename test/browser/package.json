@@ -1,0 +1,23 @@
+{
+  "name": "agentdisk-browser-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AgentDisk automated browser tests using agent-browser",
+  "scripts": {
+    "test": "node runner.js",
+    "test:t1": "node tests/t01-oauth-login.js",
+    "test:t2": "node tests/t02-folder.js",
+    "test:t3": "node tests/t03-file-upload.js",
+    "test:t4": "node tests/t04-file-preview.js",
+    "test:t5": "node tests/t05-file-download.js",
+    "test:t6": "node tests/t06-recycle.js",
+    "test:t7": "node tests/t07-tags.js",
+    "test:t8": "node tests/t08-version.js",
+    "test:t9": "node tests/t09-share.js",
+    "test:t10": "node tests/t10-permission.js",
+    "test:t11": "node tests/t11-space.js",
+    "test:t12": "node tests/t12-gateway.js",
+    "test:t13": "node tests/t13-cross-user.js",
+    "test:t14": "node tests/t14-navigation.js"
+  }
+}

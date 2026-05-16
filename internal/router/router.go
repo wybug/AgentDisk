@@ -53,7 +53,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 			RedirectURL:  cfg.OAuth2.RedirectURL,
 			Scopes:       cfg.OAuth2.Scopes,
 		})
-		authH = handler.NewAuthHandler(oauthClient)
+		authH = handler.NewAuthHandler(oauthClient, cfg.OAuth2.FrontendURL)
 	}
 
 	// Repos

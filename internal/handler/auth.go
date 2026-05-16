@@ -27,15 +27,17 @@ type AuthHandler struct {
 	sessions     map[string]*Session // In production, use Redis
 	cookieName   string
 	cookieMaxAge int
+	frontendURL  string
 }
 
 // NewAuthHandler creates and returns a new AuthHandler.
-func NewAuthHandler(oauthClient *oauth2client.OAuthClient) *AuthHandler {
+func NewAuthHandler(oauthClient *oauth2client.OAuthClient, frontendURL string) *AuthHandler {
 	return &AuthHandler{
 		oauthClient:  oauthClient,
 		sessions:     make(map[string]*Session),
 		cookieName:   "agentdisk_session",
 		cookieMaxAge: 86400,
+		frontendURL:  frontendURL,
 	}
 }
 
@@ -152,7 +154,11 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	h.sessions[sessionID] = session
 
 	c.SetCookie(h.cookieName, sessionID, h.cookieMaxAge, "/", "", false, true)
-	c.Redirect(http.StatusFound, "/")
+	redirectURL := "/"
+	if h.frontendURL != "" {
+		redirectURL = h.frontendURL
+	}
+	c.Redirect(http.StatusFound, redirectURL)
 }
 
 // Logout handles the request.

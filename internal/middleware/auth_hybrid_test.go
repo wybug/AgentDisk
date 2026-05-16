@@ -121,7 +121,7 @@ func TestHybridAuth_OAuth2Session_InvalidSessionID(t *testing.T) {
 		UserInfoURL:  "https://example.com/userinfo",
 		RedirectURL:  "https://disk.example.com/auth/callback",
 	})
-	authH := handler.NewAuthHandler(oauthClient)
+	authH := handler.NewAuthHandler(oauthClient, "")
 
 	r := setupHybridRouter("secret", authH, "")
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -144,7 +144,7 @@ func TestHybridAuth_OAuth2Session_NoCookie(t *testing.T) {
 		UserInfoURL:  "https://example.com/userinfo",
 		RedirectURL:  "https://disk.example.com/auth/callback",
 	})
-	authH := handler.NewAuthHandler(oauthClient)
+	authH := handler.NewAuthHandler(oauthClient, "")
 
 	r := setupHybridRouter("secret", authH, "")
 	req := httptest.NewRequest("GET", "/test", nil)

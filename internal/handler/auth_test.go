@@ -30,13 +30,13 @@ func newTestAuthHandler(tokenURL, userinfoURL string) *AuthHandler {
 		UserInfoURL:  userinfoURL,
 		RedirectURL:  "https://disk.example.com/auth/callback",
 	})
-	return NewAuthHandler(client)
+	return NewAuthHandler(client, "")
 }
 
 // ── NewAuthHandler ──
 
 func TestNewAuthHandler(t *testing.T) {
-	h := NewAuthHandler(nil)
+	h := NewAuthHandler(nil, "")
 	if h == nil {
 		t.Fatal("NewAuthHandler returned nil")
 	}
@@ -54,7 +54,7 @@ func TestNewAuthHandler(t *testing.T) {
 // ── Login ──
 
 func TestAuth_Login_OAuth2NotConfigured(t *testing.T) {
-	h := NewAuthHandler(nil)
+	h := NewAuthHandler(nil, "")
 	r := setupAuthRouter(h)
 
 	req := httptest.NewRequest("GET", "/auth/login", nil)
@@ -147,7 +147,7 @@ func TestAuth_Login_StandardFlow(t *testing.T) {
 // ── Callback ──
 
 func TestAuth_Callback_OAuth2NotConfigured(t *testing.T) {
-	h := NewAuthHandler(nil)
+	h := NewAuthHandler(nil, "")
 	r := setupAuthRouter(h)
 
 	req := httptest.NewRequest("GET", "/auth/callback?code=abc&state=xyz", nil)
@@ -425,7 +425,7 @@ func TestAuth_Logout_NoCookie(t *testing.T) {
 // ── GetSession ──
 
 func TestAuth_GetSession_Valid(t *testing.T) {
-	h := NewAuthHandler(nil)
+	h := NewAuthHandler(nil, "")
 	sessionID := generateSessionID()
 	h.sessions[sessionID] = &Session{
 		UserID:    "user_getsession",
@@ -442,7 +442,7 @@ func TestAuth_GetSession_Valid(t *testing.T) {
 }
 
 func TestAuth_GetSession_NotFound(t *testing.T) {
-	h := NewAuthHandler(nil)
+	h := NewAuthHandler(nil, "")
 	sess := h.GetSession("nonexistent")
 	if sess != nil {
 		t.Error("GetSession should return nil for nonexistent session")
@@ -450,7 +450,7 @@ func TestAuth_GetSession_NotFound(t *testing.T) {
 }
 
 func TestAuth_GetSession_Expired(t *testing.T) {
-	h := NewAuthHandler(nil)
+	h := NewAuthHandler(nil, "")
 	sessionID := generateSessionID()
 	h.sessions[sessionID] = &Session{
 		UserID:    "user_expired",

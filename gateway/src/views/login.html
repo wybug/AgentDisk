@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent 网关 - 登录</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      padding: 40px;
+      width: 400px;
+      max-width: 90vw;
+    }
+    .login-card h1 {
+      text-align: center;
+      color: #333;
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .login-card .subtitle {
+      text-align: center;
+      color: #999;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    }
+    .error-msg {
+      color: #e74c3c;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.9; }
+    .test-accounts {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    .test-accounts h3 {
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+    .test-accounts table {
+      width: 100%;
+      font-size: 13px;
+      color: #666;
+    }
+    .test-accounts td { padding: 3px 0; }
+    .test-accounts td:last-child { text-align: right; color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>Agent 网关</h1>
+    <p class="subtitle">请登录以继续访问 AgentDisk</p>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="userId">用户 ID</label>
+        <input type="text" id="userId" name="userId" placeholder="例如 user001" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input type="password" id="password" name="password" placeholder="输入密码" required autocomplete="current-password">
+      </div>
+      <button type="submit">登 录</button>
+    </form>
+
+    <div class="test-accounts">
+      <h3>测试账号</h3>
+      <table>
+        <tr><td>user001 (张三)</td><td>test123</td></tr>
+        <tr><td>user002 (李四)</td><td>test123</td></tr>
+        <tr><td>user003 (王五)</td><td>test123</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get('returnTo') || '/dashboard';
+    const error = params.get('error');
+
+    if (error) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = decodeURIComponent(error);
+      el.style.display = 'block';
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const userId = document.getElementById('userId').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        const resp = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, password }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          window.location.href = returnTo;
+        } else {
+          const el = document.getElementById('errorMsg');
+          el.textContent = data.message || '登录失败';
+          el.style.display = 'block';
+        }
+      } catch (err) {
+        const el = document.getElementById('errorMsg');
+        el.textContent = '网络错误，请重试';
+        el.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

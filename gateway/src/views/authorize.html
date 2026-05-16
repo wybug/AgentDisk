@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent 网关 - 授权确认</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      padding: 40px;
+      width: 420px;
+      max-width: 90vw;
+      text-align: center;
+    }
+    .card .icon {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 16px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      color: #fff;
+    }
+    .card h1 { font-size: 20px; color: #333; margin-bottom: 12px; }
+    .card p { font-size: 14px; color: #666; margin-bottom: 24px; line-height: 1.6; }
+    .card .app-name {
+      font-weight: 600;
+      color: #667eea;
+    }
+    .card .scopes {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .card .scopes div {
+      font-size: 13px;
+      color: #555;
+      padding: 4px 0;
+    }
+    .card .scopes div::before {
+      content: '✓';
+      color: #27ae60;
+      margin-right: 8px;
+      font-weight: bold;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+    }
+    .actions button {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .actions button:hover { opacity: 0.9; }
+    .btn-approve {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: #fff;
+    }
+    .btn-deny {
+      background: #f1f1f1;
+      color: #666;
+    }
+    .error { color: #e74c3c; font-size: 13px; margin-top: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🔐</div>
+    <h1>授权请求</h1>
+    <p><span class="app-name">AgentDisk</span> 请求访问你的账户</p>
+
+    <div class="scopes">
+      <div>读取你的基本身份信息 (openid)</div>
+      <div>读取你的个人资料 (profile)</div>
+    </div>
+
+    <form id="approveForm" method="POST" action="/oauth2/approve" style="display:none">
+      <input type="hidden" name="redirect_uri" id="f_redirect_uri">
+      <input type="hidden" name="scope" id="f_scope">
+      <input type="hidden" name="state" id="f_state">
+      <input type="hidden" name="code_challenge" id="f_code_challenge">
+      <input type="hidden" name="code_challenge_method" id="f_code_challenge_method">
+      <input type="hidden" name="userId" id="f_userId">
+    </form>
+
+    <div class="actions">
+      <button class="btn-deny" onclick="deny()">拒 绝</button>
+      <button class="btn-approve" onclick="approve()">允 许</button>
+    </div>
+    <div class="error" id="errorMsg"></div>
+  </div>
+
+  <script>
+    function getPending() {
+      const match = document.cookie.match(/oauth2_pending=([^;]+)/);
+      if (!match) return null;
+      try { return JSON.parse(decodeURIComponent(match[1])); } catch { return null; }
+    }
+
+    function approve() {
+      const pending = getPending();
+      if (!pending) {
+        document.getElementById('errorMsg').textContent = '缺少授权参数，请重新发起';
+        document.getElementById('errorMsg').style.display = 'block';
+        return;
+      }
+      // Fill hidden form and submit — browser follows 302 natively
+      document.getElementById('f_redirect_uri').value = pending.redirect_uri || '';
+      document.getElementById('f_scope').value = pending.scope || '';
+      document.getElementById('f_state').value = pending.state || '';
+      document.getElementById('f_code_challenge').value = pending.code_challenge || '';
+      document.getElementById('f_code_challenge_method').value = pending.code_challenge_method || '';
+      document.getElementById('f_userId').value = pending.userId || '';
+      document.getElementById('approveForm').submit();
+    }
+
+    function deny() {
+      const pending = getPending();
+      if (pending && pending.redirect_uri) {
+        const url = new URL(pending.redirect_uri);
+        url.searchParams.set('error', 'access_denied');
+        if (pending.state) url.searchParams.set('state', pending.state);
+        window.location.href = url.toString();
+      } else {
+        window.location.href = '/dashboard';
+      }
+    }
+  </script>
+</body>
+</html>

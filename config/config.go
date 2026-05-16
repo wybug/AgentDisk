@@ -80,6 +80,7 @@ type OAuth2Config struct {
 	TokenURL     string   `mapstructure:"token_url"`
 	UserInfoURL  string   `mapstructure:"userinfo_url"`
 	RedirectURL  string   `mapstructure:"redirect_url"`
+	FrontendURL  string   `mapstructure:"frontend_url"`
 	Scopes       []string `mapstructure:"scopes"`
 }
 
