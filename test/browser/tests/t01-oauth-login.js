@@ -1,4 +1,4 @@
-const { describe, step, assertCondition } = require('../lib/test-runner');
+const { describe, step, assertCondition, printReport } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
 
 describe('T1: OAuth2 登录流程', () => {
@@ -18,7 +18,6 @@ describe('T1: OAuth2 登录流程', () => {
   let snap = ab.snapshot();
   const userIdRef = ab.findRefByPlaceholder(snap, '用户 ID');
   const passwordRef = ab.findRefByPlaceholder(snap, '密码');
-  // Button text has a space: "登 录"
   const loginBtnRef = ab.findRefByText(snap, '登 录') || ab.findRefByRole(snap, 'button', '登 录');
 
   assertCondition(userIdRef !== null, 'T1.2: 找到用户 ID 输入框', userIdRef || 'not found');
@@ -38,7 +37,7 @@ describe('T1: OAuth2 登录流程', () => {
   assertCondition(isAuthorizePage, 'T1.3: 到达授权确认页', url2);
   ab.screenshot('t01-02-authorize-page');
 
-  // T1.3b - 点击允许（使用 eval 调用 approve() 因为 onclick 可能不被触发）
+  // T1.3b - 点击允许
   ab.evalStdin('approve()');
   ab.waitMs(6000);
   ab.waitLoad('networkidle');
@@ -51,25 +50,154 @@ describe('T1: OAuth2 登录流程', () => {
 
   // T1.5 - 验证界面元素
   const hasTitle = ab.pageContainsText('AgentDisk');
-  assertCondition(hasTitle, 'T1.5: 页面显示 AgentDisk 标题');
+  assertCondition(hasTitle, 'T1.5a: 页面显示 AgentDisk 标题');
 
   const hasUser = ab.pageContainsText('user001');
-  assertCondition(hasUser, 'T1.5: 页面显示用户信息 user001');
+  assertCondition(hasUser, 'T1.5b: 页面显示用户信息 user001');
 
   const hasSpace = ab.pageContainsText('GB') || ab.pageContainsText('MB');
-  assertCondition(hasSpace, 'T1.5: 页面显示空间用量');
+  assertCondition(hasSpace, 'T1.5c: 页面显示空间用量');
   ab.screenshot('t01-04-main-ui');
 
-  // T1.6 - 退出登录
+  // ============================================================
+  // T1.6 - 导航：全部文件
+  // ============================================================
+  ab.evalStdin(`(function() {
+    var items = document.querySelectorAll('.ant-menu-item');
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].textContent.includes('全部文件')) { items[i].click(); return 'clicked'; }
+    }
+    return 'not found';
+  })()`);
+  ab.waitMs(2000);
+
+  let urlNav1 = ab.getUrl();
+  assertCondition(
+    urlNav1.includes('/explorer'),
+    'T1.6: 导航到全部文件',
+    urlNav1
+  );
+  ab.screenshot('t01-06-explorer');
+
+  // ============================================================
+  // T1.7 - 导航：回收站
+  // ============================================================
+  ab.evalStdin(`(function() {
+    var items = document.querySelectorAll('.ant-menu-item');
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].textContent.includes('回收站')) { items[i].click(); return 'clicked'; }
+    }
+    return 'not found';
+  })()`);
+  ab.waitMs(2000);
+
+  let urlNav2 = ab.getUrl();
+  let hasRecycleTitle = ab.pageContainsText('回收站');
+  assertCondition(
+    urlNav2.includes('/recycle') && hasRecycleTitle,
+    'T1.7: 导航到回收站',
+    `url=${urlNav2} title=${hasRecycleTitle}`
+  );
+  ab.screenshot('t01-07-recycle');
+
+  // ============================================================
+  // T1.8 - 导航：我的分享
+  // ============================================================
+  ab.evalStdin(`(function() {
+    var items = document.querySelectorAll('.ant-menu-item');
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].textContent.includes('我的分享')) { items[i].click(); return 'clicked'; }
+    }
+    return 'not found';
+  })()`);
+  ab.waitMs(2000);
+
+  let urlNav3 = ab.getUrl();
+  let hasSharesTitle = ab.pageContainsText('分享');
+  assertCondition(
+    urlNav3.includes('/shares') && hasSharesTitle,
+    'T1.8: 导航到我的分享',
+    `url=${urlNav3} title=${hasSharesTitle}`
+  );
+  ab.screenshot('t01-08-shares');
+
+  // ============================================================
+  // T1.9 - 导航：标签搜索
+  // ============================================================
+  ab.evalStdin(`(function() {
+    var items = document.querySelectorAll('.ant-menu-item');
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].textContent.includes('标签搜索')) { items[i].click(); return 'clicked'; }
+    }
+    return 'not found';
+  })()`);
+  ab.waitMs(2000);
+
+  let urlNav4 = ab.getUrl();
+  let hasTagsTitle = ab.pageContainsText('标签');
+  assertCondition(
+    urlNav4.includes('/tags') && hasTagsTitle,
+    'T1.9: 导航到标签搜索',
+    `url=${urlNav4} title=${hasTagsTitle}`
+  );
+  ab.screenshot('t01-09-tags');
+
+  // ============================================================
+  // T1.10 - 导航：权限管理
+  // ============================================================
+  ab.evalStdin(`(function() {
+    var items = document.querySelectorAll('.ant-menu-item');
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].textContent.includes('权限管理')) { items[i].click(); return 'clicked'; }
+    }
+    return 'not found';
+  })()`);
+  ab.waitMs(2000);
+
+  let urlNav5 = ab.getUrl();
+  let hasPermTitle = ab.pageContainsText('权限');
+  assertCondition(
+    urlNav5.includes('/permissions') && hasPermTitle,
+    'T1.10: 导航到权限管理',
+    `url=${urlNav5} title=${hasPermTitle}`
+  );
+  ab.screenshot('t01-10-permissions');
+
+  // ============================================================
+  // T1.11 - 返回全部文件，验证导航回到首页
+  // ============================================================
+  ab.evalStdin(`(function() {
+    var items = document.querySelectorAll('.ant-menu-item');
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].textContent.includes('全部文件')) { items[i].click(); return 'clicked'; }
+    }
+    return 'not found';
+  })()`);
+  ab.waitMs(2000);
+
+  let urlBack = ab.getUrl();
+  assertCondition(
+    urlBack.includes('/explorer'),
+    'T1.11: 返回全部文件',
+    urlBack
+  );
+  ab.screenshot('t01-11-back-to-explorer');
+
+  // T1.12 - 退出登录
   snap = ab.snapshot();
   const logoutRef = ab.findRefByText(snap, '退出登录');
   if (logoutRef) {
     ab.click(logoutRef);
     ab.waitMs(2000);
-    ab.screenshot('t01-05-logout');
+    const urlLogout = ab.getUrl();
+    const loggedOut = urlLogout.includes('login') || !ab.pageContainsText('user001');
+    step('T1.12: 退出登录', loggedOut, urlLogout);
+    ab.screenshot('t01-12-logout');
   } else {
-    step('T1.6: 退出登录（跳过）', true, '未找到退出登录按钮');
+    step('T1.12: 退出登录（跳过）', true, '未找到退出登录按钮');
   }
 
   ab.closeBrowser();
 });
+
+printReport();

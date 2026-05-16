@@ -249,6 +249,40 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Find the button ref inside a table row that contains rowText
+function findRowButtonRef(snap, rowText, btnText) {
+  const lines = snap.split('\n');
+  let inTargetRow = false;
+  let rowIndent = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Detect row start
+    if (line.match(/^[^a-zA-Z]*row\s/) && line.includes(rowText)) {
+      inTargetRow = true;
+      rowIndent = (line.match(/^\s*/) || [''])[0].length;
+      continue;
+    }
+    if (inTargetRow) {
+      const currentIndent = (line.match(/^\s*/) || [''])[0].length;
+      // If we're back at same or lower indent level as the row, we're out of the row
+      if (line.trim().length > 0 && currentIndent <= rowIndent) {
+        inTargetRow = false;
+        continue;
+      }
+      // Look for the button with btnText
+      const escaped = escapeRegex(btnText);
+      const re = new RegExp(`button[^\\n]*"${escaped}"[^\\n]*ref=e(\\d+)`);
+      const m = line.match(re);
+      if (m) return `@e${m[1]}`;
+      // Also try generic format: button "text" [ref=eN]
+      const re2 = new RegExp(`button\\s+"[^"]*${escaped}[^"]*"\\s+\\[ref=e(\\d+)\\]`);
+      const m2 = line.match(re2);
+      if (m2) return `@e${m2[1]}`;
+    }
+  }
+  return null;
+}
+
 // React-friendly helpers: use JS to click buttons and fill inputs
 function jsClickBtn(text) {
   return evalStdin(`
@@ -319,6 +353,7 @@ module.exports = {
   closeBrowser, closeAll,
   login, logout,
   findRefByPlaceholder, findRefByRole, findRefByText, findRefBySelector,
+  findRowButtonRef,
   pageContainsText,
   jsClickBtn, jsClickLink, jsFill, jsClickElement,
 };

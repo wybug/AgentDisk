@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Space, message } from 'antd';
+import { Button, Space } from 'antd';
 import { FolderAddOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import FileList from '@/components/file/FileList';
 import FileUpload from '@/components/file/FileUpload';
 import CreateFolderModal from '@/components/folder/CreateFolderModal';
+import BreadcrumbNav from '@/components/layout/BreadcrumbNav';
 import FilePreview from '@/components/file/FilePreview';
 import VersionHistory from '@/components/file/VersionHistory';
 import CreateShareModal from '@/components/share/CreateShareModal';
 import TagInput from '@/components/tag/TagInput';
+import { folderApi } from '@/api/folder';
 import type { DiskFile } from '@/api/types';
 
 export default function ExplorerPage() {
@@ -23,6 +25,12 @@ export default function ExplorerPage() {
   const [shareFile, setShareFile] = useState<DiskFile | null>(null);
   const [tagFile, setTagFile] = useState<DiskFile | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+
+  const { data: ancestors = [] } = useQuery({
+    queryKey: ['folder-ancestors', folderId],
+    queryFn: () => folderApi.getAncestors(folderId).then(r => (r || []).map(a => ({ id: a.id, name: a.folderName }))),
+    enabled: folderId > 0,
+  });
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['folders', folderId] });
@@ -40,6 +48,8 @@ export default function ExplorerPage() {
 
   return (
     <div>
+      {folderId > 0 && <BreadcrumbNav items={ancestors} />}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
           <FileUpload folderId={folderId} />

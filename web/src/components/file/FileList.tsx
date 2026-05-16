@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { Table, Tag, Button, Space, message } from 'antd';
 import {
   FolderOutlined,
   FileOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { folderApi } from '@/api/folder';
 import { fileApi } from '@/api/file';
+import RenameFolderModal from '@/components/folder/RenameFolderModal';
 import { formatFileSize, formatDate } from '@/utils/format';
 import { getFileIcon } from '@/utils/fileType';
 import type { DiskFile, DiskFolder } from '@/api/types';
@@ -30,6 +33,7 @@ function IconFor(name: string) {
 export default function FileList({ folderId, onPreview, onVersionHistory, onShare, onTag }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [renameFolder, setRenameFolder] = useState<DiskFolder | null>(null);
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders', folderId],
@@ -88,6 +92,7 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
   const dataSource = [...folderRows, ...fileRows];
 
   return (
+    <>
     <Table
       dataSource={dataSource}
       loading={isLoading}
@@ -128,18 +133,27 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
         { title: '修改时间', dataIndex: 'updatedAt', width: 170, render: formatDate },
         {
           title: '操作',
-          width: 80,
+          width: 120,
           render: (_: any, record: any) => {
             if (record.type === 'folder') {
               return (
-                <Button
-                  type="link"
-                  danger
-                  size="small"
-                  onClick={() => handleDeleteFolder(record.rawData)}
-                >
-                  删除
-                </Button>
+                <Space size="small">
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => setRenameFolder(record.rawData)}
+                  >
+                    重命名
+                  </Button>
+                  <Button
+                    type="link"
+                    danger
+                    size="small"
+                    onClick={() => handleDeleteFolder(record.rawData)}
+                  >
+                    删除
+                  </Button>
+                </Space>
               );
             }
             return (
@@ -156,5 +170,12 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
         },
       ]}
     />
+
+    <RenameFolderModal
+      folder={renameFolder}
+      open={!!renameFolder}
+      onClose={() => setRenameFolder(null)}
+    />
+  </>
   );
 }

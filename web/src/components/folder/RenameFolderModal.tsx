@@ -1,34 +1,40 @@
 import { Modal, Form, Input } from 'antd';
 import { folderApi } from '@/api/folder';
 import { useQueryClient } from '@tanstack/react-query';
+import type { DiskFolder } from '@/api/types';
 
 interface Props {
+  folder: DiskFolder | null;
   open: boolean;
-  parentId: number;
   onClose: () => void;
 }
 
-export default function CreateFolderModal({ open, parentId, onClose }: Props) {
+export default function RenameFolderModal({ folder, open, onClose }: Props) {
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
 
   const handleOk = async () => {
+    if (!folder) return;
     const values = await form.validateFields();
-    await folderApi.create({ parentId, folderName: values.folderName });
-    queryClient.invalidateQueries({ queryKey: ['folders', parentId] });
-    queryClient.invalidateQueries({ queryKey: ['files', parentId] });
+    await folderApi.rename(folder.id, values.folderName);
+    queryClient.invalidateQueries({ queryKey: ['folders'] });
     form.resetFields();
     onClose();
   };
 
   return (
     <Modal
-      title="新建文件夹"
+      title="重命名文件夹"
       open={open}
       onOk={handleOk}
       onCancel={() => { form.resetFields(); onClose(); }}
-      okText="创建"
+      okText="确定"
       cancelText="取消"
+      afterOpenChange={(visible) => {
+        if (visible && folder) {
+          form.setFieldsValue({ folderName: folder.folderName });
+        }
+      }}
     >
       <Form form={form} layout="vertical">
         <Form.Item
@@ -36,7 +42,7 @@ export default function CreateFolderModal({ open, parentId, onClose }: Props) {
           label="文件夹名称"
           rules={[{ required: true, message: '请输入文件夹名称' }]}
         >
-          <Input placeholder="请输入文件夹名称" />
+          <Input placeholder="请输入新名称" />
         </Form.Item>
       </Form>
     </Modal>

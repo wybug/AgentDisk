@@ -40,6 +40,64 @@ func (h *FolderHandler) CreateFolder(c *gin.Context) {
 	response.Created(c, folder)
 }
 
+// GetFolder returns a single folder by ID.
+func (h *FolderHandler) GetFolder(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid id")
+		return
+	}
+	userID := c.GetString("userId")
+	folder, err := h.svc.GetFolder(userID, id)
+	if err != nil {
+		response.NotFound(c, err.Error())
+		return
+	}
+	response.OK(c, folder)
+}
+
+// GetAncestors returns the path from root to the given folder.
+func (h *FolderHandler) GetAncestors(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid id")
+		return
+	}
+	userID := c.GetString("userId")
+	ancestors, err := h.svc.GetAncestors(userID, id)
+	if err != nil {
+		response.NotFound(c, err.Error())
+		return
+	}
+	response.OK(c, ancestors)
+}
+
+// RenameFolderReq is the rename request body.
+type RenameFolderReq struct {
+	FolderName string `json:"folderName" binding:"required"`
+}
+
+// RenameFolder renames a folder.
+func (h *FolderHandler) RenameFolder(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid id")
+		return
+	}
+	var req RenameFolderReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	userID := c.GetString("userId")
+	folder, err := h.svc.RenameFolder(userID, id, req.FolderName)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, folder)
+}
+
 // ListFolders executes the ListFolders use case.
 func (h *FolderHandler) ListFolders(c *gin.Context) {
 	userID := c.GetString("userId")

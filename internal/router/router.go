@@ -104,6 +104,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// Folders
 	v1.POST("/folders", folderH.CreateFolder)
 	v1.GET("/folders", folderH.ListFolders)
+	v1.GET("/folders/:id", folderH.GetFolder)
+	v1.GET("/folders/:id/ancestors", folderH.GetAncestors)
+	v1.PUT("/folders/:id", folderH.RenameFolder)
 	v1.DELETE("/folders/:id", folderH.DeleteFolder)
 
 	// Files

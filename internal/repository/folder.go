@@ -50,6 +50,15 @@ func (r *FolderRepo) SoftDelete(id uint64) error {
 		Update("is_deleted", true).Error
 }
 
+// ExistsByName checks if a non-deleted folder with the same name exists under the same parent.
+func (r *FolderRepo) ExistsByName(userID string, parentID uint64, name string) (bool, error) {
+	var count int64
+	err := r.db.Model(&model.DiskFolder{}).
+		Where("user_id = ? AND parent_id = ? AND folder_name = ? AND is_deleted = ?", userID, parentID, name, false).
+		Count(&count).Error
+	return count > 0, err
+}
+
 // ListSubFolders returns all direct sub-folders of the given parent (including deleted).
 func (r *FolderRepo) ListSubFolders(parentID uint64) ([]model.DiskFolder, error) {
 	var folders []model.DiskFolder
