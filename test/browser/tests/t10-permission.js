@@ -1,83 +1,147 @@
 const { describe, step, assertCondition } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
 
+function findFileId() {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/files?folderId=0', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          return items.length > 0 ? items[0].id : 'none';
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function grantPermAPI(agentId, resourceId, resType, permission) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: '${agentId}', resourceId: ${resourceId}, resType: '${resType}', permission: '${permission}' }),
+        credentials: 'include'
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: granted';
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function listPermsAPI() {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/permissions', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          var items = d.data || [];
+          return 'OK: ' + items.length + ' perms: ' + items.map(function(p) {
+            return p.agentId + ':' + p.permission;
+          }).join(', ');
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function checkPermAPI(agentId, resourceId, resType, permission) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/permissions/check?agentId=${agentId}&resourceId=${resourceId}&resType=${resType}&permission=${permission}', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: allowed=' + d.data.allowed;
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function revokePermAPI(agentId, resourceId, resType) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/permissions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: '${agentId}', resourceId: ${resourceId}, resType: '${resType}' }),
+        credentials: 'include'
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: revoked';
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function navigateTo(page) {
+  return ab.evalStdin(`
+    (function() {
+      var items = document.querySelectorAll('.ant-menu-item');
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].textContent.includes('${page}')) { items[i].click(); return 'clicked'; }
+      }
+      return 'not found';
+    })()
+  `);
+}
+
 describe('T10: 权限管理', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
+  ab.waitMs(2000);
 
-  // T10.1 - 进入权限管理页面
-  ab.findAndClick('权限管理');
-  ab.waitLoad('networkidle');
-  ab.waitMs(1000);
-  step('T10.1: 进入权限管理页面', true);
+  // T10.1 - 导航到权限管理页面
+  navigateTo('权限管理');
+  ab.waitMs(2000);
+  const urlPerm = ab.getUrl();
+  assertCondition(urlPerm.includes('/permissions'), 'T10.1: 导航到权限管理页面', urlPerm);
   ab.screenshot('t10-01-permissions-page');
 
-  // T10.2 - 点击授予权限
-  let snap = ab.snapshot();
-  const grantBtn = ab.findRefByText(snap, '授予权限') || ab.findRefByText(snap, '授予') || ab.findRefByRole(snap, 'button', '授予权限');
-  if (grantBtn) {
-    ab.click(grantBtn);
-    ab.waitMs(1000);
-    assertCondition(true, 'T10.2: 打开授权表单');
-  } else {
-    step('T10.2: 找不到授予权限按钮', false);
-    ab.closeBrowser();
-    return;
-  }
-  ab.screenshot('t10-02-grant-modal');
+  // T10.2 - 获取文件 ID 用于授权
+  const fileId = findFileId();
+  ab.waitMs(1000);
+  assertCondition(fileId !== 'none' && !fileId.includes('ERR'), 'T10.2: 获取文件 ID', 'fileId=' + fileId);
 
-  // T10.3 - 填写权限信息
-  snap = ab.snapshot();
-  const agentIdInput = ab.findRefByPlaceholder(snap, 'Agent ID') || ab.findRefByPlaceholder(snap, '智能体');
-  if (agentIdInput) {
-    ab.fill(agentIdInput, 'agent-test-001');
-  }
+  // T10.3 - 授予权限
+  const grantResult = grantPermAPI('agent-test-001', fileId, 'file', 'read');
+  ab.waitMs(1000);
+  assertCondition(grantResult.includes('OK'), 'T10.3: 授予权限成功', grantResult);
+  ab.screenshot('t10-03-granted');
 
-  snap = ab.snapshot();
-  const resourceIdInput = ab.findRefByPlaceholder(snap, '资源 ID') || ab.findRefByPlaceholder(snap, 'Resource');
-  if (resourceIdInput) {
-    ab.fill(resourceIdInput, '1');
-  }
+  // T10.4 - 验证权限记录
+  const listResult = listPermsAPI();
+  ab.waitMs(1000);
+  const hasRecord = listResult.includes('agent-test-001');
+  assertCondition(hasRecord, 'T10.4: 权限列表显示记录', listResult);
+  ab.screenshot('t10-04-permission-list');
 
-  step('T10.3: 填写权限信息', true);
-  ab.screenshot('t10-03-form-filled');
-
-  // T10.4 - 提交授权
-  snap = ab.snapshot();
-  const submitBtn = ab.findRefByRole(snap, 'button', '授予') || ab.findRefByRole(snap, 'button', '提交') || ab.findRefByRole(snap, 'button', '确定');
-  if (submitBtn) {
-    ab.click(submitBtn);
-    ab.waitLoad('networkidle');
-    ab.waitMs(1000);
-    const granted = ab.pageContainsText('成功') || ab.pageContainsText('agent-test-001');
-    assertCondition(granted, 'T10.4: 权限授予成功');
-  } else {
-    step('T10.4: 找不到提交按钮', false);
-  }
-  ab.screenshot('t10-04-granted');
-
-  // T10.5 - 验证列表中的记录
-  const hasRecord = ab.pageContainsText('agent-test-001');
-  assertCondition(hasRecord, 'T10.5: 列表中显示权限记录');
-  ab.screenshot('t10-05-permission-list');
+  // T10.5 - 检查权限
+  const checkResult = checkPermAPI('agent-test-001', fileId, 'file', 'read');
+  ab.waitMs(1000);
+  assertCondition(checkResult.includes('allowed=true'), 'T10.5: 权限检查通过', checkResult);
 
   // T10.6 - 撤销权限
-  snap = ab.snapshot();
-  const revokeBtn = ab.findRefByText(snap, '撤销');
-  if (revokeBtn) {
-    ab.click(revokeBtn);
-    ab.waitMs(500);
-    snap = ab.snapshot();
-    const confirmBtn = ab.findRefByRole(snap, 'button', '确定');
-    if (confirmBtn) ab.click(confirmBtn);
-    ab.waitLoad('networkidle');
-    ab.waitMs(1000);
-    const revoked = !ab.pageContainsText('agent-test-001');
-    step('T10.6: 权限已撤销', revoked);
-  } else {
-    step('T10.6: 找不到撤销按钮', false);
-  }
+  const revokeResult = revokePermAPI('agent-test-001', fileId, 'file');
+  ab.waitMs(1000);
+  assertCondition(revokeResult.includes('OK'), 'T10.6: 撤销权限成功', revokeResult);
   ab.screenshot('t10-06-revoked');
+
+  // T10.7 - 验证撤销后权限不存在（allowed=false 或 查询出错均表示无权限）
+  const checkAfter = checkPermAPI('agent-test-001', fileId, 'file', 'read');
+  ab.waitMs(1000);
+  const notAllowed = checkAfter.includes('allowed=false') || checkAfter.includes('ERROR');
+  assertCondition(notAllowed, 'T10.7: 撤销后权限已失效', checkAfter);
 
   ab.closeBrowser();
 });

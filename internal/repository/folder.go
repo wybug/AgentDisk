@@ -50,6 +50,13 @@ func (r *FolderRepo) SoftDelete(id uint64) error {
 		Update("is_deleted", true).Error
 }
 
+// UnDelete marks a folder as not deleted by setting is_deleted = false.
+func (r *FolderRepo) UnDelete(id uint64) error {
+	return r.db.Model(&model.DiskFolder{}).
+		Where("id = ?", id).
+		Update("is_deleted", false).Error
+}
+
 // ExistsByName checks if a non-deleted folder with the same name exists under the same parent.
 func (r *FolderRepo) ExistsByName(userID string, parentID uint64, name string) (bool, error) {
 	var count int64

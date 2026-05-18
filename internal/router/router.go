@@ -79,8 +79,8 @@ func Setup(cfg *config.Config) *gin.Engine {
 
 	// Handlers
 	spaceH := handler.NewSpaceHandler(spaceSvc)
-	folderH := handler.NewFolderHandler(folderSvc)
-	fileH := handler.NewFileHandler(fileSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
+	folderH := handler.NewFolderHandler(folderSvc, recycleSvc)
+	fileH := handler.NewFileHandler(fileSvc, recycleSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
 	permH := handler.NewPermissionHandler(permSvc)
 	versionH := handler.NewVersionHandler(versionSvc)
 	recycleH := handler.NewRecycleHandler(recycleSvc)

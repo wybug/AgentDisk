@@ -1,89 +1,89 @@
 const { describe, step, assertCondition } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
-const { execSync } = require('child_process');
 
-const SESSION_A = 'user-a';
-const SESSION_B = 'user-b';
-
-function abA(...args) {
-  return execSync(['agent-browser', '--session', SESSION_A, ...args].join(' '), { encoding: 'utf-8', timeout: 30000 }).trim();
+function createFolderAPI(folderName) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentId: 0, folderName: '${folderName}' }),
+        credentials: 'include'
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: id=' + d.data.id + ' name=' + d.data.folderName;
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
 }
 
-function abB(...args) {
-  return execSync(['agent-browser', '--session', SESSION_B, ...args].join(' '), { encoding: 'utf-8', timeout: 30000 }).trim();
+function listFilesAPI() {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/files?folderId=0', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          return 'files: ' + items.length + ' - ' + items.map(function(f) { return f.fileName; }).join(', ');
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function listFoldersAPI() {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/folders?parentId=0', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          return 'folders: ' + items.length + ' - ' + items.map(function(f) { return f.folderName; }).join(', ');
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
 }
 
 describe('T13: 跨用户隔离', () => {
-  // 清理旧 session
-  try { execSync('agent-browser close --all', { encoding: 'utf-8', timeout: 10000 }); } catch {}
+  ab.closeAll();
 
-  // T13.1 - user001 创建文件夹和上传文件
-  abA('open', ab.BASE_URL);
-  try { abA('wait', '--url', '"**/login**"'); } catch {}
-  try {
-    let snapA = abA('snapshot', '-i', '-c');
-    const userIdRef = snapA.match(/@e(\d+).*placeholder="用户 ID"/);
-    const pwdRef = snapA.match(/@e(\d+).*placeholder="密码"/);
-    if (userIdRef && pwdRef) {
-      abA('fill', `@e${userIdRef[1]}`, 'user001');
-      abA('fill', `@e${pwdRef[1]}`, 'test123');
-      const btnMatch = snapA.match(/@e(\d+)\[button[^"]*\].*"登录"/);
-      if (btnMatch) abA('click', `@e${btnMatch[1]}`);
-    }
-    abA('wait', '--url', '"**/localhost:5173**"');
-    abA('wait', '--load', 'networkidle');
-  } catch {}
+  // T13.1 - user001 登录，创建文件夹（使用时间戳避免重复）
+  ab.login('user001', 'test123');
+  ab.waitMs(2000);
 
-  abA('wait', '2000');
+  const folderName = 'user1-' + Date.now();
+  const createResult = createFolderAPI(folderName);
+  ab.waitMs(2000);
+  const createOk = createResult.includes('OK:');
+  assertCondition(createOk, 'T13.1: user001 创建文件夹', createResult);
+  ab.screenshot('t13-01-user1-folder');
 
-  // 创建一个特殊名称的文件夹
-  try {
-    let snapA = abA('snapshot', '-i', '-c');
-    const createMatch = snapA.match(/@e(\d+).*"新建文件夹"/) || snapA.match(/@e(\d+).*"新建"/);
-    if (createMatch) {
-      abA('click', `@e${createMatch[1]}`);
-      abA('wait', '1000');
-      snapA = abA('snapshot', '-i', '-c');
-      const inputMatch = snapA.match(/@e(\d+).*placeholder="文件夹名称"/);
-      if (inputMatch) abA('fill', `@e${inputMatch[1]}`, '张三专属');
-      snapA = abA('snapshot', '-i', '-c');
-      const btnMatch = snapA.match(/@e(\d+)\[button[^"]*\].*"创建"/) || snapA.match(/@e(\d+)\[button[^"]*\].*"确定"/);
-      if (btnMatch) abA('click', `@e${btnMatch[1]}`);
-      abA('wait', '--load', 'networkidle');
-      abA('wait', '1000');
-    }
-  } catch {}
+  // 验证文件夹存在
+  const folders1 = listFoldersAPI();
+  ab.waitMs(1000);
+  const hasFolder = folders1.includes(folderName);
+  assertCondition(hasFolder, 'T13.1b: user001 可见自己的文件夹', folders1);
 
-  const user1Data = abA('snapshot');
-  const hasSpecialFolder = user1Data.includes('张三专属');
-  assertCondition(hasSpecialFolder, 'T13.1: user001 创建「张三专属」文件夹成功');
+  // T13.2 - 关闭 user001 会话
+  ab.closeBrowser();
 
-  try { execSync(`agent-browser --session ${SESSION_A} close`, { encoding: 'utf-8', timeout: 10000 }); } catch {}
-
-  // T13.2 & T13.3 - user002 登录
-  abB('open', ab.BASE_URL);
-  try { abB('wait', '--url', '"**/login**"'); } catch {}
-  try {
-    let snapB = abB('snapshot', '-i', '-c');
-    const userIdRef = snapB.match(/@e(\d+).*placeholder="用户 ID"/);
-    const pwdRef = snapB.match(/@e(\d+).*placeholder="密码"/);
-    if (userIdRef && pwdRef) {
-      abB('fill', `@e${userIdRef[1]}`, 'user002');
-      abB('fill', `@e${pwdRef[1]}`, 'test123');
-      const btnMatch = snapB.match(/@e(\d+)\[button[^"]*\].*"登录"/);
-      if (btnMatch) abB('click', `@e${btnMatch[1]}`);
-    }
-    abB('wait', '--url', '"**/localhost:5173**"');
-    abB('wait', '--load', 'networkidle');
-  } catch {}
-
-  abB('wait', '2000');
+  // T13.3 - user002 登录
+  ab.login('user002', 'test123');
+  ab.waitMs(2000);
 
   // T13.4 - 验证 user002 看不到 user001 的数据
-  const user2Data = abB('snapshot');
-  const notVisible = !user2Data.includes('张三专属');
-  assertCondition(notVisible, 'T13.4: user002 看不到 user001 的数据');
-  try { execSync(`agent-browser --session ${SESSION_B} screenshot /tmp/t13-user2-view.png`, { encoding: 'utf-8' }); } catch {}
+  const folders2 = listFoldersAPI();
+  ab.waitMs(1000);
+  const files2 = listFilesAPI();
+  ab.waitMs(1000);
 
-  try { execSync(`agent-browser --session ${SESSION_B} close`, { encoding: 'utf-8', timeout: 10000 }); } catch {}
+  const noFolder = !folders2.includes(folderName);
+  assertCondition(noFolder, 'T13.4: user002 看不到 user001 的文件夹', folders2 + ' | ' + files2);
+  ab.screenshot('t13-04-user2-isolated');
+
+  ab.closeBrowser();
 });

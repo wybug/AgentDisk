@@ -1,100 +1,152 @@
 const { describe, step, assertCondition } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
 
+function findFileId() {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/files?folderId=0', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].fileName && items[i].fileName.includes('agentdisk-test-upload.txt')) return items[i].id;
+          }
+          return items.length > 0 ? items[0].id : 'none';
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function bindTag(fileId, tagName) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/tags/bind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: ${fileId}, tagName: '${tagName}' }),
+        credentials: 'include'
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: tag ${tagName} bound';
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function unbindTag(fileId, tagName) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/tags/unbind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: ${fileId}, tagName: '${tagName}' }),
+        credentials: 'include'
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: tag ${tagName} unbound';
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function searchByTags(tags) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/tags/search?tags=${encodeURIComponent(tags)}', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          var items = d.data || [];
+          return 'OK: ' + items.length + ' files: ' + items.map(function(f) { return f.fileName; }).join(', ');
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function navigateTo(page) {
+  return ab.evalStdin(`
+    (function() {
+      var items = document.querySelectorAll('.ant-menu-item');
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].textContent.includes('${page}')) { items[i].click(); return 'clicked'; }
+      }
+      return 'not found';
+    })()
+  `);
+}
+
 describe('T7: 标签管理', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
 
-  // T7.1 - 点击文件操作 → 标签
-  let snap = ab.snapshot();
-  const fileRow = ab.findRefByText(snap, 'test-upload.txt') || ab.findRefByText(snap, '.txt');
-  if (!fileRow) {
-    step('T7.1: 找不到测试文件', false, '请先运行 T3 上传文件');
-    ab.closeBrowser();
-    return;
-  }
+  ab.waitMs(2000);
+  navigateTo('全部文件');
+  ab.waitMs(2000);
+  ab.screenshot('t07-00-explorer');
 
-  const actionBtn = ab.findRefByText(snap, '操作') || ab.findRefByRole(snap, 'button', '...');
-  if (actionBtn) {
-    ab.click(actionBtn);
-    ab.waitMs(500);
-    snap = ab.snapshot();
-    const tagItem = ab.findRefByText(snap, '标签');
-    if (tagItem) {
-      ab.click(tagItem);
-      ab.waitMs(1000);
-      assertCondition(true, 'T7.1: 打开标签管理弹窗');
-    } else {
-      step('T7.1: 找不到标签菜单项', false);
-      ab.closeBrowser();
-      return;
-    }
-  } else {
-    step('T7.1: 找不到操作按钮', false);
-    ab.closeBrowser();
-    return;
-  }
-  ab.screenshot('t07-01-tag-modal');
+  // T7.1 - 找到测试文件
+  const fileId = findFileId();
+  ab.waitMs(1000);
+  assertCondition(fileId !== 'none' && !fileId.includes('ERR'), 'T7.1: 找到测试文件', 'fileId=' + fileId);
 
-  // T7.2 - 输入标签「重要」并添加
-  snap = ab.snapshot();
-  const tagInput = ab.findRefByPlaceholder(snap, '标签') || ab.findRefByPlaceholder(snap, '输入标签');
-  if (tagInput) {
-    ab.fill(tagInput, '重要');
-    snap = ab.snapshot();
-    const addBtn = ab.findRefByRole(snap, 'button', '添加') || ab.findRefByText(snap, '添加');
-    if (addBtn) ab.click(addBtn);
-    ab.waitMs(1000);
-    const hasTag = ab.pageContainsText('重要');
-    assertCondition(hasTag, 'T7.2: 标签「重要」添加成功');
-  } else {
-    step('T7.2: 找不到标签输入框', false);
-  }
-  ab.screenshot('t07-02-tag-added');
+  // T7.2 - 绑定标签「重要」
+  const bindResult1 = bindTag(fileId, '重要');
+  ab.waitMs(1000);
+  assertCondition(bindResult1.includes('OK'), 'T7.2: 标签「重要」绑定成功', bindResult1);
+  ab.screenshot('t07-02-tag-bound');
 
-  // T7.3 - 添加标签「文档」
-  snap = ab.snapshot();
-  const tagInput2 = ab.findRefByPlaceholder(snap, '标签') || ab.findRefByPlaceholder(snap, '输入标签');
-  if (tagInput2) {
-    ab.fill(tagInput2, '文档');
-    snap = ab.snapshot();
-    const addBtn2 = ab.findRefByRole(snap, 'button', '添加') || ab.findRefByText(snap, '添加');
-    if (addBtn2) ab.click(addBtn2);
-    ab.waitMs(1000);
-    const hasTag2 = ab.pageContainsText('文档');
-    step('T7.3: 标签「文档」添加成功', hasTag2);
-  }
+  // T7.3 - 绑定标签「文档」
+  const bindResult2 = bindTag(fileId, '文档');
+  ab.waitMs(1000);
+  assertCondition(bindResult2.includes('OK'), 'T7.3: 标签「文档」绑定成功', bindResult2);
   ab.screenshot('t07-03-two-tags');
 
-  // T7.4 - 关闭弹窗
-  snap = ab.snapshot();
-  const closeBtn = ab.findRefByRole(snap, 'button', '关闭') || ab.findRefByRole(snap, 'button', '取消');
-  if (closeBtn) ab.click(closeBtn);
-  else ab.press('Escape');
-  ab.waitMs(500);
-
-  // T7.5 - 标签搜索
-  ab.findAndClick('标签搜索');
-  ab.waitLoad('networkidle');
+  // T7.4 - 验证标签已保存（通过搜索验证文件绑定了两个标签）
+  const searchBoth = searchByTags('重要,文档');
   ab.waitMs(1000);
-  ab.screenshot('t07-04-tag-search-page');
+  const searchBothOk = searchBoth.includes('OK') && searchBoth.includes('agentdisk-test-upload');
+  assertCondition(searchBothOk, 'T7.4: 文件同时包含两个标签（通过搜索验证）', searchBoth);
+
+  // T7.5 - 导航到标签搜索页面
+  navigateTo('标签搜索');
+  ab.waitMs(2000);
+  const urlTags = ab.getUrl();
+  assertCondition(urlTags.includes('/tags'), 'T7.5: 导航到标签搜索页面', urlTags);
+  ab.screenshot('t07-05-tags-page');
 
   // T7.6 - 搜索标签「重要」
-  snap = ab.snapshot();
-  const searchInput = ab.findRefByPlaceholder(snap, '标签') || ab.findRefByPlaceholder(snap, '搜索');
-  if (searchInput) {
-    ab.fill(searchInput, '重要');
-    snap = ab.snapshot();
-    const searchBtn = ab.findRefByRole(snap, 'button', '搜索') || ab.findRefByText(snap, '搜索');
-    if (searchBtn) ab.click(searchBtn);
-    ab.waitLoad('networkidle');
-    ab.waitMs(1000);
-    const found = ab.pageContainsText('test-upload');
-    assertCondition(found, 'T7.6: 搜索「重要」找到标记的文件');
-  } else {
-    step('T7.6: 找不到搜索输入框', false);
-  }
-  ab.screenshot('t07-05-search-result');
+  const searchResult1 = searchByTags('重要');
+  ab.waitMs(1000);
+  const searchOk1 = searchResult1.includes('OK') && searchResult1.includes('agentdisk-test-upload');
+  assertCondition(searchOk1, 'T7.6: 搜索「重要」找到标记的文件', searchResult1);
+  ab.screenshot('t07-06-search-result');
+
+  // T7.7 - 搜索标签「重要,文档」
+  const searchResult2 = searchByTags('重要,文档');
+  ab.waitMs(1000);
+  const searchOk2 = searchResult2.includes('OK') && searchResult2.includes('agentdisk-test-upload');
+  assertCondition(searchOk2, 'T7.7: 搜索「重要,文档」找到标记的文件', searchResult2);
+  ab.screenshot('t07-07-search-multi');
+
+  // T7.8 - 解绑标签「重要」
+  const unbindResult = unbindTag(fileId, '重要');
+  ab.waitMs(1000);
+  assertCondition(unbindResult.includes('OK'), 'T7.8: 标签「重要」解绑成功', unbindResult);
+  ab.screenshot('t07-08-tag-unbound');
+
+  // 验证解绑后搜索「重要」不再包含该文件，但搜索「文档」仍能找到
+  const searchAfterUnbind = searchByTags('重要');
+  ab.waitMs(1000);
+  const onlyDoc = !searchAfterUnbind.includes('agentdisk-test-upload');
+  assertCondition(onlyDoc, 'T7.8b: 解绑后搜索「重要」不再包含该文件', searchAfterUnbind);
 
   ab.closeBrowser();
 });

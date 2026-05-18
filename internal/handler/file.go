@@ -12,14 +12,15 @@ import (
 
 // FileHandler represents a domain type.
 type FileHandler struct {
-	svc      *service.FileService
-	dlSecret string
-	dlExpire int
+	svc        *service.FileService
+	recycleSvc *service.RecycleService
+	dlSecret   string
+	dlExpire   int
 }
 
 // NewFileHandler creates a new FileHandler.
-func NewFileHandler(svc *service.FileService, dlSecret string, dlExpire int) *FileHandler {
-	return &FileHandler{svc: svc, dlSecret: dlSecret, dlExpire: dlExpire}
+func NewFileHandler(svc *service.FileService, recycleSvc *service.RecycleService, dlSecret string, dlExpire int) *FileHandler {
+	return &FileHandler{svc: svc, recycleSvc: recycleSvc, dlSecret: dlSecret, dlExpire: dlExpire}
 }
 
 // UploadFile handles the request.
@@ -101,6 +102,7 @@ func (h *FileHandler) DeleteFile(c *gin.Context) {
 		response.InternalError(c, err.Error())
 		return
 	}
+	_ = h.recycleSvc.MoveToRecycle(userID, id, "file", "user")
 	response.OK(c, nil)
 }
 

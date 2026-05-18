@@ -50,6 +50,13 @@ func (r *FileRepo) SoftDelete(id uint64) error {
 		Update("is_deleted", true).Error
 }
 
+// UnDelete marks a file as not deleted by setting is_deleted = false.
+func (r *FileRepo) UnDelete(id uint64) error {
+	return r.db.Model(&model.DiskFile{}).
+		Where("id = ?", id).
+		Update("is_deleted", false).Error
+}
+
 // GetByMD5 returns all non-deleted files matching the given MD5 hash for a specific user.
 func (r *FileRepo) GetByMD5(userID, md5 string) ([]model.DiskFile, error) {
 	var files []model.DiskFile

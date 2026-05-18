@@ -43,13 +43,14 @@ func (r *TagRepo) FindOrCreate(userID, name string) (*model.DiskTag, error) {
 	return &tag, nil
 }
 
-// BindFile creates a tag-file association record.
+// BindFile creates a tag-file association record (idempotent).
 func (r *TagRepo) BindFile(tagID, fileID uint64) error {
 	relation := model.DiskTagRelation{
 		TagID:  tagID,
 		FileID: fileID,
 	}
-	return r.db.Create(&relation).Error
+	result := r.db.Where("tag_id = ? AND file_id = ?", tagID, fileID).FirstOrCreate(&relation)
+	return result.Error
 }
 
 // UnbindFile removes the tag-file association.

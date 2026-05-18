@@ -10,12 +10,13 @@ import (
 
 // FolderHandler is a core domain type.
 type FolderHandler struct {
-	svc *service.FolderService
+	svc        *service.FolderService
+	recycleSvc *service.RecycleService
 }
 
 // NewFolderHandler creates and returns a new FolderHandler.
-func NewFolderHandler(svc *service.FolderService) *FolderHandler {
-	return &FolderHandler{svc: svc}
+func NewFolderHandler(svc *service.FolderService, recycleSvc *service.RecycleService) *FolderHandler {
+	return &FolderHandler{svc: svc, recycleSvc: recycleSvc}
 }
 
 // CreateFolderReq is a core domain type.
@@ -85,8 +86,8 @@ func (h *FolderHandler) RenameFolder(c *gin.Context) {
 		return
 	}
 	var req RenameFolderReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+		response.BadRequest(c, bindErr.Error())
 		return
 	}
 	userID := c.GetString("userId")
@@ -125,5 +126,6 @@ func (h *FolderHandler) DeleteFolder(c *gin.Context) {
 		response.InternalError(c, err.Error())
 		return
 	}
+	_ = h.recycleSvc.MoveToRecycle(userID, id, "folder", "user")
 	response.OK(c, nil)
 }

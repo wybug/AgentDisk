@@ -121,12 +121,18 @@ func (s *FileService) UpdateFile(ctx context.Context, userID string, fileID uint
 		return nil, fmt.Errorf("permission denied")
 	}
 
-	// Create version snapshot before update
+	// Copy current OSS content to version-specific key before overwriting
+	snapshotOSSKey := fmt.Sprintf("%s_v%d", file.OSSKey, file.Version)
+	if err := s.ossClient.Copy(ctx, file.OSSKey, snapshotOSSKey); err != nil {
+		return nil, fmt.Errorf("copy version snapshot: %w", err)
+	}
+
+	// Create version snapshot referencing the version-specific key
 	snapshot := &model.DiskFileVersion{
 		FileID:   file.ID,
 		UserID:   userID,
 		Version:  file.Version,
-		OSSKey:   file.OSSKey,
+		OSSKey:   snapshotOSSKey,
 		FileSize: file.FileSize,
 		MD5:      file.MD5,
 	}

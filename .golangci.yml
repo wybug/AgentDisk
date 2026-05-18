@@ -92,6 +92,11 @@ linters:
         linters:
           - errcheck
           - gosec
+      - path: web/node_modules/
+        linters:
+          - gocognit
+          - gocritic
+          - govet
       - linters:
           - gosec
         text: "G201:"

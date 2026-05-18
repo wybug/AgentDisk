@@ -68,7 +68,12 @@ func (s *RecycleService) Restore(userID string, recycleID uint64) error {
 	if item.UserID != userID {
 		return fmt.Errorf("permission denied")
 	}
-	// Restore by removing recycle record; data was soft-deleted, not physically removed
+	switch item.ResType {
+	case "file":
+		_ = s.fileRepo.UnDelete(item.ResourceID)
+	case "folder":
+		_ = s.folderRepo.UnDelete(item.ResourceID)
+	}
 	return s.recycleRepo.Delete(recycleID)
 }
 

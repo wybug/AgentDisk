@@ -1,46 +1,57 @@
 const { describe, step, assertCondition } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
 
+function navigateTo(page) {
+  return ab.evalStdin(`
+    (function() {
+      var items = document.querySelectorAll('.ant-menu-item');
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].textContent.includes('${page}')) { items[i].click(); return 'clicked'; }
+      }
+      return 'not found';
+    })()
+  `);
+}
+
 describe('T14: 页面导航与响应式', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
+  ab.waitMs(2000);
 
-  // T14.1 - 依次点击侧边栏各菜单项
-  const menuItems = ['全部文件', '回收站', '我的分享', '标签搜索', '权限管理'];
+  // T14.1 - 依次点击侧边栏各菜单项，验证 URL
+  const pages = [
+    { menu: '回收站', url: '/recycle' },
+    { menu: '我的分享', url: '/shares' },
+    { menu: '标签搜索', url: '/tags' },
+    { menu: '权限管理', url: '/permissions' },
+  ];
 
-  for (const item of menuItems) {
-    try {
-      ab.findAndClick(item);
-      ab.waitLoad('networkidle');
-      ab.waitMs(800);
-      const currentUrl = ab.getUrl();
-      step(`点击「${item}」`, true, currentUrl);
-      ab.screenshot(`t14-nav-${item.replace(/\s/g, '-')}`);
-    } catch {
-      step(`点击「${item}」`, false, '导航失败');
-    }
+  for (const p of pages) {
+    navigateTo(p.menu);
+    ab.waitMs(2000);
+    const currentUrl = ab.getUrl();
+    const ok = currentUrl.includes(p.url);
+    assertCondition(ok, 'T14.1: 导航到「' + p.menu + '」', currentUrl);
+    ab.screenshot('t14-nav-' + p.menu);
   }
 
   // T14.2 - 回到全部文件
-  ab.findAndClick('全部文件');
-  ab.waitLoad('networkidle');
-  ab.waitMs(800);
-  step('T14.2: 回到全部文件页面', true);
-  ab.screenshot('t14-back-to-files');
+  navigateTo('全部文件');
+  ab.waitMs(2000);
+  const urlFiles = ab.getUrl();
+  assertCondition(urlFiles.includes('/explorer'), 'T14.2: 返回全部文件', urlFiles);
+  ab.screenshot('t14-02-back-to-files');
 
-  // T14.3 - 缩小窗口到 768px 以下
+  // T14.3 - 缩小窗口测试响应式
   ab.setViewport(768, 1024);
   ab.waitMs(1000);
-  ab.screenshot('t14-responsive-768');
+  ab.screenshot('t14-03-responsive-768');
 
   ab.setViewport(375, 812);
   ab.waitMs(1000);
-  ab.screenshot('t14-responsive-375');
+  ab.screenshot('t14-04-responsive-375');
 
-  // T14.4 - 验证侧边栏折叠
-  const snap = ab.snapshot();
-  const siderCollapsed = !snap.includes('全部文件') || snap.includes('collapsed');
-  step('T14.3/T14.4: 响应式布局 - 小屏幕下侧边栏状态', true, siderCollapsed ? '已折叠' : '未折叠');
+  step('T14.3: 响应式视口测试完成', true, '768x1024 + 375x812');
 
   // 恢复窗口
   ab.setViewport(1440, 900);
