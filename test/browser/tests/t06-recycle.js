@@ -163,11 +163,24 @@ describe('T6: 文件删除与回收站', () => {
   step('T6.6: 再次删除文件', deleteResult2.includes('OK'), deleteResult2);
   ab.screenshot('t06-06-deleted-again');
 
-  // T6.7 - 彻底删除（通过 API 获取所有匹配的回收站记录，逐个删除）
+  // T6.7 - 彻底删除（通过 API 获取回收站记录）
   navigateTo('回收站');
   ab.waitMs(2000);
 
-  const recycleHasFile2 = ab.pageContainsText('agentdisk-test-recycle.txt');
+  const recycleCheck2 = ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/recycle', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          var matches = items.filter(function(r) { return r.resName === 'agentdisk-test-recycle.txt'; });
+          return matches.length > 0 ? 'found:' + matches[0].id : 'not found';
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+  ab.waitMs(1000);
+  const recycleHasFile2 = recycleCheck2.includes('found:');
   if (recycleHasFile2) {
     // 获取所有匹配的回收站记录并逐个删除
     const permDelResult = ab.evalStdin(`

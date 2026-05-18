@@ -15,12 +15,13 @@ type RecycleService struct {
 	recycleRepo *repository.RecycleRepo
 	fileRepo    *repository.FileRepo
 	folderRepo  *repository.FolderRepo
+	spaceRepo   *repository.SpaceRepo
 	ossClient   *oss.Client
 }
 
 // NewRecycleService creates a new RecycleService.
-func NewRecycleService(recycleRepo *repository.RecycleRepo, fileRepo *repository.FileRepo, folderRepo *repository.FolderRepo, ossClient *oss.Client) *RecycleService {
-	return &RecycleService{recycleRepo: recycleRepo, fileRepo: fileRepo, folderRepo: folderRepo, ossClient: ossClient}
+func NewRecycleService(recycleRepo *repository.RecycleRepo, fileRepo *repository.FileRepo, folderRepo *repository.FolderRepo, spaceRepo *repository.SpaceRepo, ossClient *oss.Client) *RecycleService {
+	return &RecycleService{recycleRepo: recycleRepo, fileRepo: fileRepo, folderRepo: folderRepo, spaceRepo: spaceRepo, ossClient: ossClient}
 }
 
 // MoveToRecycle handles the request.
@@ -90,6 +91,7 @@ func (s *RecycleService) PermanentlyDelete(ctx context.Context, userID string, r
 	if item.ResType == "file" {
 		f, err := s.fileRepo.GetByID(item.ResourceID)
 		if err == nil {
+			_ = s.spaceRepo.UpdateUsedQuota(userID, -f.FileSize)
 			_ = s.ossClient.Delete(ctx, f.OSSKey) // best-effort physical delete
 		}
 	}

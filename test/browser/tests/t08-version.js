@@ -166,6 +166,33 @@ describe('T8: 版本历史与回滚', () => {
   const versionIncreased = verifyResult.includes('version=') && !verifyResult.includes('version=1') && !verifyResult.includes('version=2');
   step('T8.6b: 回滚后版本号递增', versionIncreased || verifyResult.includes('OK'), verifyResult);
 
+  // T8.7 - 清理：删除版本测试文件 + 回收站记录
+  if (fileId) {
+    ab.evalStdin(`
+      (function() {
+        return fetch('/v1/disk/files/${fileId}', { method: 'DELETE', credentials: 'include' })
+          .then(function(r) { return r.json(); })
+          .then(function() {
+            return fetch('/v1/disk/recycle', { credentials: 'include' })
+              .then(function(r) { return r.json(); })
+              .then(function(d) {
+                var items = (d.data || []).filter(function(m) { return m.resName === 'agentdisk-version-test.txt'; });
+                return Promise.all(items.map(function(m) {
+                  return fetch('/v1/disk/recycle', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recycleId: m.id }),
+                    credentials: 'include'
+                  }).then(function(r) { return r.json(); });
+                })).then(function() { return 'OK: cleaned'; });
+              });
+          });
+      })()
+    `);
+    ab.waitMs(2000);
+    step('T8.7: 清理版本测试文件', true, 'fileId=' + fileId);
+  }
+
   try { fs.unlinkSync(tmpFile); } catch {}
   ab.closeBrowser();
 });

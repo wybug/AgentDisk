@@ -168,8 +168,8 @@ func (s *FileService) DeleteFile(userID string, fileID uint64) error {
 	if file.UserID != userID {
 		return fmt.Errorf("permission denied")
 	}
-	if err := s.spaceRepo.UpdateUsedQuota(userID, -file.FileSize); err != nil {
-		return fmt.Errorf("update used quota: %w", err)
+	if file.IsDeleted {
+		return fmt.Errorf("file already deleted")
 	}
 	return s.fileRepo.SoftDelete(fileID)
 }

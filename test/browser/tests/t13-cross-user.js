@@ -85,5 +85,27 @@ describe('T13: 跨用户隔离', () => {
   assertCondition(noFolder, 'T13.4: user002 看不到 user001 的文件夹', folders2 + ' | ' + files2);
   ab.screenshot('t13-04-user2-isolated');
 
+  // T13.5 - 清理：切回 user001 删除测试文件夹
+  ab.closeBrowser();
+  ab.login('user001', 'test123');
+  ab.waitMs(2000);
+  var cleanResult = ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/folders?parentId=0', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = (d.data || []).filter(function(f) { return f.folderName === '${folderName}'; });
+          if (items.length === 0) return 'OK: already gone';
+          return fetch('/v1/disk/folders/' + items[0].id, {
+            method: 'DELETE', credentials: 'include'
+          }).then(function(r) { return r.json(); })
+            .then(function(d2) { return d2.code === 0 ? 'OK: deleted' : 'ERROR'; });
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+  ab.waitMs(1500);
+  step('T13.5: user001 清理测试文件夹', cleanResult.includes('OK'), cleanResult);
+
   ab.closeBrowser();
 });

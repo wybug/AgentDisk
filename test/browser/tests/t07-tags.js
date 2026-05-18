@@ -148,5 +148,10 @@ describe('T7: 标签管理', () => {
   const onlyDoc = !searchAfterUnbind.includes('agentdisk-test-upload');
   assertCondition(onlyDoc, 'T7.8b: 解绑后搜索「重要」不再包含该文件', searchAfterUnbind);
 
+  // T7.9 - 清理：解绑「文档」标签，恢复初始状态
+  const unbindDoc = unbindTag(fileId, '文档');
+  ab.waitMs(1000);
+  step('T7.9: 清理标签「文档」', unbindDoc.includes('OK'), unbindDoc);
+
   ab.closeBrowser();
 });

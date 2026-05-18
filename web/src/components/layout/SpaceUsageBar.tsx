@@ -12,11 +12,13 @@ export default function SpaceUsageBar() {
 
   if (!space) return null;
 
-  const percent = space.totalQuota > 0 ? Math.round((space.usedQuota / space.totalQuota) * 100) : 0;
+  const totalQuota = space.totalQuota ?? 0;
+  const usedQuota = space.usedQuota ?? 0;
+  const percent = totalQuota > 0 ? Math.round((usedQuota / totalQuota) * 100) : 0;
   const color = percent > 90 ? '#ff4d4f' : percent > 70 ? '#faad14' : '#1890ff';
 
   return (
-    <Tooltip title={`${formatFileSize(space.usedQuota)} / ${formatFileSize(space.totalQuota)}`}>
+    <Tooltip title={`${formatFileSize(usedQuota)} / ${formatFileSize(totalQuota)}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Progress
           percent={percent}
@@ -26,7 +28,7 @@ export default function SpaceUsageBar() {
           showInfo={false}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-          {formatFileSize(space.usedQuota)} / {formatFileSize(space.totalQuota)}
+          {formatFileSize(usedQuota)} / {formatFileSize(totalQuota)}
         </Typography.Text>
       </div>
     </Tooltip>

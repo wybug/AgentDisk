@@ -185,6 +185,12 @@ describe('T9: 分享管理', () => {
   ab.waitMs(1000);
   step('T9.8: 验证分享访问', afterAccess.includes('OK'), afterAccess.substring(0, 150));
 
+  // T9.8b - 分享不存在的文件应返回错误
+  const fakeShare = createShareAPI(999999, 'abc', 10, 72);
+  ab.waitMs(1000);
+  const fakeRejected = fakeShare.includes('ERROR') && (fakeShare.includes('不存在') || fakeShare.includes('not found') || fakeShare.includes('not exist'));
+  assertCondition(fakeRejected, 'T9.8b: 分享不存在的文件返回错误', fakeShare);
+
   // T9.9 - 撤销分享
   const revokeResult = revokeShareAPI(shareId);
   ab.waitMs(1000);

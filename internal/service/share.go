@@ -11,16 +11,40 @@ import (
 
 // ShareService represents a domain type.
 type ShareService struct {
-	repo *repository.ShareRepo
+	repo       *repository.ShareRepo
+	fileRepo   *repository.FileRepo
+	folderRepo *repository.FolderRepo
 }
 
 // NewShareService creates a new ShareService.
-func NewShareService(repo *repository.ShareRepo) *ShareService {
-	return &ShareService{repo: repo}
+func NewShareService(repo *repository.ShareRepo, fileRepo *repository.FileRepo, folderRepo *repository.FolderRepo) *ShareService {
+	return &ShareService{repo: repo, fileRepo: fileRepo, folderRepo: folderRepo}
 }
 
 // CreateShare handles the request.
 func (s *ShareService) CreateShare(userID string, resourceID uint64, resType, extractCode string, maxVisit, expireHours int) (*model.DiskShare, error) {
+	// 校验资源是否存在
+	switch resType {
+	case "file":
+		f, err := s.fileRepo.GetByID(resourceID)
+		if err != nil {
+			return nil, fmt.Errorf("文件不存在")
+		}
+		if f.UserID != userID {
+			return nil, fmt.Errorf("无权分享该文件")
+		}
+	case "folder":
+		f, err := s.folderRepo.GetByID(resourceID)
+		if err != nil {
+			return nil, fmt.Errorf("文件夹不存在")
+		}
+		if f.UserID != userID {
+			return nil, fmt.Errorf("无权分享该文件夹")
+		}
+	default:
+		return nil, fmt.Errorf("不支持的资源类型: %s", resType)
+	}
+
 	code, err := generateShareCode()
 	if err != nil {
 		return nil, err

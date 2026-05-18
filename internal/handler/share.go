@@ -41,7 +41,7 @@ func (h *ShareHandler) CreateShare(c *gin.Context) {
 	}
 	share, err := h.svc.CreateShare(userID, req.ResourceID, req.ResType, req.ExtractCode, req.MaxVisit, req.ExpireHours)
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.BadRequest(c, err.Error())
 		return
 	}
 	response.Created(c, share)

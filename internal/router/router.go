@@ -72,9 +72,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	fileSvc := service.NewFileService(fileRepo, folderRepo, versionRepo, spaceRepo, ossClient)
 	permSvc := service.NewPermissionService(permRepo)
 	versionSvc := service.NewVersionService(versionRepo, fileRepo, ossClient)
-	recycleSvc := service.NewRecycleService(recycleRepo, fileRepo, folderRepo, ossClient)
+	recycleSvc := service.NewRecycleService(recycleRepo, fileRepo, folderRepo, spaceRepo, ossClient)
 	tagSvc := service.NewTagService(tagRepo)
-	shareSvc := service.NewShareService(shareRepo)
+	shareSvc := service.NewShareService(shareRepo, fileRepo, folderRepo)
 	previewSvc := service.NewPreviewService(fileSvc, ossClient)
 
 	// Handlers

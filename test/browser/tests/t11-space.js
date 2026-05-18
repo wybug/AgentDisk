@@ -68,9 +68,14 @@ describe('T11: 存储空间显示', () => {
   const hasSpace = space1.includes('OK:');
   assertCondition(hasSpace, 'T11.1: 获取空间用量', space1);
 
+  // T11.1b - 验证前端空间显示不含 NaN 或 undefined
+  const spaceText = ab.pageContainsText('NaN') || ab.pageContainsText('undefined');
+  const noNaN = !spaceText;
+  assertCondition(noNaN, 'T11.1b: 空间显示无 NaN/undefined', noNaN ? '正常' : '发现NaN或undefined');
+  ab.screenshot('t11-01-space-display');
+
   const usedBefore = space1.match(/used=(\d+)/);
   const usedValue = usedBefore ? parseInt(usedBefore[1]) : 0;
-  ab.screenshot('t11-01-space-before');
 
   // T11.2 - 上传文件后验证用量变化
   const tmpFile = path.join(os.tmpdir(), 'agentdisk-space-test.bin');
@@ -92,13 +97,20 @@ describe('T11: 存储空间显示', () => {
   assertCondition(increased, 'T11.2b: 上传后用量增加', 'before=' + usedValue + ' after=' + usedAfterValue);
   ab.screenshot('t11-02-space-after-upload');
 
-  // T11.3 - 删除文件后验证用量减少
+  // T11.3 - 软删除文件后验证用量不变（只有回收站彻底删除才释放配额）
   if (fileId) {
     deleteFileViaAPI(fileId);
     ab.waitMs(2000);
   }
 
-  // 清理回收站中的记录
+  const spaceAfterSoftDel = getSpaceAPI();
+  ab.waitMs(1000);
+  const usedSoftDel = spaceAfterSoftDel.match(/used=(\d+)/);
+  const usedSoftDelValue = usedSoftDel ? parseInt(usedSoftDel[1]) : 0;
+  const unchanged = usedSoftDelValue === usedAfterValue;
+  assertCondition(unchanged, 'T11.3: 软删除后用量不变', 'before=' + usedAfterValue + ' softDel=' + usedSoftDelValue);
+
+  // T11.4 - 从回收站彻底删除后验证用量减少
   const cleanRecycle = ab.evalStdin(`
     (function() {
       return fetch('/v1/disk/recycle', { credentials: 'include' })
@@ -125,8 +137,8 @@ describe('T11: 存储空间显示', () => {
   const usedAfterDel = space3.match(/used=(\d+)/);
   const usedAfterDelValue = usedAfterDel ? parseInt(usedAfterDel[1]) : 0;
   const decreased = usedAfterDelValue < usedAfterValue || usedAfterDelValue <= usedValue;
-  assertCondition(decreased, 'T11.3: 删除后用量减少', 'before=' + usedValue + ' afterDel=' + usedAfterDelValue + ' clean=' + cleanRecycle);
-  ab.screenshot('t11-03-space-after-delete');
+  assertCondition(decreased, 'T11.4: 回收站彻底删除后用量减少', 'before=' + usedValue + ' afterPurge=' + usedAfterDelValue + ' clean=' + cleanRecycle);
+  ab.screenshot('t11-04-space-after-purge');
 
   try { fs.unlinkSync(tmpFile); } catch {}
   ab.closeBrowser();
