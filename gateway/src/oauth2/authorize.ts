@@ -8,7 +8,7 @@ const CLIENT: OAuth2Client = {
   clientId: 'agentdisk',
   clientSecret: 'agentdisk-secret',
   redirectUris: [
-    'http://localhost:5173/auth/callback',
+    'http://localhost:9101/auth/callback',
     'http://localhost:9100/auth/callback',
   ],
 };

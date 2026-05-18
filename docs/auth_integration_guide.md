@@ -83,7 +83,36 @@ curl -X GET http://agentdisk:8080/v1/disk/space \
 
 ---
 
-## 3. 生成下载直链
+## 3. 网关代理认证（Agent 对话）
+
+网关为已登录用户签发 JWT，代理到 Agent 服务时携带，使 Agent 能以用户身份访问 AgentDisk API。
+
+### 认证链路
+
+```
+浏览器 → 网关 /process (gw_session cookie)
+       → 网关从 session 取 userId → 签发 JWT
+       → 代理到 Agent (Authorization: Bearer <jwt>)
+       → Agent 拿 JWT 调用后端 /v1/disk/* 接口
+```
+
+### JWT 签发参数
+
+| 参数 | 值 |
+|------|-----|
+| secret | 与后端 `config.yaml` 中 `jwt.secret` 一致 |
+| payload | `{ userId: "<当前用户ID>" }` |
+| expiresIn | 72h |
+
+### 安全约束
+
+- 未登录用户访问 `/process` 返回 401
+- JWT 绑定当前登录用户，无法伪造
+- Agent 服务使用 JWT 调用后端时自动携带用户身份
+
+---
+
+## 4. 生成下载直链
 
 ### 你需要什么
 
@@ -118,7 +147,7 @@ curl -o file.pdf "http://agentdisk:8080/v1/disk/files/download?t=xxx"
 
 ---
 
-## 4. 公共常量与约定
+## 5. 公共常量与约定
 
 ### JWT Claims 结构
 
@@ -147,7 +176,7 @@ signature = HMAC-SHA256(dlSecret, payloadBase64)
 
 ---
 
-## 5. 错误码速查
+## 6. 错误码速查
 
 | HTTP Code | Code | 含义 | 处理建议 |
 |-----------|------|------|---------|
@@ -159,7 +188,7 @@ signature = HMAC-SHA256(dlSecret, payloadBase64)
 
 ---
 
-## 6. 环境变量清单
+## 7. 环境变量清单
 
 | 变量名 | 用途 | 必填 |
 |--------|------|------|
@@ -173,7 +202,7 @@ signature = HMAC-SHA256(dlSecret, payloadBase64)
 
 ---
 
-## 7. 各 Agent 集成检查清单
+## 8. 各 Agent 集成检查清单
 
 - [ ] 获取 `JWT_SECRET` 环境变量
 - [ ] 调用 API 前生成 JWT（使用 `pkg/jwt` 包）

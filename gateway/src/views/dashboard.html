@@ -122,13 +122,17 @@
     <div class="card">
       <h2>快速操作</h2>
       <div class="quick-actions">
-        <a href="http://localhost:5173" target="_blank">
+        <a href="http://localhost:9101" target="_blank">
           <div class="icon">📁</div>
           <div class="label">打开 AgentDisk</div>
         </a>
         <a href="/oauth2/debug" target="_blank">
           <div class="icon">🔧</div>
           <div class="label">OAuth2 调试</div>
+        </a>
+        <a href="/chat">
+          <div class="icon">💬</div>
+          <div class="label">Agent 对话</div>
         </a>
       </div>
     </div>
@@ -137,10 +141,10 @@
       <h2>OAuth2 配置</h2>
       <table class="config-table">
         <tr><th>Client ID</th><td>agentdisk</td></tr>
-        <tr><th>Authorize URL</th><td>http://localhost:3000/oauth2/authorize</td></tr>
-        <tr><th>Token URL</th><td>http://localhost:3000/oauth2/token</td></tr>
-        <tr><th>Userinfo URL</th><td>http://localhost:3000/oauth2/userinfo</td></tr>
-        <tr><th>Redirect URI</th><td>http://localhost:5173/auth/callback</td></tr>
+        <tr><th>Authorize URL</th><td>http://localhost:3100/oauth2/authorize</td></tr>
+        <tr><th>Token URL</th><td>http://localhost:3100/oauth2/token</td></tr>
+        <tr><th>Userinfo URL</th><td>http://localhost:3100/oauth2/userinfo</td></tr>
+        <tr><th>Redirect URI</th><td>http://localhost:9101/auth/callback</td></tr>
         <tr><th>Scopes</th><td>openid, profile</td></tr>
       </table>
     </div>

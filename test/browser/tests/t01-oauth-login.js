@@ -10,7 +10,7 @@ describe('T1: OAuth2 登录流程', () => {
   ab.waitLoad('networkidle');
 
   const url1 = ab.getUrl();
-  const isLoginPage = url1.includes('3000') && url1.includes('login');
+  const isLoginPage = url1.includes('3100') && url1.includes('login');
   assertCondition(isLoginPage, 'T1.1: 浏览器重定向到网关登录页', url1);
   ab.screenshot('t01-01-login-page');
 
@@ -33,7 +33,7 @@ describe('T1: OAuth2 登录流程', () => {
   ab.waitLoad('networkidle');
 
   const url2 = ab.getUrl();
-  const isAuthorizePage = url2.includes('3000') && url2.includes('authorize');
+  const isAuthorizePage = url2.includes('3100') && url2.includes('authorize');
   assertCondition(isAuthorizePage, 'T1.3: 到达授权确认页', url2);
   ab.screenshot('t01-02-authorize-page');
 
@@ -44,7 +44,7 @@ describe('T1: OAuth2 登录流程', () => {
 
   // T1.4 - 验证重定向回前端主界面
   const url3 = ab.getUrl();
-  const isMainPage = url3.includes('5173') && (url3.includes('explorer') || url3 === ab.BASE_URL + '/');
+  const isMainPage = url3.includes('9101') && (url3.includes('explorer') || url3 === ab.BASE_URL + '/');
   assertCondition(isMainPage, 'T1.4: 登录成功，回到前端主界面', url3);
   ab.screenshot('t01-03-main-page');
 

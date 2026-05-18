@@ -16,8 +16,8 @@ function checkServices() {
   console.log('\n\x1b[1m检查服务状态...\x1b[0m');
   const services = [
     { name: '后端 API', port: 9100 },
-    { name: '测试网关', port: 3000 },
-    { name: 'Web 前端', port: 5173 },
+    { name: '测试网关', port: 3100 },
+    { name: 'Web 前端', port: 9101 },
   ];
 
   let allRunning = true;

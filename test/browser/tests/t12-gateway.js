@@ -78,7 +78,7 @@ describe('T12: 测试网关管理', () => {
   ab.screenshot('t12-04-user-deleted');
 
   // T12.5 - 验证「打开 AgentDisk」链接
-  const hasOpenLink = ab.pageContainsText('AgentDisk') || ab.pageContainsText('5173');
+  const hasOpenLink = ab.pageContainsText('AgentDisk') || ab.pageContainsText('9101');
   step('T12.5: 页面包含 AgentDisk 链接信息', hasOpenLink);
   ab.screenshot('t12-05-agentdisk-link');
 

@@ -2,8 +2,8 @@ const { execFileSync, execSync } = require('child_process');
 const path = require('path');
 
 const SESSION = 'agentdisk-test';
-const BASE_URL = 'http://localhost:5173';
-const GATEWAY_URL = 'http://localhost:3000';
+const BASE_URL = 'http://localhost:9101';
+const GATEWAY_URL = 'http://localhost:3100';
 const SCREENSHOT_DIR = path.join(__dirname, '..', 'screenshots');
 
 function ab(...args) {
