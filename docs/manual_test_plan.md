@@ -20,10 +20,13 @@
 3. `oauth2.redirect_url` 指向 `http://localhost:5173/auth/callback`
 4. 环境变量 `DB_PASSWORD`、`OSS_ACCESS_KEY`、`OSS_SECRET_KEY` 已设置
 
-### 调试工具
+### 调试测试工具
 
-agent-browser调试工具
+#### agent-browser调试工具
 http://localhost:4848/
+
+#### 测试程序目录
+test/browser/tests/
 
 ---
 

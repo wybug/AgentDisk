@@ -83,5 +83,8 @@ func (c *Client) PresignedGetURL(ctx context.Context, key string, expires time.D
 // BuildKey constructs OSS key following the path convention:
 // disk/user_{userId}/{fullPath}/{fileId}_{fileName}
 func BuildKey(userID, fullPath string, fileID uint64, fileName string) string {
-	return fmt.Sprintf("disk/user_%s/%s/%d_%s", userID, fullPath, fileID, fileName)
+	if fullPath != "" {
+		return fmt.Sprintf("disk/user_%s/%s/%d_%s", userID, fullPath, fileID, fileName)
+	}
+	return fmt.Sprintf("disk/user_%s/%d_%s", userID, fileID, fileName)
 }

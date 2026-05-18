@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/service"
@@ -28,6 +29,7 @@ func (h *PreviewHandler) PreviewFile(c *gin.Context) {
 	userID := c.GetString("userId")
 	result, err := h.svc.Preview(c.Request.Context(), userID, id)
 	if err != nil {
+		log.Printf("Preview error: userId=%s id=%d err=%v", userID, id, err)
 		response.InternalError(c, err.Error())
 		return
 	}

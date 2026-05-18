@@ -183,6 +183,58 @@ describe('T1: OAuth2 登录流程', () => {
   );
   ab.screenshot('t01-11-back-to-explorer');
 
+  // ============================================================
+  // T1.11a - 通过 UI 删除所有文件和文件夹
+  // ============================================================
+  var deleteLoop = 0;
+  while (deleteLoop < 20) {
+    snap = ab.snapshot();
+    // Find first "删除" button in table rows (folders have 删除 button)
+    var deleteBtn = ab.findRefByRole(snap, 'button', '删除');
+    if (!deleteBtn) {
+      // Try finding file action buttons (操作 column → dropdown → 删除)
+      // Use JS to click file delete via action menu
+      var clickResult = ab.evalStdin(`
+        (function() {
+          var rows = document.querySelectorAll('.ant-table-row');
+          if (rows.length === 0) return 'empty';
+          // Click the first row's action trigger
+          var actions = rows[0].querySelector('.ant-space-item button, .ant-btn-link');
+          if (actions) { actions.click(); return 'clicked action'; }
+          return 'no action btn';
+        })()
+      `);
+      if (clickResult === 'empty') break;
+      ab.waitMs(500);
+      // Now look for delete in the dropdown
+      snap = ab.snapshot();
+      var dropDelete = ab.findRefByText(snap, '删除');
+      if (dropDelete) {
+        ab.click(dropDelete);
+        ab.waitMs(500);
+        // Confirm deletion
+        snap = ab.snapshot();
+        var confirmBtn = ab.findRefByRole(snap, 'button', '确 定') || ab.findRefByRole(snap, 'button', '删除');
+        if (confirmBtn) ab.click(confirmBtn);
+        ab.waitMs(1000);
+      } else {
+        break;
+      }
+    } else {
+      ab.click(deleteBtn);
+      ab.waitMs(500);
+      snap = ab.snapshot();
+      var okBtn = ab.findRefByRole(snap, 'button', '确 定');
+      if (okBtn) ab.click(okBtn);
+      ab.waitMs(1000);
+    }
+    deleteLoop++;
+  }
+  step('T1.11a: 清理所有文件和文件夹', true, '循环 ' + deleteLoop + ' 次');
+  ab.waitMs(500);
+
+  ab.screenshot('t01-11a-cleaned');
+
   // T1.12 - 退出登录
   snap = ab.snapshot();
   const logoutRef = ab.findRefByText(snap, '退出登录');

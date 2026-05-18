@@ -7,6 +7,13 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/.dev-logs"
 PID_FILE="$PROJECT_ROOT/.dev-pids"
 
+# Load .env if present
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  source "$PROJECT_ROOT/.env"
+  set +a
+fi
+
 # 颜色
 RED='\033[0;31m'
 GREEN='\033[0;32m'

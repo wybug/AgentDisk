@@ -41,12 +41,16 @@ func NewFileService(
 
 // UploadFile handles the request.
 func (s *FileService) UploadFile(ctx context.Context, userID string, folderID uint64, fileName string, reader io.Reader, size int64, contentType, agentID string) (*model.DiskFile, error) {
-	folder, err := s.folderRepo.GetByID(folderID)
-	if err != nil {
-		return nil, fmt.Errorf("folder not found: %w", err)
-	}
-	if folder.UserID != userID {
-		return nil, fmt.Errorf("permission denied")
+	var fullPath string
+	if folderID > 0 {
+		folder, err := s.folderRepo.GetByID(folderID)
+		if err != nil {
+			return nil, fmt.Errorf("folder not found: %w", err)
+		}
+		if folder.UserID != userID {
+			return nil, fmt.Errorf("permission denied")
+		}
+		fullPath = folder.FullPath
 	}
 
 	file := &model.DiskFile{
@@ -64,7 +68,7 @@ func (s *FileService) UploadFile(ctx context.Context, userID string, folderID ui
 		return nil, fmt.Errorf("create file record: %w", err)
 	}
 
-	ossKey := oss.BuildKey(userID, folder.FullPath, file.ID, fileName)
+	ossKey := oss.BuildKey(userID, fullPath, file.ID, fileName)
 	if err := s.ossClient.Upload(ctx, ossKey, reader, size, contentType); err != nil {
 		return nil, fmt.Errorf("upload to oss: %w", err)
 	}
@@ -73,10 +77,22 @@ func (s *FileService) UploadFile(ctx context.Context, userID string, folderID ui
 		return nil, fmt.Errorf("update file oss key: %w", err)
 	}
 
+	if err := s.ensureQuota(userID); err != nil {
+		return nil, fmt.Errorf("init quota: %w", err)
+	}
 	if err := s.spaceRepo.UpdateUsedQuota(userID, size); err != nil {
 		return nil, fmt.Errorf("update used quota: %w", err)
 	}
 	return file, nil
+}
+
+func (s *FileService) ensureQuota(userID string) error {
+	_, err := s.spaceRepo.GetByUserID(userID)
+	if err != nil {
+		defaultQuota := int64(10 * 1024 * 1024 * 1024) // 10GB
+		return s.spaceRepo.CreateQuota(userID, defaultQuota)
+	}
+	return nil
 }
 
 // GetFile handles the request.

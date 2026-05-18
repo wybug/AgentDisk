@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/service"
@@ -24,6 +25,7 @@ func NewFileHandler(svc *service.FileService, dlSecret string, dlExpire int) *Fi
 // UploadFile handles the request.
 func (h *FileHandler) UploadFile(c *gin.Context) {
 	userID := c.GetString("userId")
+	log.Printf("UploadFile: userId=%s", userID)
 	folderID, err := strconv.ParseUint(c.PostForm("folderId"), 10, 64)
 	if err != nil {
 		folderID = 0
@@ -32,6 +34,7 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
+		log.Printf("UploadFile: FormFile error: %v", err)
 		response.BadRequest(c, "file required")
 		return
 	}
@@ -39,6 +42,7 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 
 	result, err := h.svc.UploadFile(c.Request.Context(), userID, folderID, header.Filename, file, header.Size, header.Header.Get("Content-Type"), agentID)
 	if err != nil {
+		log.Printf("UploadFile: service error: %v", err)
 		response.InternalError(c, err.Error())
 		return
 	}
@@ -55,6 +59,7 @@ func (h *FileHandler) GetFile(c *gin.Context) {
 	userID := c.GetString("userId")
 	file, url, err := h.svc.GetFile(c.Request.Context(), userID, id)
 	if err != nil {
+		log.Printf("GetFile error: userId=%s id=%d err=%v", userID, id, err)
 		response.InternalError(c, err.Error())
 		return
 	}
