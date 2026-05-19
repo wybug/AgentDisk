@@ -68,8 +68,8 @@ func (h *FileHandler) GetFile(c *gin.Context) {
 	agentGroupID := c.GetString("agentGroupId")
 
 	if agentID != "" {
-		ok, err := h.permSvc.CheckOrAutoGrant(userID, agentID, agentGroupID, id, "file", "read")
-		if err != nil || !ok {
+		permOK, permErr := h.permSvc.CheckOrAutoGrant(userID, agentID, agentGroupID, id, "file", "read")
+		if permErr != nil || !permOK {
 			response.Forbidden(c, "no permission")
 			return
 		}
@@ -96,8 +96,8 @@ func (h *FileHandler) UpdateFile(c *gin.Context) {
 	agentGroupID := c.GetString("agentGroupId")
 
 	if agentID != "" {
-		ok, err := h.permSvc.CheckOrAutoGrant(userID, agentID, agentGroupID, id, "file", "write")
-		if err != nil || !ok {
+		permOK, permErr := h.permSvc.CheckOrAutoGrant(userID, agentID, agentGroupID, id, "file", "write")
+		if permErr != nil || !permOK {
 			response.Forbidden(c, "no permission")
 			return
 		}

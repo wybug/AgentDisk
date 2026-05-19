@@ -29,6 +29,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	if err != nil {
 		panic("failed to connect database: " + err.Error())
 	}
+	if err := repository.AutoMigrate(db); err != nil {
+		panic("failed to auto-migrate database: " + err.Error())
+	}
 	ossClient, err := oss.NewClient(
 		cfg.OSS.Endpoint,
 		cfg.OSS.AccessKey,

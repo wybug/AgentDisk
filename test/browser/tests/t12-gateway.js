@@ -70,6 +70,8 @@ describe('T12: 测试网关管理', () => {
       })()
     `);
     ab.waitMs(2000);
+    ab.evalStdin('loadUsers()'); // trigger table refresh
+    ab.waitMs(1000);
     const gone = !ab.pageContainsText('testuser999');
     step('T12.4: 测试用户删除', gone, delResult);
   } else {

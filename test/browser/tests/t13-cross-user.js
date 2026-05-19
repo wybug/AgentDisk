@@ -107,5 +107,26 @@ describe('T13: 跨用户隔离', () => {
   ab.waitMs(1500);
   step('T13.5: user001 清理测试文件夹', cleanResult.includes('OK'), cleanResult);
 
+  // 清理回收站中 T13 产生的记录
+  ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/recycle', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          return Promise.all(items.map(function(m) {
+            return fetch('/v1/disk/recycle', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recycleId: m.id }),
+              credentials: 'include'
+            }).then(function(r) { return r.json(); });
+          })).then(function() { return items.length; });
+        })
+        .catch(function(e) { return -1; });
+    })()
+  `);
+  ab.waitMs(2000);
+
   ab.closeBrowser();
 });
