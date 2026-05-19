@@ -40,11 +40,11 @@ oauth2:
   enabled: true               # 启用 OAuth2 Web 登录
   client_id: "agentdisk"
   client_secret: "agentdisk-secret"
-  auth_url: "http://localhost:3000/oauth2/authorize"
-  token_url: "http://localhost:3000/oauth2/token"
-  userinfo_url: "http://localhost:3000/oauth2/userinfo"
+  auth_url: "http://localhost:3100/oauth2/authorize"
+  token_url: "http://localhost:3100/oauth2/token"
+  userinfo_url: "http://localhost:3100/oauth2/userinfo"
   redirect_url: "http://localhost:9100/auth/callback"
-  frontend_url: "http://localhost:5173"
+  frontend_url: "http://localhost:9101"
   scopes:
     - openid
     - profile

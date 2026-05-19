@@ -10,7 +10,7 @@ describe('T1: OAuth2 登录流程', () => {
   ab.waitLoad('networkidle');
 
   const url1 = ab.getUrl();
-  const isLoginPage = url1.includes('3000') && url1.includes('login');
+  const isLoginPage = url1.includes('3100') && url1.includes('login');
   assertCondition(isLoginPage, 'T1.1: 浏览器重定向到网关登录页', url1);
   ab.screenshot('t01-01-login-page');
 
@@ -33,7 +33,7 @@ describe('T1: OAuth2 登录流程', () => {
   ab.waitLoad('networkidle');
 
   const url2 = ab.getUrl();
-  const isAuthorizePage = url2.includes('3000') && url2.includes('authorize');
+  const isAuthorizePage = url2.includes('3100') && url2.includes('authorize');
   assertCondition(isAuthorizePage, 'T1.3: 到达授权确认页', url2);
   ab.screenshot('t01-02-authorize-page');
 
@@ -44,7 +44,7 @@ describe('T1: OAuth2 登录流程', () => {
 
   // T1.4 - 验证重定向回前端主界面
   const url3 = ab.getUrl();
-  const isMainPage = url3.includes('5173') && (url3.includes('explorer') || url3 === ab.BASE_URL + '/');
+  const isMainPage = url3.includes('9101') && (url3.includes('explorer') || url3 === ab.BASE_URL + '/');
   assertCondition(isMainPage, 'T1.4: 登录成功，回到前端主界面', url3);
   ab.screenshot('t01-03-main-page');
 
@@ -187,30 +187,32 @@ describe('T1: OAuth2 登录流程', () => {
   // T1.11 - 全局清理：通过 API 清除所有数据（分享、权限、文件、文件夹、回收站）
   // ============================================================
 
-  // 清理所有分享（单次 evalStdin 内串行完成）
+  // 清理所有分享（串行删除，避免并发竞态）
   var shareClean = ab.evalStdin(`
     (function() {
       return fetch('/v1/disk/shares', { credentials: 'include' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           var items = d.data || [];
-          var p = Promise.resolve();
+          var chain = Promise.resolve();
+          var count = 0;
           items.forEach(function(s) {
-            p = p.then(function() {
+            chain = chain.then(function() {
               return fetch('/v1/disk/shares', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ shareId: s.id }),
                 credentials: 'include'
-              });
+              }).then(function(r) { return r.json(); })
+              .then(function() { count++; });
             });
           });
-          return p.then(function() { return items.length; });
+          return chain.then(function() { return count; });
         })
         .catch(function(e) { return 'ERR:' + e.message; });
     })()
   `);
-  ab.waitMs(5000);
+  ab.waitMs(3000);
 
   // 清理所有权限
   var permClean = ab.evalStdin(`
@@ -311,10 +313,11 @@ describe('T1: OAuth2 登录流程', () => {
   `);
   ab.waitMs(1500);
 
-  step('T1.11: 全局数据清理（API）', true,
-    'shares=' + shareClean + ' perms=' + permClean +
+  var cleanDetail = 'shares=' + shareClean + ' perms=' + permClean +
     ' files=' + fileClean + ' folders=' + folderClean +
-    ' recycle1=' + recycleClean1 + ' recycle2=' + recycleClean2);
+    ' recycle1=' + recycleClean1 + ' recycle2=' + recycleClean2;
+
+  step('T1.11: 全局数据清理（API）', true, cleanDetail);
 
   // T1.12 - 退出登录
   snap = ab.snapshot();

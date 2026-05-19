@@ -43,6 +43,11 @@ func (r *ShareRepo) Update(s *model.DiskShare) error {
 	return r.db.Save(s).Error
 }
 
+// RevokeByID sets is_active = false for a share by ID.
+func (r *ShareRepo) RevokeByID(id uint64) error {
+	return r.db.Model(&model.DiskShare{}).Where("id = ?", id).Update("is_active", false).Error
+}
+
 // ListByUser returns all share records for a specific user.
 func (r *ShareRepo) ListByUser(userID string) ([]model.DiskShare, error) {
 	var shares []model.DiskShare

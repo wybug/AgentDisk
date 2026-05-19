@@ -29,6 +29,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	if err != nil {
 		panic("failed to connect database: " + err.Error())
 	}
+	if migrateErr := repository.AutoMigrate(db); migrateErr != nil {
+		panic("failed to auto-migrate database: " + migrateErr.Error())
+	}
 	ossClient, err := oss.NewClient(
 		cfg.OSS.Endpoint,
 		cfg.OSS.AccessKey,
@@ -80,7 +83,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// Handlers
 	spaceH := handler.NewSpaceHandler(spaceSvc)
 	folderH := handler.NewFolderHandler(folderSvc, recycleSvc)
-	fileH := handler.NewFileHandler(fileSvc, recycleSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
+	fileH := handler.NewFileHandler(fileSvc, permSvc, recycleSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
 	permH := handler.NewPermissionHandler(permSvc)
 	versionH := handler.NewVersionHandler(versionSvc)
 	recycleH := handler.NewRecycleHandler(recycleSvc)

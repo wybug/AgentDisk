@@ -2,9 +2,11 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import * as url from 'node:url';
+import * as http from 'node:http';
+import jwt from 'jsonwebtoken';
 
 import * as userStore from './store/users.js';
+import * as agentStore from './store/agents.js';
 import * as authorize from './oauth2/authorize.js';
 import * as token from './oauth2/token.js';
 import * as userinfo from './oauth2/userinfo.js';
@@ -12,7 +14,7 @@ import { generateSessionId } from './oauth2/pkce.js';
 import type { SessionUser } from './oauth2/types.js';
 
 const app = express();
-const PORT = 3000;
+const PORT = 3100;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -46,6 +48,70 @@ function serveView(name: string) {
 app.get('/login', serveView('login.html'));
 app.get('/authorize', serveView('authorize.html'));
 app.get('/dashboard', serveView('dashboard.html'));
+app.get('/chat', serveView('chat.html'));
+
+// Static assets for chat UI
+app.use('/static', express.static(path.join(__dirname, 'views', 'static')));
+
+// Serve chat-ui CSS from node_modules
+app.get('/static/chat-styles.css', (_req, res) => {
+  const cssPath = path.join(__dirname, '..', 'node_modules', '@nexus-ai', 'agent-chat-ui', 'dist', 'styles.css');
+  res.type('css').sendFile(cssPath);
+});
+
+const JWT_SECRET = 'dev-jwt-secret-for-testing-only';
+
+// SSE proxy: /process -> http://localhost:8090/process
+app.all('/process', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) {
+    res.status(401).json({ error: '请先登录' });
+    return;
+  }
+
+  const agentId = req.body?.agentId || '';
+  let payload: object;
+
+  if (agentId) {
+    const agent = agentStore.findByAgentId(agentId);
+    if (!agent || agent.userId !== user.userId) {
+      res.status(403).json({ error: 'Agent 未注册或不属于当前用户' });
+      return;
+    }
+    payload = { userId: user.userId, agentId, agentGroupId: agent.agentGroupId || '' };
+  } else {
+    payload = { userId: user.userId };
+  }
+
+  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '72h' });
+  const proxyReq = http.request(
+    {
+      hostname: 'localhost',
+      port: 8090,
+      path: '/process',
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    }
+  );
+  proxyReq.on('error', (err) => {
+    console.error('[Proxy] Error:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Agent service unavailable' });
+    }
+  });
+  if (req.body && Object.keys(req.body).length > 0) {
+    proxyReq.write(JSON.stringify(req.body));
+  }
+  proxyReq.end();
+});
 
 // API: Login
 app.post('/api/login', (req, res) => {
@@ -105,6 +171,47 @@ app.delete('/api/users/:userId', (req, res) => {
   res.json({ success: true });
 });
 
+// API: List agents for current user
+app.get('/api/agents', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) {
+    res.json([]);
+    return;
+  }
+  res.json(agentStore.findByUserId(user.userId));
+});
+
+// API: Register agent
+app.post('/api/agents', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) {
+    res.status(401).json({ error: '请先登录' });
+    return;
+  }
+  const { agentId, agentName, agentGroupId } = req.body;
+  if (!agentId || !agentName) {
+    res.status(400).json({ error: 'agentId and agentName required' });
+    return;
+  }
+  agentStore.register(agentId, agentName, user.userId, agentGroupId || '');
+  res.json({ success: true });
+});
+
+// API: Remove agent
+app.delete('/api/agents/:agentId', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) {
+    res.status(401).json({ error: '请先登录' });
+    return;
+  }
+  if (!agentStore.verifyOwnership(req.params.agentId, user.userId)) {
+    res.status(403).json({ error: 'Agent 不属于当前用户' });
+    return;
+  }
+  agentStore.remove(req.params.agentId);
+  res.json({ success: true });
+});
+
 // OAuth2 endpoints
 app.get('/oauth2/authorize', authorize.handleAuthorize);
 app.post('/oauth2/approve', authorize.handleAuthorizeApprove);
@@ -127,7 +234,7 @@ pre { background: #16213e; padding: 16px; border-radius: 4px; overflow-x: auto; 
 <h1>OAuth2 Debugger</h1>
 <p>模拟发起 OAuth2 授权请求</p>
 <div class="form-group"><label>Client ID</label><input id="clientId" value="agentdisk"></div>
-<div class="form-group"><label>Redirect URI</label><input id="redirectUri" value="http://localhost:5173/auth/callback"></div>
+<div class="form-group"><label>Redirect URI</label><input id="redirectUri" value="http://localhost:9101/auth/callback"></div>
 <div class="form-group"><label>Scope</label><input id="scope" value="openid profile"></div>
 <div class="form-group"><label>State</label><input id="state" value="test-state"></div>
 <div class="form-group"><label>Code Challenge (optional)</label><input id="codeChallenge" value=""></div>

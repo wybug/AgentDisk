@@ -143,5 +143,48 @@ describe('T10: 权限管理', () => {
   const notAllowed = checkAfter.includes('allowed=false') || checkAfter.includes('ERROR');
   assertCondition(notAllowed, 'T10.7: 撤销后权限已失效', checkAfter);
 
+  // T10.8 - 清理所有文件（T3 上传的 txt/md/py）
+  ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/files?folderId=0', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          var chain = Promise.resolve();
+          items.forEach(function(f) {
+            chain = chain.then(function() {
+              return fetch('/v1/disk/files/' + f.id, {
+                method: 'DELETE', credentials: 'include'
+              }).then(function(r) { return r.json(); });
+            });
+          });
+          return chain.then(function() { return items.length; });
+        })
+        .catch(function(e) { return -1; });
+    })()
+  `);
+  ab.waitMs(3000);
+
+  // T10.9 - 清理回收站（文件软删除后产生记录）
+  ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/recycle', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          return Promise.all(items.map(function(item) {
+            return fetch('/v1/disk/recycle', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recycleId: item.id }),
+              credentials: 'include'
+            }).then(function(r) { return r.json(); });
+          })).then(function() { return items.length; });
+        })
+        .catch(function(e) { return -1; });
+    })()
+  `);
+  ab.waitMs(2000);
+
   ab.closeBrowser();
 });

@@ -17,6 +17,9 @@ function describe(name, fn) {
   if (currentTest.passed + currentTest.failed > 0) {
     results.push(currentTest);
   }
+  if (currentTest.failed > 0) {
+    process.exitCode = 1;
+  }
 }
 
 function step(name, passed, detail = '') {

@@ -13,14 +13,15 @@ import (
 // FileHandler represents a domain type.
 type FileHandler struct {
 	svc        *service.FileService
+	permSvc    *service.PermissionService
 	recycleSvc *service.RecycleService
 	dlSecret   string
 	dlExpire   int
 }
 
 // NewFileHandler creates a new FileHandler.
-func NewFileHandler(svc *service.FileService, recycleSvc *service.RecycleService, dlSecret string, dlExpire int) *FileHandler {
-	return &FileHandler{svc: svc, recycleSvc: recycleSvc, dlSecret: dlSecret, dlExpire: dlExpire}
+func NewFileHandler(svc *service.FileService, permSvc *service.PermissionService, recycleSvc *service.RecycleService, dlSecret string, dlExpire int) *FileHandler {
+	return &FileHandler{svc: svc, permSvc: permSvc, recycleSvc: recycleSvc, dlSecret: dlSecret, dlExpire: dlExpire}
 }
 
 // UploadFile handles the request.
@@ -31,7 +32,12 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 	if err != nil {
 		folderID = 0
 	}
-	agentID := c.PostForm("agentId")
+	// Prefer agentId from JWT context, fallback to form field
+	agentID := c.GetString("agentId")
+	if agentID == "" {
+		agentID = c.PostForm("agentId")
+	}
+	agentGroupID := c.GetString("agentGroupId")
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
@@ -41,7 +47,7 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 	}
 	defer func() { _ = file.Close() }()
 
-	result, err := h.svc.UploadFile(c.Request.Context(), userID, folderID, header.Filename, file, header.Size, header.Header.Get("Content-Type"), agentID)
+	result, err := h.svc.UploadFileWithGroup(c.Request.Context(), userID, folderID, header.Filename, file, header.Size, header.Header.Get("Content-Type"), agentID, agentGroupID)
 	if err != nil {
 		log.Printf("UploadFile: service error: %v", err)
 		response.InternalError(c, err.Error())
@@ -58,6 +64,17 @@ func (h *FileHandler) GetFile(c *gin.Context) {
 		return
 	}
 	userID := c.GetString("userId")
+	agentID := c.GetString("agentId")
+	agentGroupID := c.GetString("agentGroupId")
+
+	if agentID != "" {
+		permOK, permErr := h.permSvc.CheckOrAutoGrant(userID, agentID, agentGroupID, id, "file", "read")
+		if permErr != nil || !permOK {
+			response.Forbidden(c, "no permission")
+			return
+		}
+	}
+
 	file, url, err := h.svc.GetFile(c.Request.Context(), userID, id)
 	if err != nil {
 		log.Printf("GetFile error: userId=%s id=%d err=%v", userID, id, err)
@@ -75,6 +92,17 @@ func (h *FileHandler) UpdateFile(c *gin.Context) {
 		return
 	}
 	userID := c.GetString("userId")
+	agentID := c.GetString("agentId")
+	agentGroupID := c.GetString("agentGroupId")
+
+	if agentID != "" {
+		permOK, permErr := h.permSvc.CheckOrAutoGrant(userID, agentID, agentGroupID, id, "file", "write")
+		if permErr != nil || !permOK {
+			response.Forbidden(c, "no permission")
+			return
+		}
+	}
+
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		response.BadRequest(c, "file required")
@@ -98,11 +126,26 @@ func (h *FileHandler) DeleteFile(c *gin.Context) {
 		return
 	}
 	userID := c.GetString("userId")
+	agentID := c.GetString("agentId")
+	agentGroupID := c.GetString("agentGroupId")
+
+	if agentID != "" {
+		ok, err := h.permSvc.CheckOrAutoGrant(userID, agentID, agentGroupID, id, "file", "delete")
+		if err != nil || !ok {
+			response.Forbidden(c, "no permission")
+			return
+		}
+	}
+
 	if err := h.svc.DeleteFile(userID, id); err != nil {
 		response.InternalError(c, err.Error())
 		return
 	}
-	_ = h.recycleSvc.MoveToRecycle(userID, id, "file", "user")
+	deletedBy := "user"
+	if agentID != "" {
+		deletedBy = agentID
+	}
+	_ = h.recycleSvc.MoveToRecycle(userID, id, "file", deletedBy)
 	response.OK(c, nil)
 }
 

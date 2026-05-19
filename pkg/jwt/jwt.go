@@ -9,16 +9,23 @@ import (
 
 // Claims represents a claims.
 type Claims struct {
-	UserID  string `json:"userId"`
-	AgentID string `json:"agentId,omitempty"`
+	UserID       string `json:"userId"`
+	AgentID      string `json:"agentId,omitempty"`
+	AgentGroupID string `json:"agentGroupId,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken handles HTTP requests.
 func GenerateToken(secret, userID, agentID string, expireHours int) (string, error) {
+	return GenerateTokenWithGroup(secret, userID, agentID, "", expireHours)
+}
+
+// GenerateTokenWithGroup generates a JWT token with agent group ID.
+func GenerateTokenWithGroup(secret, userID, agentID, agentGroupID string, expireHours int) (string, error) {
 	claims := Claims{
-		UserID:  userID,
-		AgentID: agentID,
+		UserID:       userID,
+		AgentID:      agentID,
+		AgentGroupID: agentGroupID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expireHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

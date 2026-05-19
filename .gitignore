@@ -1,5 +1,5 @@
 # Binaries
-agentdisk
+/agentdisk
 *.exe
 *.exe~
 *.dll
@@ -45,3 +45,12 @@ tmp/
 
 # Lint cache
 .golangci-cache/
+
+# Dependencies
+node_modules/
+
+# Dev runtime
+.dev-pids
+.dev-logs/
+.agents/
+skills-lock.json

@@ -7,9 +7,18 @@ import (
 	"github.com/agentdisk/agent-disk/internal/repository"
 )
 
+// permissionRepo defines the interface for permission data access.
+type permissionRepo interface {
+	Create(p *model.DiskPermission) error
+	GetByAgentAndResource(agentID string, resourceID uint64, resType string) (*model.DiskPermission, error)
+	GetResourceDetail(resourceID uint64, resType string) (*repository.ResourceOwner, error)
+	ListByUser(userID string) ([]model.DiskPermission, error)
+	Delete(id uint64) error
+}
+
 // PermissionService represents a domain type.
 type PermissionService struct {
-	repo *repository.PermissionRepo
+	repo permissionRepo
 }
 
 // NewPermissionService creates a new PermissionService.
@@ -53,6 +62,38 @@ func (s *PermissionService) RevokePermission(userID, agentID string, resourceID 
 // ListPermissions handles the request.
 func (s *PermissionService) ListPermissions(userID string) ([]model.DiskPermission, error) {
 	return s.repo.ListByUser(userID)
+}
+
+// CheckOrAutoGrant checks permission with auto-grant rules for agents.
+// User requests (agentID == "") always pass.
+// Agent requests go through: own-file auto, same-group auto, then explicit table.
+func (s *PermissionService) CheckOrAutoGrant(userID, agentID, agentGroupID string, resourceID uint64, resType, required string) (bool, error) {
+	if agentID == "" {
+		return true, nil
+	}
+
+	owner, err := s.repo.GetResourceDetail(resourceID, resType)
+	if err != nil {
+		return false, err
+	}
+	if owner.OwnerID != userID {
+		return false, nil
+	}
+
+	if !owner.IsArtifact {
+		return s.CheckPermission(agentID, resourceID, resType, required)
+	}
+
+	if required == "read" || required == "write" {
+		if owner.SourceAgent == agentID {
+			return true, nil
+		}
+		if agentGroupID != "" && owner.SourceAgentGroup == agentGroupID {
+			return true, nil
+		}
+	}
+
+	return s.CheckPermission(agentID, resourceID, resType, required)
 }
 
 func hasPermission(actual, required string) bool {

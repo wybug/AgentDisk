@@ -9,11 +9,29 @@ import (
 	"github.com/agentdisk/agent-disk/internal/repository"
 )
 
+type shareRepo interface {
+	Create(s *model.DiskShare) error
+	GetByCode(code string) (*model.DiskShare, error)
+	GetByID(id uint64) (*model.DiskShare, error)
+	Update(s *model.DiskShare) error
+	RevokeByID(id uint64) error
+	ListByUser(userID string) ([]model.DiskShare, error)
+	LogAccess(log *model.ShareAccessLog) error
+}
+
+type fileResourceRepo interface {
+	GetByID(id uint64) (*model.DiskFile, error)
+}
+
+type folderResourceRepo interface {
+	GetByID(id uint64) (*model.DiskFolder, error)
+}
+
 // ShareService represents a domain type.
 type ShareService struct {
-	repo       *repository.ShareRepo
-	fileRepo   *repository.FileRepo
-	folderRepo *repository.FolderRepo
+	repo       shareRepo
+	fileRepo   fileResourceRepo
+	folderRepo folderResourceRepo
 }
 
 // NewShareService creates a new ShareService.
@@ -113,8 +131,7 @@ func (s *ShareService) RevokeShare(userID string, shareID uint64) error {
 	if share.UserID != userID {
 		return fmt.Errorf("permission denied")
 	}
-	share.IsActive = false
-	return s.repo.Update(share)
+	return s.repo.RevokeByID(shareID)
 }
 
 // ListShares handles the request.

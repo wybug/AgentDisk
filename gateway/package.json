@@ -4,18 +4,31 @@
   "private": true,
   "description": "AgentDisk 测试网关 - OAuth2 Provider + Agent 网关",
   "scripts": {
+    "build:chat": "esbuild src/views/chat-entry.tsx --bundle --outfile=src/views/static/chat-bundle.js --format=iife --jsx=automatic --platform=browser --minify",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "npm run build:chat && tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@nexus-ai/agent-chat-ui": "^0.1.4",
+    "better-sqlite3": "^12.10.0",
     "cookie-parser": "^1.4.6",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.16.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cookie-parser": "^1.4.7",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }

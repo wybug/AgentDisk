@@ -63,7 +63,9 @@ describe('T3: 文件上传', () => {
   assertCondition(txtOk, 'T3.2: txt 文件上传成功', txtResult);
   ab.screenshot('t03-02-txt-uploaded');
 
-  // T3.3 - 验证列表中文件信息
+  // T3.3 - 验证列表中文件信息（刷新页面以加载新上传的文件）
+  ab.evalStdin('location.reload()');
+  ab.waitMs(2000);
   ab.waitLoad('networkidle');
   const hasFileInfo = ab.pageContainsText('agentdisk-test-upload.txt');
   step('T3.3: 验证列表中文件信息', hasFileInfo, hasFileInfo ? '文件名可见' : '文件名不可见');

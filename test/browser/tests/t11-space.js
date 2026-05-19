@@ -57,6 +57,21 @@ function deleteFileViaAPI(fileId) {
   `);
 }
 
+function getSpaceUIText() {
+  return ab.evalStdin(`
+    (function() {
+      var els = document.querySelectorAll('.ant-typography');
+      for (var i = 0; i < els.length; i++) {
+        var t = els[i].textContent;
+        if (t && (t.includes('B') || t.includes('KB') || t.includes('MB') || t.includes('GB')) && t.includes('/')) {
+          return t;
+        }
+      }
+      return '';
+    })()
+  `);
+}
+
 describe('T11: 存储空间显示', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
@@ -73,6 +88,14 @@ describe('T11: 存储空间显示', () => {
   const noNaN = !spaceText;
   assertCondition(noNaN, 'T11.1b: 空间显示无 NaN/undefined', noNaN ? '正常' : '发现NaN或undefined');
   ab.screenshot('t11-01-space-display');
+
+  // T11.1c - 验证界面空间用量格式正确
+  const uiText1 = getSpaceUIText();
+  ab.waitMs(500);
+  // 验证 UI 文本包含合理的格式化值（如 "0 B / 1.0 GB" 或 "100.0 KB / 1.0 GB"）
+  const uiHasUnit = /(\d+\.?\d*)\s*(B|KB|MB|GB|TB)\s*\/\s*(\d+\.?\d*)\s*(B|KB|MB|GB|TB)/.test(uiText1);
+  assertCondition(uiHasUnit, 'T11.1c: 界面空间用量格式正确', 'ui=' + uiText1 + ' api=' + space1);
+  ab.screenshot('t11-01c-space-ui');
 
   const usedBefore = space1.match(/used=(\d+)/);
   const usedValue = usedBefore ? parseInt(usedBefore[1]) : 0;
@@ -95,6 +118,12 @@ describe('T11: 存储空间显示', () => {
   const usedAfterValue = usedAfter ? parseInt(usedAfter[1]) : 0;
   const increased = usedAfterValue > usedValue;
   assertCondition(increased, 'T11.2b: 上传后用量增加', 'before=' + usedValue + ' after=' + usedAfterValue);
+
+  // T11.2c - 验证上传后界面空间用量增加
+  const uiText2 = getSpaceUIText();
+  ab.waitMs(500);
+  const uiIncreased = uiText2.length > 0 && !uiText2.startsWith('0 B /');
+  step('T11.2c: 上传后界面空间用量变化', uiIncreased, 'ui=' + uiText2);
   ab.screenshot('t11-02-space-after-upload');
 
   // T11.3 - 软删除文件后验证用量不变（只有回收站彻底删除才释放配额）

@@ -65,7 +65,7 @@ export default function PermissionsPage() {
         columns={[
           { title: 'Agent ID', dataIndex: 'agentId' },
           { title: '资源 ID', dataIndex: 'resourceId', width: 80 },
-          { title: '资源类型', dataIndex: 'resType', width: 80, render: (t: string) => <Tag>{t}</Tag> },
+          { title: '资源类型', dataIndex: 'resType', width: 100, render: (t: string) => <Tag>{t}</Tag> },
           {
             title: '权限',
             dataIndex: 'permission',

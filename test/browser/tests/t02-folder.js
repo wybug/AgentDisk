@@ -282,6 +282,28 @@ describe('T2: 文件夹管理', () => {
 
   const allDeleted = !ab.pageContainsText('一级目录D');
   assertCondition(allDeleted, 'T2.16: 所有测试文件夹已删除', deletedViaApi);
+
+  // 清理回收站中 T2 产生的记录
+  ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/recycle', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = d.data || [];
+          return Promise.all(items.map(function(m) {
+            return fetch('/v1/disk/recycle', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recycleId: m.id }),
+              credentials: 'include'
+            }).then(function(r) { return r.json(); });
+          })).then(function() { return items.length; });
+        })
+        .catch(function(e) { return -1; });
+    })()
+  `);
+  ab.waitMs(2000);
+
   ab.screenshot('t02-16-all-deleted');
 
   ab.closeBrowser();

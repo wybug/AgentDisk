@@ -18,7 +18,11 @@
 ```go
 import "github.com/agentdisk/agent-disk/pkg/jwt"
 
+// 不带 Agent 组
 token, err := jwt.GenerateToken(secret, userId, agentId, expireHours)
+
+// 带 Agent 组
+token, err := jwt.GenerateTokenWithGroup(secret, userId, agentId, agentGroupId, expireHours)
 ```
 
 ### 如何调用 API
@@ -77,13 +81,116 @@ curl -X GET http://agentdisk:8080/v1/disk/space \
 
 ### Session 管理
 
-- Cookie: `agentdisk_session`，HttpOnly, Secure, SameSite=Lax
+- Cookie: `agentdisk_session`，HttpOnly, Secure, SameSite-Lax
 - 有效期: 与 OAuth2 Access Token 一致（默认 24 小时）
 - 续期: 通过 refresh_token 自动续期
 
 ---
 
-## 3. 生成下载直链
+## 2.5 Agent 注册与管理
+
+Agent 通过网关 REST API 注册。注册后，网关在代理请求时将 agentId 写入 JWT，后端据此进行权限控制。
+
+### 注册 Agent
+
+```
+POST /api/agents
+Content-Type: application/json
+
+{ "agentId": "writer-01", "agentName": "写作助手", "agentGroupId": "team-a" }
+```
+
+需要登录（gw_session cookie）。`agentGroupId` 选填，同组 Agent 共享文件读写权限。
+
+### 查询 Agent
+
+```
+GET /api/agents
+```
+
+返回当前用户注册的所有 Agent 列表。
+
+### 注销 Agent
+
+```
+DELETE /api/agents/:agentId
+```
+
+只能注销属于当前用户的 Agent。
+
+### Agent 数据持久化
+
+Agent 注册信息存储在网关本地 SQLite 数据库（`gateway/data/agents.db`），包含：
+- `agent_id` — Agent 唯一标识
+- `agent_name` — Agent 显示名称
+- `user_id` — 归属用户
+- `agent_group_id` — Agent 组（同组 Agent 自动共享产物读写）
+
+---
+
+## 2.6 Agent 自动权限规则
+
+Agent 请求通过 JWT 中的 `agentId` 和 `agentGroupId` 字段标识身份。后端根据以下规则判断权限：
+
+| 场景 | 权限 | 说明 |
+|------|------|------|
+| 用户请求（JWT 无 agentId） | 完全访问 | file.UserID == userID 即放行 |
+| Agent 访问自己创建的文件 | 自动 read/write | source_agent == agentId |
+| Agent 访问同组 Agent 创建的文件 | 自动 read/write | sourceAgentGroup == agentGroupId |
+| Agent 访问用户手动上传的文件 | 需显式授权 | is_artifact == false |
+| Agent 请求 delete/owner 权限 | 需显式授权 | 必须在 disk_permission 表中配置 |
+| 跨用户访问 | 始终拒绝 | userID 不匹配 |
+
+### 授权决策流程
+
+```
+请求进入 → HybridAuth 从 JWT 提取 userId + agentId + agentGroupId
+  ├─ agentId 为空 → 用户身份 → 资源属于该用户即放行
+  └─ agentId 非空 → Agent 身份 → 检查权限:
+       1. 查询资源归属（ownerID, sourceAgent, sourceAgentGroup, isArtifact）
+       2. 跨用户 → 拒绝
+       3. 非 Agent 产物 (isArtifact=false) → 走显式权限表
+       4. Agent 产物 + read/write:
+            ├─ sourceAgent == agentId → 放行（自己创建）
+            ├─ sourceAgentGroup == agentGroupId → 放行（同组）
+            └─ 否则 → 走显式权限表
+       5. delete/owner → 走显式权限表
+```
+
+---
+
+## 3. 网关代理认证（Agent 对话）
+
+网关为已登录用户签发 JWT，代理到 Agent 服务时携带，使 Agent 能以用户身份访问 AgentDisk API。
+
+### 认证链路
+
+```
+浏览器 → 网关 /process (gw_session cookie + agentId)
+       → 网关验证 Agent 归属 → 签发 JWT (userId + agentId + agentGroupId)
+       → 代理到 Agent (Authorization: Bearer <jwt>)
+       → Agent 拿 JWT 调用后端 /v1/disk/* 接口
+```
+
+### JWT 签发参数
+
+| 参数 | 值 |
+|------|-----|
+| secret | 与后端 `config.yaml` 中 `jwt.secret` 一致 |
+| payload (用户请求) | `{ userId: "<当前用户ID>" }` |
+| payload (Agent 请求) | `{ userId: "<当前用户ID>", agentId: "<AgentID>", agentGroupId: "<组ID>" }` |
+| expiresIn | 72h |
+
+### 安全约束
+
+- 未登录用户访问 `/process` 返回 401
+- Agent 未注册或不属于当前用户返回 403
+- JWT 绑定当前登录用户，无法伪造
+- Agent 服务使用 JWT 调用后端时自动携带用户和 Agent 身份
+
+---
+
+## 4. 生成下载直链
 
 ### 你需要什么
 
@@ -118,18 +225,22 @@ curl -o file.pdf "http://agentdisk:8080/v1/disk/files/download?t=xxx"
 
 ---
 
-## 4. 公共常量与约定
+## 5. 公共常量与约定
 
 ### JWT Claims 结构
 
 ```json
 {
   "userId": "string, 必填",
-  "agentId": "string, 选填",
+  "agentId": "string, 选填，Agent 身份时必填",
+  "agentGroupId": "string, 选填，Agent 组标识",
   "iat": 1747000000,
   "exp": 1747259200
 }
 ```
+
+- 当 `agentId` 为空时，请求视为**用户身份**，享有完全访问权限。
+- 当 `agentId` 非空时，请求视为 **Agent 身份**，受权限规则约束。
 
 ### 下载令牌格式
 
@@ -147,19 +258,19 @@ signature = HMAC-SHA256(dlSecret, payloadBase64)
 
 ---
 
-## 5. 错误码速查
+## 6. 错误码速查
 
 | HTTP Code | Code | 含义 | 处理建议 |
 |-----------|------|------|---------|
 | 400 | BAD_REQUEST | 参数错误 | 检查请求参数 |
 | 401 | UNAUTHORIZED | 未认证 | 检查 Token 或重新登录 |
-| 403 | FORBIDDEN | 无权限 | 检查资源归属和权限 |
+| 403 | FORBIDDEN | 无权限 | 检查资源归属和权限；Agent 检查是否已注册、是否属于当前用户 |
 | 404 | NOT_FOUND | 资源不存在 | 检查 ID 是否正确 |
 | 500 | INTERNAL_ERROR | 服务内部错误 | 联系 T0 |
 
 ---
 
-## 6. 环境变量清单
+## 7. 环境变量清单
 
 | 变量名 | 用途 | 必填 |
 |--------|------|------|
@@ -173,11 +284,13 @@ signature = HMAC-SHA256(dlSecret, payloadBase64)
 
 ---
 
-## 7. 各 Agent 集成检查清单
+## 8. 各 Agent 集成检查清单
 
 - [ ] 获取 `JWT_SECRET` 环境变量
 - [ ] 调用 API 前生成 JWT（使用 `pkg/jwt` 包）
 - [ ] 所有请求携带 `Authorization: Bearer <token>` Header
 - [ ] 处理 401/403 错误（重新生成 Token / 跳过无权限资源）
 - [ ] 如需生成下载直链，调用 `POST /v1/disk/files/:id/download-token`
+- [ ] 通过网关 API 注册 Agent（`POST /api/agents`）
+- [ ] Agent 请求携带 `agentId` 参数
 - [ ] 运行 `bash scripts/test_auth.sh` 验证集成正确性

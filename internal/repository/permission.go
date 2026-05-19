@@ -41,3 +41,27 @@ func (r *PermissionRepo) ListByUser(userID string) ([]model.DiskPermission, erro
 func (r *PermissionRepo) Delete(id uint64) error {
 	return r.db.Where("id = ?", id).Delete(&model.DiskPermission{}).Error
 }
+
+// ResourceOwner holds resource ownership detail.
+type ResourceOwner struct {
+	OwnerID          string
+	SourceAgent      string
+	SourceAgentGroup string
+	IsArtifact       bool
+}
+
+// GetResourceDetail returns the owner, source agent and artifact flag for a resource.
+func (r *PermissionRepo) GetResourceDetail(resourceID uint64, resType string) (*ResourceOwner, error) {
+	if resType == "file" {
+		var f model.DiskFile
+		if err := r.db.Select("user_id, source_agent, source_agent_group, is_artifact").Where("id = ? AND is_deleted = ?", resourceID, false).First(&f).Error; err != nil {
+			return nil, err
+		}
+		return &ResourceOwner{OwnerID: f.UserID, SourceAgent: f.SourceAgent, SourceAgentGroup: f.SourceAgentGroup, IsArtifact: f.IsArtifact}, nil
+	}
+	var fo model.DiskFolder
+	if err := r.db.Select("user_id").Where("id = ? AND is_deleted = ?", resourceID, false).First(&fo).Error; err != nil {
+		return nil, err
+	}
+	return &ResourceOwner{OwnerID: fo.UserID, SourceAgent: "", SourceAgentGroup: "", IsArtifact: false}, nil
+}

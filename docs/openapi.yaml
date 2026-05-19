@@ -9,14 +9,39 @@ info:
     name: Apache 2.0
 
 servers:
-  - url: http://localhost:8080/v1/disk
+  - url: http://localhost:9100
     description: Local development
 
 security:
   - BearerAuth: []
 
 paths:
-  /space:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags: [System]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: "ok"
+
+  /v1/disk/space:
     get:
       summary: Get user disk space info
       operationId: getSpace
@@ -27,9 +52,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Response"
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserDisk"
 
-  /folders:
+  /v1/disk/folders:
     post:
       summary: Create folder
       operationId: createFolder
@@ -51,6 +81,15 @@ paths:
       responses:
         "201":
           description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskFolder"
     get:
       summary: List folders
       operationId: listFolders
@@ -65,8 +104,75 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskFolder"
 
-  /folders/{id}:
+  /v1/disk/folders/{id}:
+    get:
+      summary: Get folder details
+      operationId: getFolder
+      tags: [Folder]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskFolder"
+    put:
+      summary: Rename folder
+      operationId: renameFolder
+      tags: [Folder]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [folderName]
+              properties:
+                folderName:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskFolder"
     delete:
       summary: Delete folder
       operationId: deleteFolder
@@ -81,8 +187,39 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /files/upload:
+  /v1/disk/folders/{id}/ancestors:
+    get:
+      summary: Get folder path hierarchy
+      operationId: getAncestors
+      tags: [Folder]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskFolder"
+
+  /v1/disk/files/upload:
     post:
       summary: Upload file
       operationId: uploadFile
@@ -106,8 +243,17 @@ paths:
       responses:
         "201":
           description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskFile"
 
-  /files:
+  /v1/disk/files:
     get:
       summary: List files in folder
       operationId: listFiles
@@ -122,8 +268,19 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskFile"
 
-  /files/{id}:
+  /v1/disk/files/{id}:
     get:
       summary: Get file info with presigned URL
       operationId: getFile
@@ -138,6 +295,15 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/FileDetailResponse"
     put:
       summary: Update file (creates version snapshot)
       operationId: updateFile
@@ -163,6 +329,15 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskFile"
     delete:
       summary: Delete file (move to recycle bin)
       operationId: deleteFile
@@ -177,8 +352,62 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /permissions:
+  /v1/disk/files/{id}/download-token:
+    post:
+      summary: Generate download token for file
+      operationId: createDownloadToken
+      tags: [File]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DownloadTokenResponse"
+
+  /v1/disk/files/download:
+    get:
+      summary: Download file by token (public, no auth)
+      operationId: downloadByToken
+      tags: [File]
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DownloadByTokenResponse"
+
+  /v1/disk/permissions:
     post:
       summary: Grant permission to agent
       operationId: grantPermission
@@ -205,8 +434,12 @@ paths:
       responses:
         "201":
           description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
     get:
-      summary: List or check permissions
+      summary: List permissions
       operationId: listPermissions
       tags: [Permission]
       parameters:
@@ -226,6 +459,17 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskPermission"
     delete:
       summary: Revoke permission
       operationId: revokePermission
@@ -248,8 +492,52 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /versions:
+  /v1/disk/permissions/check:
+    get:
+      summary: Check specific permission
+      operationId: checkPermission
+      tags: [Permission]
+      parameters:
+        - name: agentId
+          in: query
+          schema:
+            type: string
+        - name: resourceId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: uint64
+        - name: resType
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: permission
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [owner, read, write, delete]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PermissionCheckResponse"
+
+  /v1/disk/versions:
     get:
       summary: List file versions
       operationId: listVersions
@@ -264,8 +552,19 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskFileVersion"
 
-  /versions/rollback:
+  /v1/disk/versions/rollback:
     post:
       summary: Rollback to specific version
       operationId: rollbackVersion
@@ -286,8 +585,12 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /recycle:
+  /v1/disk/recycle:
     get:
       summary: List recycle bin items
       operationId: listRecycle
@@ -295,6 +598,17 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskRecycleBin"
     delete:
       summary: Permanently delete item
       operationId: deletePermanent
@@ -313,8 +627,12 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /recycle/restore:
+  /v1/disk/recycle/restore:
     post:
       summary: Restore item from recycle bin
       operationId: restoreItem
@@ -333,8 +651,12 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /tags/bind:
+  /v1/disk/tags/bind:
     post:
       summary: Bind tag to file
       operationId: bindTag
@@ -355,8 +677,12 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /tags/unbind:
+  /v1/disk/tags/unbind:
     post:
       summary: Unbind tag from file
       operationId: unbindTag
@@ -377,8 +703,12 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /tags/search:
+  /v1/disk/tags/search:
     get:
       summary: Search files by tags
       operationId: searchByTags
@@ -393,8 +723,19 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskFile"
 
-  /shares:
+  /v1/disk/shares:
     post:
       summary: Create share link
       operationId: createShare
@@ -424,6 +765,15 @@ paths:
       responses:
         "201":
           description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskShare"
     get:
       summary: List user shares
       operationId: listShares
@@ -431,6 +781,17 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiskShare"
     delete:
       summary: Revoke share
       operationId: revokeShare
@@ -449,8 +810,12 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
 
-  /share/{code}:
+  /v1/disk/share/{code}:
     get:
       summary: Get share info (public, no auth)
       operationId: getShare
@@ -465,8 +830,17 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskShare"
 
-  /share/access:
+  /v1/disk/share/access:
     post:
       summary: Access shared resource (public, no auth)
       operationId: accessShare
@@ -487,8 +861,17 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiskShare"
 
-  /preview/{id}:
+  /v1/disk/preview/{id}:
     get:
       summary: Preview file content
       operationId: previewFile
@@ -503,6 +886,15 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PreviewResult"
 
 components:
   securitySchemes:
@@ -512,7 +904,7 @@ components:
       bearerFormat: JWT
 
   schemas:
-    Response:
+    ResponseBase:
       type: object
       properties:
         code:
@@ -520,5 +912,271 @@ components:
           description: "0 means success"
         message:
           type: string
-        data:
-          type: object
+
+    ErrorResponse:
+      allOf:
+        - $ref: "#/components/schemas/ResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object
+
+    UserDisk:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        totalQuota:
+          type: integer
+          format: int64
+          description: Total quota in bytes (default 10GB)
+        usedQuota:
+          type: integer
+          format: int64
+          description: Used quota in bytes
+        rootFolder:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiskFolder:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        parentId:
+          type: integer
+          format: uint64
+        folderName:
+          type: string
+        fullPath:
+          type: string
+        sortOrder:
+          type: integer
+        isDeleted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiskFile:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        folderId:
+          type: integer
+          format: uint64
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        fileType:
+          type: string
+        ossKey:
+          type: string
+        md5:
+          type: string
+        version:
+          type: integer
+        isDeleted:
+          type: boolean
+        sourceAgent:
+          type: string
+        sourceAgentGroup:
+          type: string
+        isArtifact:
+          type: boolean
+          description: true if created by an agent
+        tags:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiskPermission:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        agentId:
+          type: string
+        resourceId:
+          type: integer
+          format: uint64
+        resType:
+          type: string
+          enum: [file, folder]
+        permission:
+          type: string
+          enum: [owner, read, write, delete]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiskShare:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        resourceId:
+          type: integer
+          format: uint64
+        resType:
+          type: string
+          enum: [file, folder]
+        shareCode:
+          type: string
+        extractCode:
+          type: string
+        maxVisit:
+          type: integer
+          description: "-1 means unlimited"
+        visitCount:
+          type: integer
+        expireAt:
+          type: string
+          format: date-time
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    DiskRecycleBin:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        resourceId:
+          type: integer
+          format: uint64
+        resType:
+          type: string
+        resName:
+          type: string
+        originalPath:
+          type: string
+        deletedBy:
+          type: string
+        expireAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    DiskFileVersion:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        fileId:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        version:
+          type: integer
+        ossKey:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        md5:
+          type: string
+        snapshotBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    DiskTag:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint64
+        userId:
+          type: string
+        tagName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PreviewResult:
+      type: object
+      properties:
+        fileType:
+          type: string
+          description: "markdown, code, image, text, binary"
+        url:
+          type: string
+          description: Presigned URL for file content
+
+    DownloadTokenResponse:
+      type: object
+      properties:
+        downloadToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Token validity in seconds
+
+    FileDetailResponse:
+      type: object
+      properties:
+        file:
+          $ref: "#/components/schemas/DiskFile"
+        url:
+          type: string
+          description: Presigned URL for file access
+
+    DownloadByTokenResponse:
+      type: object
+      properties:
+        file:
+          $ref: "#/components/schemas/DiskFile"
+        downloadUrl:
+          type: string
+          description: Presigned URL for file download
+
+    PermissionCheckResponse:
+      type: object
+      properties:
+        allowed:
+          type: boolean

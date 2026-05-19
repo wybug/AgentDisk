@@ -97,6 +97,50 @@ func TestHybridAuth_JWTSetsContext(t *testing.T) {
 	r.ServeHTTP(w, req)
 }
 
+func TestHybridAuth_JWTWithAgentGroupId(t *testing.T) {
+	secret := "test_jwt_secret"
+	token, _ := jwt.GenerateTokenWithGroup(secret, "user_001", "agent_001", "group-a", 1)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(HybridAuth(secret, nil, ""))
+	r.GET("/test", func(c *gin.Context) {
+		if c.GetString("agentGroupId") != "group-a" {
+			t.Errorf("agentGroupId = %q, want group-a", c.GetString("agentGroupId"))
+		}
+		if c.GetString("agentId") != "agent_001" {
+			t.Errorf("agentId = %q, want agent_001", c.GetString("agentId"))
+		}
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestIsAgentRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Run("with agentId", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set("agentId", "agent_001")
+		if !IsAgentRequest(c) {
+			t.Error("expected true when agentId is set")
+		}
+	})
+	t.Run("without agentId", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		if IsAgentRequest(c) {
+			t.Error("expected false when agentId is empty")
+		}
+	})
+}
+
 // ── OAuth2 Session 认证路径 ──
 
 func TestHybridAuth_OAuth2Session_NilHandler(t *testing.T) {

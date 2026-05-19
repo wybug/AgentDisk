@@ -40,7 +40,7 @@ stop_all() {
   fi
 
   # 兜底：按端口清理残留进程
-  for port in 9100 3000 5173; do
+  for port in 9100 3100 9101; do
     local pids
     pids=$(lsof -ti:$port 2>/dev/null || true)
     if [ -n "$pids" ]; then
@@ -110,12 +110,12 @@ start_all() {
     || { error "后端启动失败，终止"; exit 1; }
 
   # 2. 测试网关
-  start_service "gateway" 3000 \
+  start_service "gateway" 3100 \
     "cd gateway && node --import tsx src/index.ts" \
     || { warn "网关启动失败，继续启动前端"; }
 
   # 3. Web 前端
-  start_service "web" 5173 \
+  start_service "web" 9101 \
     "cd web && node_modules/.bin/vite --host" \
     || { warn "前端启动失败"; }
 
@@ -124,8 +124,8 @@ start_all() {
   echo -e "${GREEN}║     所有服务已启动                        ║${NC}"
   echo -e "${GREEN}╠══════════════════════════════════════════╣${NC}"
   echo -e "${GREEN}║  后端 API:   http://localhost:9100       ║${NC}"
-  echo -e "${GREEN}║  测试网关:   http://localhost:3000       ║${NC}"
-  echo -e "${GREEN}║  Web 前端:   http://localhost:5173       ║${NC}"
+  echo -e "${GREEN}║  测试网关:   http://localhost:3100       ║${NC}"
+  echo -e "${GREEN}║  Web 前端:   http://localhost:9101       ║${NC}"
   echo -e "${GREEN}╠══════════════════════════════════════════╣${NC}"
   echo -e "${GREEN}║  日志目录: $LOG_DIR/"
   echo -e "${GREEN}║  停止命令: $0 stop"
@@ -138,7 +138,7 @@ show_status() {
   echo ""
   echo "AgentDisk 服务状态:"
   echo "─────────────────────────────"
-  for svc in "backend:9100" "gateway:3000" "web:5173"; do
+  for svc in "backend:9100" "gateway:3100" "web:9101"; do
     local name="${svc%%:*}"
     local port="${svc##*:}"
     if lsof -ti:$port 2>/dev/null | grep -q .; then
