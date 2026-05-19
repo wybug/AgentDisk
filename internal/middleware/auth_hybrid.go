@@ -25,6 +25,7 @@ func HybridAuth(
 			if err == nil && claims != nil {
 				c.Set("userId", claims.UserID)
 				c.Set("agentId", claims.AgentID)
+				c.Set("agentGroupId", claims.AgentGroupID)
 				c.Set("authMethod", "jwt")
 				c.Next()
 				return
@@ -64,4 +65,9 @@ func HybridAuth(
 		response.Unauthorized(c, "authentication required")
 		c.Abort()
 	}
+}
+
+// IsAgentRequest returns true if the current request carries an agent identity.
+func IsAgentRequest(c *gin.Context) bool {
+	return c.GetString("agentId") != ""
 }

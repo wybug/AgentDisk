@@ -14,8 +14,9 @@ type DiskFile struct {
 	MD5         string    `gorm:"size:32" json:"md5"`
 	Version     int       `gorm:"not null;default:1" json:"version"`
 	IsDeleted   bool      `gorm:"default:false;index" json:"isDeleted"`
-	SourceAgent string    `gorm:"size:64" json:"sourceAgent"`
-	IsArtifact  bool      `gorm:"default:false" json:"isArtifact"`
+	SourceAgent       string    `gorm:"size:64" json:"sourceAgent"`
+	SourceAgentGroup  string    `gorm:"size:64" json:"sourceAgentGroup"`
+	IsArtifact        bool      `gorm:"default:false" json:"isArtifact"`
 	Tags        string    `gorm:"size:1024" json:"tags"`
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updatedAt"`

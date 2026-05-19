@@ -6,6 +6,7 @@ import * as http from 'node:http';
 import jwt from 'jsonwebtoken';
 
 import * as userStore from './store/users.js';
+import * as agentStore from './store/agents.js';
 import * as authorize from './oauth2/authorize.js';
 import * as token from './oauth2/token.js';
 import * as userinfo from './oauth2/userinfo.js';
@@ -67,7 +68,22 @@ app.all('/process', (req, res) => {
     res.status(401).json({ error: '请先登录' });
     return;
   }
-  const token = jwt.sign({ userId: user.userId }, JWT_SECRET, { expiresIn: '72h' });
+
+  const agentId = req.body?.agentId || '';
+  let payload: object;
+
+  if (agentId) {
+    const agent = agentStore.findByAgentId(agentId);
+    if (!agent || agent.userId !== user.userId) {
+      res.status(403).json({ error: 'Agent 未注册或不属于当前用户' });
+      return;
+    }
+    payload = { userId: user.userId, agentId, agentGroupId: agent.agentGroupId || '' };
+  } else {
+    payload = { userId: user.userId };
+  }
+
+  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '72h' });
   const proxyReq = http.request(
     {
       hostname: 'localhost',
@@ -152,6 +168,47 @@ app.post('/api/users', (req, res) => {
 // API: Delete user
 app.delete('/api/users/:userId', (req, res) => {
   userStore.remove(req.params.userId);
+  res.json({ success: true });
+});
+
+// API: List agents for current user
+app.get('/api/agents', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) {
+    res.json([]);
+    return;
+  }
+  res.json(agentStore.findByUserId(user.userId));
+});
+
+// API: Register agent
+app.post('/api/agents', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) {
+    res.status(401).json({ error: '请先登录' });
+    return;
+  }
+  const { agentId, agentName, agentGroupId } = req.body;
+  if (!agentId || !agentName) {
+    res.status(400).json({ error: 'agentId and agentName required' });
+    return;
+  }
+  agentStore.register(agentId, agentName, user.userId, agentGroupId || '');
+  res.json({ success: true });
+});
+
+// API: Remove agent
+app.delete('/api/agents/:agentId', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) {
+    res.status(401).json({ error: '请先登录' });
+    return;
+  }
+  if (!agentStore.verifyOwnership(req.params.agentId, user.userId)) {
+    res.status(403).json({ error: 'Agent 不属于当前用户' });
+    return;
+  }
+  agentStore.remove(req.params.agentId);
   res.json({ success: true });
 });
 

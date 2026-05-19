@@ -41,6 +41,11 @@ func NewFileService(
 
 // UploadFile handles the request.
 func (s *FileService) UploadFile(ctx context.Context, userID string, folderID uint64, fileName string, reader io.Reader, size int64, contentType, agentID string) (*model.DiskFile, error) {
+	return s.UploadFileWithGroup(ctx, userID, folderID, fileName, reader, size, contentType, agentID, "")
+}
+
+// UploadFileWithGroup handles file upload with agent group context.
+func (s *FileService) UploadFileWithGroup(ctx context.Context, userID string, folderID uint64, fileName string, reader io.Reader, size int64, contentType, agentID, agentGroupID string) (*model.DiskFile, error) {
 	var fullPath string
 	if folderID > 0 {
 		folder, err := s.folderRepo.GetByID(folderID)
@@ -54,15 +59,16 @@ func (s *FileService) UploadFile(ctx context.Context, userID string, folderID ui
 	}
 
 	file := &model.DiskFile{
-		UserID:      userID,
-		FolderID:    folderID,
-		FileName:    fileName,
-		FileSize:    size,
-		FileType:    ext(fileName),
-		OSSKey:      "", // set after create to get ID
-		Version:     1,
-		SourceAgent: agentID,
-		IsArtifact:  agentID != "",
+		UserID:           userID,
+		FolderID:         folderID,
+		FileName:         fileName,
+		FileSize:         size,
+		FileType:         ext(fileName),
+		OSSKey:           "", // set after create to get ID
+		Version:          1,
+		SourceAgent:      agentID,
+		SourceAgentGroup: agentGroupID,
+		IsArtifact:       agentID != "",
 	}
 	if err := s.fileRepo.Create(file); err != nil {
 		return nil, fmt.Errorf("create file record: %w", err)

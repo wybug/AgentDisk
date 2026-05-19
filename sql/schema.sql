@@ -47,6 +47,7 @@ CREATE TABLE `disk_file` (
     `version` INT NOT NULL DEFAULT 1 COMMENT '当前版本号',
     `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已删除',
     `source_agent` VARCHAR(64) DEFAULT NULL COMMENT '来源智能体ID',
+    `source_agent_group` VARCHAR(64) DEFAULT NULL COMMENT '来源智能体组ID',
     `is_artifact` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否为智能体产物',
     `tags` VARCHAR(1024) DEFAULT NULL COMMENT '标签(逗号分隔)',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

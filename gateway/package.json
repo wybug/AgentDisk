@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@nexus-ai/agent-chat-ui": "^0.1.4",
+    "better-sqlite3": "^12.10.0",
     "cookie-parser": "^1.4.6",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.3",
@@ -20,6 +21,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cookie-parser": "^1.4.7",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",

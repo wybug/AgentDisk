@@ -39,7 +39,7 @@ export default function SharesPage() {
           {
             title: '资源类型',
             dataIndex: 'resType',
-            width: 80,
+            width: 100,
             render: (t: string) => <Tag>{t}</Tag>,
           },
           { title: '资源 ID', dataIndex: 'resourceId', width: 80 },

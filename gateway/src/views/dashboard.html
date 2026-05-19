@@ -150,6 +150,22 @@
     </div>
 
     <div class="card">
+      <h2>Agent 管理</h2>
+      <table class="users-table">
+        <thead>
+          <tr><th>Agent ID</th><th>名称</th><th>组</th><th>操作</th></tr>
+        </thead>
+        <tbody id="agentList"></tbody>
+      </table>
+      <form class="add-user-form" id="addAgentForm">
+        <input type="text" id="newAgentId" placeholder="Agent ID" required>
+        <input type="text" id="newAgentName" placeholder="名称" required>
+        <input type="text" id="newAgentGroup" placeholder="组 ID (可选)">
+        <button type="submit">注册</button>
+      </form>
+    </div>
+
+    <div class="card">
       <h2>测试用户</h2>
       <table class="users-table">
         <thead>
@@ -213,6 +229,43 @@
 
     loadProfile();
     loadUsers();
+    loadAgents();
+
+    async function loadAgents() {
+      const resp = await fetch('/api/agents');
+      const data = await resp.json();
+      const tbody = document.getElementById('agentList');
+      tbody.innerHTML = data.map(a => `
+        <tr>
+          <td>${a.agentId}</td>
+          <td>${a.agentName}</td>
+          <td>${a.agentGroupId || '-'}</td>
+          <td><button class="btn-small btn-danger" onclick="removeAgent('${a.agentId}')">注销</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function removeAgent(agentId) {
+      if (!confirm('确定注销 Agent ' + agentId + '？')) return;
+      await fetch('/api/agents/' + agentId, { method: 'DELETE' });
+      loadAgents();
+    }
+
+    document.getElementById('addAgentForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const agentId = document.getElementById('newAgentId').value;
+      const agentName = document.getElementById('newAgentName').value;
+      const agentGroupId = document.getElementById('newAgentGroup').value;
+      await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId, agentName, agentGroupId }),
+      });
+      document.getElementById('newAgentId').value = '';
+      document.getElementById('newAgentName').value = '';
+      document.getElementById('newAgentGroup').value = '';
+      loadAgents();
+    });
   </script>
 </body>
 </html>

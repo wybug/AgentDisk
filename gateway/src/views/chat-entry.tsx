@@ -13,6 +13,12 @@ interface Metrics {
   duration: number;
 }
 
+interface AgentOption {
+  agentId: string;
+  agentName: string;
+  agentGroupId: string;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -116,8 +122,14 @@ function ChatApp() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch('/api/agents').then(r => r.json()).then((data: AgentOption[]) => setAgents(data)).catch(() => {});
+  }, []);
 
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
@@ -145,7 +157,7 @@ function ChatApp() {
       const resp = await fetch('/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: [{ role: 'user', content: [{ type: 'text', text }] }] }),
+        body: JSON.stringify({ input: [{ role: 'user', content: [{ type: 'text', text }] }], agentId: selectedAgent || undefined }),
         signal: controller.signal,
       });
 
@@ -207,6 +219,19 @@ function ChatApp() {
 
   return (
     <div style={styles.container}>
+      {agents.length > 0 && (
+        <div style={styles.agentBar}>
+          <span style={styles.agentLabel}>身份：</span>
+          <select
+            value={selectedAgent}
+            onChange={e => setSelectedAgent(e.target.value)}
+            style={styles.agentSelect}
+          >
+            <option value="">用户身份</option>
+            {agents.map(a => <option key={a.agentId} value={a.agentId}>{a.agentName} ({a.agentId})</option>)}
+          </select>
+        </div>
+      )}
       <div ref={scrollRef} style={styles.messageArea}>
         {messages.map(m => <MessageBubble key={m.id} msg={m} />)}
       </div>
@@ -224,6 +249,9 @@ function ChatApp() {
 
 const styles: Record<string, React.CSSProperties> = {
   container: { display: 'flex', flexDirection: 'column', height: '100%', background: '#f9fafb' },
+  agentBar: { display: 'flex', alignItems: 'center', padding: '8px 16px', background: '#fff', borderBottom: '1px solid #e5e7eb' },
+  agentLabel: { fontSize: '13px', color: '#666', marginRight: 8 },
+  agentSelect: { padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '13px', background: '#fff' },
   messageArea: { flex: 1, overflow: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' },
   bubbleRow: { display: 'flex' },
   bubble: { maxWidth: '80%', padding: '10px 14px', borderRadius: '12px', lineHeight: 1.6, fontSize: '14px', wordBreak: 'break-word' as const },
