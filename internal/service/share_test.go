@@ -61,10 +61,12 @@ func (m *mockShareRepo) GetByID(id uint64) (*model.DiskShare, error) {
 	return s, nil
 }
 
-func (m *mockShareRepo) Update(s *model.DiskShare) error {
-	m.shares[s.ID] = s
-	m.byCode[s.ShareCode] = s
-	m.updates[s.ID]++
+func (m *mockShareRepo) IncrementVisitCount(id uint64) error {
+	_, ok := m.shares[id]
+	if !ok {
+		return fmt.Errorf("not found")
+	}
+	m.updates[id]++
 	return nil
 }
 

@@ -118,7 +118,7 @@ func (s *FolderService) RenameFolder(userID string, folderID uint64, newName str
 	}
 	folder.FolderName = newName
 	folder.FullPath = newPath
-	if err := s.folderRepo.Update(folder); err != nil {
+	if err := s.folderRepo.UpdateNameAndPath(folder.ID, newName, newPath); err != nil {
 		return nil, fmt.Errorf("update folder: %w", err)
 	}
 	// Update child paths recursively
@@ -140,8 +140,7 @@ func (s *FolderService) updateChildPaths(parentID uint64, parentPath string) err
 			continue
 		}
 		newPath := parentPath + "/" + sub.FolderName
-		sub.FullPath = newPath
-		if err := s.folderRepo.Update(&sub); err != nil {
+		if err := s.folderRepo.UpdateFullPath(sub.ID, newPath); err != nil {
 			return err
 		}
 		if err := s.updateChildPaths(sub.ID, newPath); err != nil {

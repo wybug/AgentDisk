@@ -79,7 +79,7 @@ func (s *FileService) UploadFileWithGroup(ctx context.Context, userID string, fo
 		return nil, fmt.Errorf("upload to oss: %w", err)
 	}
 	file.OSSKey = ossKey
-	if err := s.fileRepo.Update(file); err != nil {
+	if err := s.fileRepo.UpdateOSSKey(file.ID, ossKey); err != nil {
 		return nil, fmt.Errorf("update file oss key: %w", err)
 	}
 
@@ -153,12 +153,11 @@ func (s *FileService) UpdateFile(ctx context.Context, userID string, fileID uint
 	}
 
 	delta := size - file.FileSize
-	file.FileSize = size
-	file.Version = newVersion
-	file.OSSKey = ossKey
-	if err := s.fileRepo.Update(file); err != nil {
+	if err := s.fileRepo.UpdateVersion(file.ID, size, newVersion, ossKey, file.MD5); err != nil {
 		return nil, fmt.Errorf("update file: %w", err)
 	}
+	file.FileSize = size
+	file.Version = newVersion
 	if err := s.spaceRepo.UpdateUsedQuota(userID, delta); err != nil {
 		return nil, fmt.Errorf("update used quota: %w", err)
 	}

@@ -38,9 +38,23 @@ func (r *FileRepo) ListByFolder(userID string, folderID uint64) ([]model.DiskFil
 	return files, err
 }
 
-// Update saves changes to an existing file record.
-func (r *FileRepo) Update(file *model.DiskFile) error {
-	return r.db.Save(file).Error
+// UpdateOSSKey sets only the oss_key column for a file.
+func (r *FileRepo) UpdateOSSKey(id uint64, ossKey string) error {
+	return r.db.Model(&model.DiskFile{}).
+		Where("id = ?", id).
+		Update("oss_key", ossKey).Error
+}
+
+// UpdateVersion sets file_size, version, oss_key, and md5 for a file.
+func (r *FileRepo) UpdateVersion(id uint64, fileSize int64, version int, ossKey, md5 string) error {
+	return r.db.Model(&model.DiskFile{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"file_size": fileSize,
+			"version":   version,
+			"oss_key":   ossKey,
+			"md5":       md5,
+		}).Error
 }
 
 // SoftDelete marks a file as deleted by setting is_deleted = true.
