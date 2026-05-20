@@ -3,6 +3,7 @@ import { UndoOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { recycleApi } from '@/api/recycle';
 import { formatDate } from '@/utils/format';
+import type { DiskRecycleBin } from '@/api/types';
 
 export default function RecycleBinPage() {
   const queryClient = useQueryClient();
@@ -19,8 +20,8 @@ export default function RecycleBinPage() {
       queryClient.invalidateQueries({ queryKey: ['recycle'] });
       queryClient.invalidateQueries({ queryKey: ['files'] });
       queryClient.invalidateQueries({ queryKey: ['folders'] });
-    } catch (err: any) {
-      message.error('恢复失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('恢复失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -30,8 +31,8 @@ export default function RecycleBinPage() {
       message.success('已彻底删除');
       queryClient.invalidateQueries({ queryKey: ['recycle'] });
       queryClient.invalidateQueries({ queryKey: ['space'] });
-    } catch (err: any) {
-      message.error('删除失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('删除失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -52,7 +53,7 @@ export default function RecycleBinPage() {
           {
             title: '操作',
             width: 150,
-            render: (_: any, record: any) => (
+            render: (_: unknown, record: DiskRecycleBin) => (
               <Space>
                 <Button
                   size="small"

@@ -7,7 +7,6 @@ import {
   HistoryOutlined,
   TagOutlined,
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import { fileApi } from '@/api/file';
 import { getDownloadUrl } from '@/utils/format';
 import { useQueryClient } from '@tanstack/react-query';
@@ -23,15 +22,14 @@ interface Props {
 }
 
 export default function FileActions({ file, folderId, onPreview, onVersionHistory, onShare, onTag }: Props) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const handleDownload = async () => {
     try {
       const result = await fileApi.getDownloadToken(file.id);
       window.open(getDownloadUrl(result.downloadToken), '_blank');
-    } catch (err: any) {
-      message.error('获取下载链接失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('获取下载链接失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 

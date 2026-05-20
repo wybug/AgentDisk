@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Modal, Form, Input, InputNumber, Typography, message } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
 import { shareApi } from '@/api/share';
 import type { DiskFile } from '@/api/types';
 
@@ -32,8 +31,8 @@ export default function CreateShareModal({ file, open, onClose }: Props) {
         shareCode: 'check shares page',
         extractCode: values.extractCode || '',
       });
-    } catch (err: any) {
-      message.error('创建失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('创建失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 

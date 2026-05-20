@@ -4,7 +4,6 @@ import { SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { tagApi } from '@/api/tag';
 import { formatFileSize, formatDate } from '@/utils/format';
-import type { DiskFile } from '@/api/types';
 
 export default function TagsPage() {
   const [tagInput, setTagInput] = useState('');

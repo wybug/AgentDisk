@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Union
-
-import httpx
+from typing import TYPE_CHECKING, Any
 
 from ..exceptions import raise_for_response
+
+if TYPE_CHECKING:
+    import httpx
 
 _PREFIX = "/v1/disk"
 
@@ -26,10 +27,10 @@ class BaseAPI:
         method: str,
         path: str,
         *,
-        params: Optional[dict] = None,
-        json: Optional[dict] = None,
-        files: Optional[dict] = None,
-        data: Optional[dict] = None,
+        params: dict | None = None,
+        json: dict | None = None,
+        files: dict | None = None,
+        data: dict | None = None,
     ) -> Any:
         url = f"{_PREFIX}{path}"
         resp = self._client.request(
@@ -61,10 +62,10 @@ class AsyncBaseAPI:
         method: str,
         path: str,
         *,
-        params: Optional[dict] = None,
-        json: Optional[dict] = None,
-        files: Optional[dict] = None,
-        data: Optional[dict] = None,
+        params: dict | None = None,
+        json: dict | None = None,
+        files: dict | None = None,
+        data: dict | None = None,
     ) -> Any:
         url = f"{_PREFIX}{path}"
         resp = await self._client.request(

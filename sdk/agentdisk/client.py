@@ -15,7 +15,6 @@ from .api import (
     TagAPI,
     VersionAPI,
 )
-from .config import ClientConfig
 
 
 class AgentDiskClient:

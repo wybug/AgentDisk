@@ -3,6 +3,7 @@ import { RollbackOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { versionApi } from '@/api/version';
 import { formatFileSize, formatDate } from '@/utils/format';
+import type { DiskFileVersion } from '@/api/types';
 import type { DiskFile } from '@/api/types';
 
 interface Props {
@@ -26,8 +27,8 @@ export default function VersionHistory({ file, open, onClose }: Props) {
       message.success(`已回滚到 v${version}`);
       queryClient.invalidateQueries({ queryKey: ['files'] });
       queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
-    } catch (err: any) {
-      message.error('回滚失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('回滚失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -52,7 +53,7 @@ export default function VersionHistory({ file, open, onClose }: Props) {
           {
             title: '操作',
             width: 80,
-            render: (_: any, record: any) => (
+            render: (_: unknown, record: DiskFileVersion) => (
               <Popconfirm
                 title={`确定回滚到 v${record.version}？`}
                 onConfirm={() => handleRollback(record.fileId, record.version)}

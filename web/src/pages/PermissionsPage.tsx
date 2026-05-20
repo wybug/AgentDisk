@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Popconfirm, message, Space, Tag } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, Popconfirm, message, Tag } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { permissionApi } from '@/api/permission';
+import type { DiskPermission } from '@/api/types';
 
 export default function PermissionsPage() {
   const queryClient = useQueryClient();
@@ -22,12 +23,12 @@ export default function PermissionsPage() {
       queryClient.invalidateQueries({ queryKey: ['permissions'] });
       form.resetFields();
       setModalOpen(false);
-    } catch (err: any) {
-      message.error('授予失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('授予失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
-  const handleRevoke = async (record: any) => {
+  const handleRevoke = async (record: DiskPermission) => {
     try {
       await permissionApi.revoke({
         agentId: record.agentId,
@@ -36,8 +37,8 @@ export default function PermissionsPage() {
       });
       message.success('权限已撤销');
       queryClient.invalidateQueries({ queryKey: ['permissions'] });
-    } catch (err: any) {
-      message.error('撤销失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('撤销失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -75,7 +76,7 @@ export default function PermissionsPage() {
           {
             title: '操作',
             width: 80,
-            render: (_: any, record: any) => (
+            render: (_: unknown, record: DiskPermission) => (
               <Popconfirm title="确定撤销此权限？" onConfirm={() => handleRevoke(record)}>
                 <Button size="small" danger icon={<DeleteOutlined />}>撤销</Button>
               </Popconfirm>

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING
 
 from ..models.file import (
     DiskFile,
@@ -13,9 +13,11 @@ from ..models.file import (
 )
 from .base import AsyncBaseAPI, BaseAPI
 
+if TYPE_CHECKING:
+    import builtins
+
 
 class FileAPI(BaseAPI):
-
     def upload(
         self,
         file_path: str,
@@ -48,7 +50,7 @@ class FileAPI(BaseAPI):
         )
         return DiskFile.from_dict(data)
 
-    def list(self, folder_id: int) -> List[DiskFile]:
+    def list(self, folder_id: int) -> builtins.list[DiskFile]:
         data = self._request("GET", "/files", params={"folderId": folder_id})
         return [DiskFile.from_dict(d) for d in (data or [])]
 
@@ -93,7 +95,6 @@ class FileAPI(BaseAPI):
 
 
 class AsyncFileAPI(AsyncBaseAPI):
-
     async def upload(
         self,
         file_path: str,
@@ -126,7 +127,7 @@ class AsyncFileAPI(AsyncBaseAPI):
         )
         return DiskFile.from_dict(data)
 
-    async def list(self, folder_id: int) -> List[DiskFile]:
+    async def list(self, folder_id: int) -> builtins.list[DiskFile]:
         data = await self._request("GET", "/files", params={"folderId": folder_id})
         return [DiskFile.from_dict(d) for d in (data or [])]
 

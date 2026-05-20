@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { DiskFolder, CreateFolderRequest } from './types';
+import type { ApiResponse, DiskFolder, CreateFolderRequest } from './types';
 
 export interface AncestorItem {
   id: number;
@@ -11,13 +11,13 @@ export const folderApi = {
     apiClient.post('/v1/disk/folders', data),
 
   list: (parentId: number = 0) =>
-    apiClient.get<any, { code: number; message: string; data: DiskFolder[] }>('/v1/disk/folders', { params: { parentId } }).then(r => r.data),
+    apiClient.get<never, ApiResponse<DiskFolder[]>>('/v1/disk/folders', { params: { parentId } }).then(r => r.data),
 
   getById: (id: number) =>
-    apiClient.get<any, { code: number; message: string; data: DiskFolder }>(`/v1/disk/folders/${id}`).then(r => r.data),
+    apiClient.get<never, ApiResponse<DiskFolder>>(`/v1/disk/folders/${id}`).then(r => r.data),
 
   getAncestors: (id: number) =>
-    apiClient.get<any, { code: number; message: string; data: AncestorItem[] }>(`/v1/disk/folders/${id}/ancestors`).then(r => r.data),
+    apiClient.get<never, ApiResponse<AncestorItem[]>>(`/v1/disk/folders/${id}/ancestors`).then(r => r.data),
 
   delete: (id: number) =>
     apiClient.delete(`/v1/disk/folders/${id}`),

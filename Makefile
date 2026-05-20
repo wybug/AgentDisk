@@ -48,3 +48,27 @@ dev-stop:
 
 dev-status:
 	bash scripts/dev.sh status
+
+sdk-lint:
+	cd sdk && ruff check .
+
+sdk-format:
+	cd sdk && ruff format --check .
+
+sdk-format-fix:
+	cd sdk && ruff format .
+
+sdk-typecheck:
+	cd sdk && mypy agentdisk tests
+
+sdk-check: sdk-lint sdk-format sdk-typecheck
+	@echo "All SDK checks passed."
+
+web-lint:
+	cd web && npm run lint
+
+web-build:
+	cd web && npm run build
+
+web-check: web-lint web-build
+	@echo "All web checks passed."

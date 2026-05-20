@@ -1,7 +1,7 @@
 """Test async client."""
 
 import pytest
-from agentdisk import AsyncAgentDiskClient
+
 from agentdisk.models import UserDisk
 
 

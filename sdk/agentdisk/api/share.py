@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from typing import List
-
-import httpx
+from typing import TYPE_CHECKING
 
 from ..models.share import DiskShare
 from .base import AsyncBaseAPI, BaseAPI
+
+if TYPE_CHECKING:
+    import builtins
 
 _PREFIX_PUBLIC = "/v1/disk/share"
 
 
 class ShareAPI(BaseAPI):
-
     def create(
         self,
         resource_id: int,
@@ -35,7 +35,7 @@ class ShareAPI(BaseAPI):
         )
         return DiskShare.from_dict(data)
 
-    def list(self) -> List[DiskShare]:
+    def list(self) -> builtins.list[DiskShare]:
         data = self._request("GET", "/shares")
         return [DiskShare.from_dict(d) for d in (data or [])]
 
@@ -44,10 +44,12 @@ class ShareAPI(BaseAPI):
 
     def get_by_code(self, code: str) -> DiskShare:
         resp = self._client.request(
-            "GET", f"{_PREFIX_PUBLIC}/{code}",
+            "GET",
+            f"{_PREFIX_PUBLIC}/{code}",
         )
         body = resp.json()
         from ..exceptions import raise_for_response
+
         raise_for_response(resp.status_code, body)
         return DiskShare.from_dict(body["data"])
 
@@ -59,12 +61,12 @@ class ShareAPI(BaseAPI):
         )
         body = resp.json()
         from ..exceptions import raise_for_response
+
         raise_for_response(resp.status_code, body)
         return DiskShare.from_dict(body["data"])
 
 
 class AsyncShareAPI(AsyncBaseAPI):
-
     async def create(
         self,
         resource_id: int,
@@ -86,7 +88,7 @@ class AsyncShareAPI(AsyncBaseAPI):
         )
         return DiskShare.from_dict(data)
 
-    async def list(self) -> List[DiskShare]:
+    async def list(self) -> builtins.list[DiskShare]:
         data = await self._request("GET", "/shares")
         return [DiskShare.from_dict(d) for d in (data or [])]
 
@@ -95,10 +97,12 @@ class AsyncShareAPI(AsyncBaseAPI):
 
     async def get_by_code(self, code: str) -> DiskShare:
         resp = await self._client.request(
-            "GET", f"{_PREFIX_PUBLIC}/{code}",
+            "GET",
+            f"{_PREFIX_PUBLIC}/{code}",
         )
         body = resp.json()
         from ..exceptions import raise_for_response
+
         raise_for_response(resp.status_code, body)
         return DiskShare.from_dict(body["data"])
 
@@ -110,5 +114,6 @@ class AsyncShareAPI(AsyncBaseAPI):
         )
         body = resp.json()
         from ..exceptions import raise_for_response
+
         raise_for_response(resp.status_code, body)
         return DiskShare.from_dict(body["data"])

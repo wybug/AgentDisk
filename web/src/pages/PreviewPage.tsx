@@ -1,7 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Spin, Button, Result } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
 import { fileApi } from '@/api/file';
 import FilePreview from '@/components/file/FilePreview';
 

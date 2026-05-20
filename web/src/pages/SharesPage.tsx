@@ -3,6 +3,7 @@ import { DeleteOutlined, CopyOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { shareApi } from '@/api/share';
 import { formatDate } from '@/utils/format';
+import type { DiskShare } from '@/api/types';
 
 export default function SharesPage() {
   const queryClient = useQueryClient();
@@ -17,8 +18,8 @@ export default function SharesPage() {
       await shareApi.revoke(shareId);
       message.success('已撤销分享');
       queryClient.invalidateQueries({ queryKey: ['shares'] });
-    } catch (err: any) {
-      message.error('撤销失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('撤销失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -62,7 +63,7 @@ export default function SharesPage() {
           {
             title: '访问',
             width: 100,
-            render: (_: any, record: any) => `${record.visitCount}/${record.maxVisit === -1 ? '∞' : record.maxVisit}`,
+            render: (_: unknown, record: DiskShare) => `${record.visitCount}/${record.maxVisit === -1 ? '∞' : record.maxVisit}`,
           },
           {
             title: '有效期',
@@ -81,7 +82,7 @@ export default function SharesPage() {
           {
             title: '操作',
             width: 80,
-            render: (_: any, record: any) => (
+            render: (_: unknown, record: DiskShare) => (
               <Popconfirm
                 title="确定撤销此分享？"
                 onConfirm={() => handleRevoke(record.id)}
