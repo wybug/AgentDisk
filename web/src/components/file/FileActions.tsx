@@ -6,6 +6,7 @@ import {
   EyeOutlined,
   HistoryOutlined,
   TagOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 import { fileApi } from '@/api/file';
 import { getDownloadUrl } from '@/utils/format';
@@ -19,9 +20,10 @@ interface Props {
   onVersionHistory?: () => void;
   onShare?: () => void;
   onTag?: () => void;
+  onGrantPermission?: () => void;
 }
 
-export default function FileActions({ file, folderId, onPreview, onVersionHistory, onShare, onTag }: Props) {
+export default function FileActions({ file, folderId, onPreview, onVersionHistory, onShare, onTag, onGrantPermission }: Props) {
   const queryClient = useQueryClient();
 
   const handleDownload = async () => {
@@ -52,6 +54,7 @@ export default function FileActions({ file, folderId, onPreview, onVersionHistor
     { key: 'preview', icon: <EyeOutlined />, label: '预览', onClick: onPreview },
     { key: 'download', icon: <DownloadOutlined />, label: '下载', onClick: handleDownload },
     { key: 'share', icon: <ShareAltOutlined />, label: '分享', onClick: onShare },
+    { key: 'permission', icon: <SafetyOutlined />, label: '授予权限', onClick: onGrantPermission },
     { key: 'tag', icon: <TagOutlined />, label: '标签', onClick: onTag },
     { key: 'version', icon: <HistoryOutlined />, label: '版本历史', onClick: onVersionHistory },
     { type: 'divider' as const },

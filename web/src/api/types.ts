@@ -86,8 +86,10 @@ export interface DiskPermission {
   id: number;
   userId: string;
   agentId: string;
+  agentGroupId: string;
   resourceId: number;
   resType: 'file' | 'folder';
+  resourcePath: string;
   permission: 'owner' | 'read' | 'write' | 'delete';
   createdAt: string;
   updatedAt: string;
@@ -112,9 +114,11 @@ export interface CreateShareRequest {
 }
 
 export interface GrantPermissionRequest {
-  agentId: string;
-  resourceId: number;
-  resType: 'file' | 'folder';
+  agentId?: string;
+  agentGroupId?: string;
+  resourceId?: number;
+  resType?: 'file' | 'folder';
+  resourcePath?: string;
   permission: 'owner' | 'read' | 'write' | 'delete';
 }
 

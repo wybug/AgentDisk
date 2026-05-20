@@ -47,6 +47,9 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 
 // AutoMigrate runs GORM auto-migration for all project models.
 func AutoMigrate(db *gorm.DB) error {
+	if err := migratePermissionIndex(db); err != nil {
+		return fmt.Errorf("permission index migration: %w", err)
+	}
 	return db.AutoMigrate(
 		&model.UserDisk{},
 		&model.DiskFolder{},
@@ -59,4 +62,15 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.DiskShare{},
 		&model.ShareAccessLog{},
 	)
+}
+
+// migratePermissionIndex drops the old uk_agent_resource unique index and creates
+// the new composite unique index that includes agent_group_id and resource_path.
+func migratePermissionIndex(db *gorm.DB) error {
+	if db.Migrator().HasIndex(&model.DiskPermission{}, "uk_agent_resource") {
+		if err := db.Migrator().DropIndex(&model.DiskPermission{}, "uk_agent_resource"); err != nil {
+			return err
+		}
+	}
+	return nil
 }

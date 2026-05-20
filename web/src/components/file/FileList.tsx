@@ -43,12 +43,19 @@ type FileRow = {
 
 type RowItem = FolderRow | FileRow;
 
+interface GrantPermResource {
+  id: number;
+  name: string;
+  resType: 'file' | 'folder';
+}
+
 interface Props {
   folderId: number;
   onPreview: (file: DiskFile) => void;
   onVersionHistory: (file: DiskFile) => void;
   onShare: (file: DiskFile) => void;
   onTag: (file: DiskFile) => void;
+  onGrantPermission: (resource: GrantPermResource) => void;
 }
 
 function IconFor(name: string) {
@@ -57,7 +64,7 @@ function IconFor(name: string) {
   return <IconComponent />;
 }
 
-export default function FileList({ folderId, onPreview, onVersionHistory, onShare, onTag }: Props) {
+export default function FileList({ folderId, onPreview, onVersionHistory, onShare, onTag, onGrantPermission }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [renameFolder, setRenameFolder] = useState<DiskFolder | null>(null);
@@ -167,6 +174,13 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
                   <Button
                     type="link"
                     size="small"
+                    onClick={() => onGrantPermission({ id: record.rawData.id, name: record.rawData.folderName, resType: 'folder' })}
+                  >
+                    授权
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
                     onClick={() => setRenameFolder(record.rawData)}
                   >
                     重命名
@@ -190,6 +204,7 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
                 onVersionHistory={() => onVersionHistory(record.rawData)}
                 onShare={() => onShare(record.rawData)}
                 onTag={() => onTag(record.rawData)}
+                onGrantPermission={() => onGrantPermission({ id: record.rawData.id, name: record.rawData.fileName, resType: 'file' })}
               />
             );
           },

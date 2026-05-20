@@ -63,17 +63,18 @@ CREATE TABLE `disk_file` (
 CREATE TABLE `disk_permission` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id` VARCHAR(64) NOT NULL COMMENT '资源所有者ID',
-    `agent_id` VARCHAR(64) NOT NULL COMMENT '被授权智能体ID',
-    `resource_id` BIGINT UNSIGNED NOT NULL COMMENT '资源ID',
-    `res_type` VARCHAR(16) NOT NULL COMMENT '资源类型: file/folder',
+    `agent_id` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '被授权智能体ID',
+    `agent_group_id` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '被授权智能体组ID',
+    `resource_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '资源ID（路径授权时为0）',
+    `res_type` VARCHAR(16) NOT NULL DEFAULT '' COMMENT '资源类型: file/folder',
+    `resource_path` VARCHAR(1024) NOT NULL DEFAULT '' COMMENT '路径模式，支持通配符',
     `permission` VARCHAR(16) NOT NULL COMMENT '权限: owner/read/write/delete',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_user_id` (`user_id`),
-    KEY `idx_agent_id` (`agent_id`),
-    KEY `idx_resource` (`resource_id`),
-    UNIQUE KEY `uk_agent_resource` (`agent_id`, `resource_id`, `res_type`)
+    KEY `idx_agent` (`agent_id`, `agent_group_id`),
+    KEY `idx_resource` (`resource_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='智能体权限';
 
 -- 5. 版本快照表

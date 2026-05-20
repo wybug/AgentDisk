@@ -11,6 +11,12 @@
 *.out
 coverage.html
 coverage.txt
+test/browser/screenshots/
+
+# Python cache
+__pycache__/
+*.pyc
+sdk/dist/
 
 # IDE
 .idea/

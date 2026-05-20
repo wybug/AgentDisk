@@ -10,9 +10,16 @@ import BreadcrumbNav from '@/components/layout/BreadcrumbNav';
 import FilePreview from '@/components/file/FilePreview';
 import VersionHistory from '@/components/file/VersionHistory';
 import CreateShareModal from '@/components/share/CreateShareModal';
+import GrantPermissionModal from '@/components/permission/GrantPermissionModal';
 import TagInput from '@/components/tag/TagInput';
 import { folderApi } from '@/api/folder';
 import type { DiskFile } from '@/api/types';
+
+interface GrantPermResource {
+  id: number;
+  name: string;
+  resType: 'file' | 'folder';
+}
 
 export default function ExplorerPage() {
   const { folderId: folderIdStr } = useParams();
@@ -24,6 +31,7 @@ export default function ExplorerPage() {
   const [versionFile, setVersionFile] = useState<DiskFile | null>(null);
   const [shareFile, setShareFile] = useState<DiskFile | null>(null);
   const [tagFile, setTagFile] = useState<DiskFile | null>(null);
+  const [grantPermResource, setGrantPermResource] = useState<GrantPermResource | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
   const { data: ancestors = [] } = useQuery({
@@ -68,6 +76,7 @@ export default function ExplorerPage() {
         onVersionHistory={(file) => setVersionFile(file)}
         onShare={(file) => setShareFile(file)}
         onTag={(file) => setTagFile(file)}
+        onGrantPermission={setGrantPermResource}
       />
 
       <CreateFolderModal
@@ -86,6 +95,12 @@ export default function ExplorerPage() {
         file={shareFile}
         open={!!shareFile}
         onClose={() => setShareFile(null)}
+      />
+
+      <GrantPermissionModal
+        resource={grantPermResource}
+        open={!!grantPermResource}
+        onClose={() => setGrantPermResource(null)}
       />
 
       <TagInput
