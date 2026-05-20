@@ -2,10 +2,10 @@
 
 
 def test_preview_file(client):
-    f = client.files.upload_bytes("preview-test.md", b"# Hello\npreview test", folder_id=0)
+    client.upload_bytes("preview-test.md", b"# Hello\npreview test")
     try:
-        result = client.preview.file(f.id)
+        result = client.preview("preview-test.md")
         assert result.file_type != ""
         assert result.url != ""
     finally:
-        client.files.delete(f.id)
+        client.delete_file("preview-test.md")

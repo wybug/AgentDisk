@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import builtins
 
 
-class PermissionAPI(BaseAPI):
+class _PermissionAPI(BaseAPI):
     def grant(self, agent_id: str, resource_id: int, res_type: str, permission: str) -> None:
         self._request(
             "POST",
@@ -49,7 +49,7 @@ class PermissionAPI(BaseAPI):
         )
 
 
-class AsyncPermissionAPI(AsyncBaseAPI):
+class _AsyncPermissionAPI(AsyncBaseAPI):
     async def grant(self, agent_id: str, resource_id: int, res_type: str, permission: str) -> None:
         await self._request(
             "POST",

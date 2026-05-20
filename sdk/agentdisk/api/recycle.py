@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import builtins
 
 
-class RecycleAPI(BaseAPI):
+class _RecycleAPI(BaseAPI):
     def list(self) -> builtins.list[DiskRecycleBin]:
         data = self._request("GET", "/recycle")
         return [DiskRecycleBin.from_dict(d) for d in (data or [])]
@@ -23,7 +23,7 @@ class RecycleAPI(BaseAPI):
         self._request("DELETE", "/recycle", json={"recycleId": recycle_id})
 
 
-class AsyncRecycleAPI(AsyncBaseAPI):
+class _AsyncRecycleAPI(AsyncBaseAPI):
     async def list(self) -> builtins.list[DiskRecycleBin]:
         data = await self._request("GET", "/recycle")
         return [DiskRecycleBin.from_dict(d) for d in (data or [])]
