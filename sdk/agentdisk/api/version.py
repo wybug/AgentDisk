@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import builtins
 
 
-class VersionAPI(BaseAPI):
+class _VersionAPI(BaseAPI):
     def list(self, file_id: int) -> builtins.list[DiskFileVersion]:
         data = self._request("GET", "/versions", params={"fileId": file_id})
         return [DiskFileVersion.from_dict(d) for d in (data or [])]
@@ -20,7 +20,7 @@ class VersionAPI(BaseAPI):
         self._request("POST", "/versions/rollback", json={"fileId": file_id, "version": version})
 
 
-class AsyncVersionAPI(AsyncBaseAPI):
+class _AsyncVersionAPI(AsyncBaseAPI):
     async def list(self, file_id: int) -> builtins.list[DiskFileVersion]:
         data = await self._request("GET", "/versions", params={"fileId": file_id})
         return [DiskFileVersion.from_dict(d) for d in (data or [])]

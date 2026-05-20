@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 _PREFIX_PUBLIC = "/v1/disk/share"
 
 
-class ShareAPI(BaseAPI):
+class _ShareAPI(BaseAPI):
     def create(
         self,
         resource_id: int,
@@ -66,7 +66,7 @@ class ShareAPI(BaseAPI):
         return DiskShare.from_dict(body["data"])
 
 
-class AsyncShareAPI(AsyncBaseAPI):
+class _AsyncShareAPI(AsyncBaseAPI):
     async def create(
         self,
         resource_id: int,

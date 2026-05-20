@@ -6,7 +6,7 @@ from ..models.file import DiskFile
 from .base import AsyncBaseAPI, BaseAPI
 
 
-class TagAPI(BaseAPI):
+class _TagAPI(BaseAPI):
     def bind(self, file_id: int, tag_name: str) -> None:
         self._request("POST", "/tags/bind", json={"fileId": file_id, "tagName": tag_name})
 
@@ -18,7 +18,7 @@ class TagAPI(BaseAPI):
         return [DiskFile.from_dict(d) for d in (data or [])]
 
 
-class AsyncTagAPI(AsyncBaseAPI):
+class _AsyncTagAPI(AsyncBaseAPI):
     async def bind(self, file_id: int, tag_name: str) -> None:
         await self._request("POST", "/tags/bind", json={"fileId": file_id, "tagName": tag_name})
 

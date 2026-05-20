@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     import builtins
 
 
-class FileAPI(BaseAPI):
+class _FileAPI(BaseAPI):
     def upload(
         self,
         file_path: str,
@@ -94,7 +94,7 @@ class FileAPI(BaseAPI):
         return DownloadByTokenResponse.from_dict(data)
 
 
-class AsyncFileAPI(AsyncBaseAPI):
+class _AsyncFileAPI(AsyncBaseAPI):
     async def upload(
         self,
         file_path: str,

@@ -2,16 +2,16 @@
 
 
 def test_list_versions(client):
-    f = client.files.upload_bytes("ver-test.txt", b"version 1", folder_id=0)
+    client.upload_bytes("ver-test.txt", b"version 1")
     try:
-        client.files.update_bytes(f.id, "ver-test.txt", b"version 2")
+        client.update_file_bytes("ver-test.txt", b"version 2")
 
-        versions = client.versions.list(f.id)
+        versions = client.list_versions("ver-test.txt")
         assert len(versions) >= 1
         assert versions[0].version == 1
 
-        client.versions.rollback(f.id, 1)
-        detail = client.files.get(f.id)
+        client.rollback_version("ver-test.txt", 1)
+        detail = client.get_file("ver-test.txt")
         assert detail.file.version == 1
     finally:
-        client.files.delete(f.id)
+        client.delete_file("ver-test.txt")

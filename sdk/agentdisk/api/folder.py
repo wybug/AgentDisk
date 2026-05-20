@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import builtins
 
 
-class FolderAPI(BaseAPI):
+class _FolderAPI(BaseAPI):
     def create(self, folder_name: str, parent_id: int = 0) -> DiskFolder:
         data = self._request("POST", "/folders", json={"folderName": folder_name, "parentId": parent_id})
         return DiskFolder.from_dict(data)
@@ -36,7 +36,7 @@ class FolderAPI(BaseAPI):
         self._request("DELETE", f"/folders/{id}")
 
 
-class AsyncFolderAPI(AsyncBaseAPI):
+class _AsyncFolderAPI(AsyncBaseAPI):
     async def create(self, folder_name: str, parent_id: int = 0) -> DiskFolder:
         data = await self._request("POST", "/folders", json={"folderName": folder_name, "parentId": parent_id})
         return DiskFolder.from_dict(data)
