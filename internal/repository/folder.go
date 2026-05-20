@@ -38,9 +38,21 @@ func (r *FolderRepo) ListByParent(userID string, parentID uint64) ([]model.DiskF
 	return folders, err
 }
 
-// Update saves changes to an existing folder record.
-func (r *FolderRepo) Update(folder *model.DiskFolder) error {
-	return r.db.Save(folder).Error
+// UpdateNameAndPath sets folder_name and full_path for a folder.
+func (r *FolderRepo) UpdateNameAndPath(id uint64, folderName, fullPath string) error {
+	return r.db.Model(&model.DiskFolder{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"folder_name": folderName,
+			"full_path":   fullPath,
+		}).Error
+}
+
+// UpdateFullPath sets only the full_path for a folder.
+func (r *FolderRepo) UpdateFullPath(id uint64, fullPath string) error {
+	return r.db.Model(&model.DiskFolder{}).
+		Where("id = ?", id).
+		Update("full_path", fullPath).Error
 }
 
 // SoftDelete marks a folder as deleted by setting is_deleted = true.

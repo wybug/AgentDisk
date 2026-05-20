@@ -53,8 +53,5 @@ func (s *VersionService) Rollback(ctx context.Context, userID string, fileID uin
 		return fmt.Errorf("rollback oss: %w", err)
 	}
 
-	file.Version = targetVersion
-	file.FileSize = snapshot.FileSize
-	file.MD5 = snapshot.MD5
-	return s.fileRepo.Update(file)
+	return s.fileRepo.UpdateVersion(file.ID, snapshot.FileSize, targetVersion, file.OSSKey, snapshot.MD5)
 }

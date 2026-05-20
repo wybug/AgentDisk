@@ -38,9 +38,11 @@ func (r *ShareRepo) GetByID(id uint64) (*model.DiskShare, error) {
 	return &s, nil
 }
 
-// Update saves changes to an existing share record.
-func (r *ShareRepo) Update(s *model.DiskShare) error {
-	return r.db.Save(s).Error
+// IncrementVisitCount atomically increments visit_count for a share.
+func (r *ShareRepo) IncrementVisitCount(id uint64) error {
+	return r.db.Model(&model.DiskShare{}).
+		Where("id = ?", id).
+		Update("visit_count", gorm.Expr("visit_count + 1")).Error
 }
 
 // RevokeByID sets is_active = false for a share by ID.

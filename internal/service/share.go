@@ -13,7 +13,7 @@ type shareRepo interface {
 	Create(s *model.DiskShare) error
 	GetByCode(code string) (*model.DiskShare, error)
 	GetByID(id uint64) (*model.DiskShare, error)
-	Update(s *model.DiskShare) error
+	IncrementVisitCount(id uint64) error
 	RevokeByID(id uint64) error
 	ListByUser(userID string) ([]model.DiskShare, error)
 	LogAccess(log *model.ShareAccessLog) error
@@ -108,7 +108,7 @@ func (s *ShareService) AccessShare(code, extractCode, visitorIP, ua string) (*mo
 		return nil, fmt.Errorf("max visit limit reached")
 	}
 	share.VisitCount++
-	if err := s.repo.Update(share); err != nil {
+	if err := s.repo.IncrementVisitCount(share.ID); err != nil {
 		return nil, fmt.Errorf("update share visit count: %w", err)
 	}
 	if err := s.repo.LogAccess(&model.ShareAccessLog{
