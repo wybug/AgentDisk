@@ -60,11 +60,17 @@
 
 ### 4.3 静态检查强制规范
 
-- 所有模块代码必须通过 `golangci-lint run ./...` 检查，零 Error、零 Warning 方可合并。
-- 使用项目根目录 `.golangci.yml` 统一配置，禁止私自修改 lint 规则。
-- 安装命令：`make lint-install`，运行命令：`make lint`。
-- 新增代码提交前必须本地运行 `make lint` 并确认通过。
-- lint 未通过等同于测试未通过，禁止合并、禁止交付。
+所有模块代码提交前必须通过对应的 lint 检查，零 Error、零 Warning 方可合并。lint 未通过等同于测试未通过，禁止合并、禁止交付。
+
+| 模块 | 检查命令 | 说明 |
+|------|----------|------|
+| Go 后端 | `make lint` | golangci-lint，配置见 `.golangci.yml`；安装：`make lint-install` |
+| Python SDK | `cd sdk && ruff check .` | ruff lint，安装：`pip install ruff` |
+| Python SDK 类型 | `cd sdk && mypy agentdisk tests` | mypy 静态类型检查，安装：`pip install mypy` |
+| Web 前端 | `cd web && npm run lint` | ESLint |
+| Gateway 网关 | `cd gateway && npx tsc --noEmit` | TypeScript 编译检查（无独立 lint 脚本） |
+| SDK 一键全检 | `make sdk-check` | ruff + ruff format + mypy |
+| Web 一键全检 | `make web-check` | ESLint + build |
 
 ### 4.4 接口设计规范
 
