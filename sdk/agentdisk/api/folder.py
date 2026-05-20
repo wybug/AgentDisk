@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import TYPE_CHECKING
 
 from ..models.folder import DiskFolder
 from .base import AsyncBaseAPI, BaseAPI
 
+if TYPE_CHECKING:
+    import builtins
+
 
 class FolderAPI(BaseAPI):
-
     def create(self, folder_name: str, parent_id: int = 0) -> DiskFolder:
-        data = self._request(
-            "POST", "/folders", json={"folderName": folder_name, "parentId": parent_id}
-        )
+        data = self._request("POST", "/folders", json={"folderName": folder_name, "parentId": parent_id})
         return DiskFolder.from_dict(data)
 
-    def list(self, parent_id: int = 0) -> List[DiskFolder]:
+    def list(self, parent_id: int = 0) -> builtins.list[DiskFolder]:
         data = self._request("GET", "/folders", params={"parentId": parent_id})
         return [DiskFolder.from_dict(d) for d in (data or [])]
 
@@ -24,7 +24,7 @@ class FolderAPI(BaseAPI):
         data = self._request("GET", f"/folders/{id}")
         return DiskFolder.from_dict(data)
 
-    def ancestors(self, id: int) -> List[DiskFolder]:
+    def ancestors(self, id: int) -> builtins.list[DiskFolder]:
         data = self._request("GET", f"/folders/{id}/ancestors")
         return [DiskFolder.from_dict(d) for d in (data or [])]
 
@@ -37,14 +37,11 @@ class FolderAPI(BaseAPI):
 
 
 class AsyncFolderAPI(AsyncBaseAPI):
-
     async def create(self, folder_name: str, parent_id: int = 0) -> DiskFolder:
-        data = await self._request(
-            "POST", "/folders", json={"folderName": folder_name, "parentId": parent_id}
-        )
+        data = await self._request("POST", "/folders", json={"folderName": folder_name, "parentId": parent_id})
         return DiskFolder.from_dict(data)
 
-    async def list(self, parent_id: int = 0) -> List[DiskFolder]:
+    async def list(self, parent_id: int = 0) -> builtins.list[DiskFolder]:
         data = await self._request("GET", "/folders", params={"parentId": parent_id})
         return [DiskFolder.from_dict(d) for d in (data or [])]
 
@@ -52,7 +49,7 @@ class AsyncFolderAPI(AsyncBaseAPI):
         data = await self._request("GET", f"/folders/{id}")
         return DiskFolder.from_dict(data)
 
-    async def ancestors(self, id: int) -> List[DiskFolder]:
+    async def ancestors(self, id: int) -> builtins.list[DiskFolder]:
         data = await self._request("GET", f"/folders/{id}/ancestors")
         return [DiskFolder.from_dict(d) for d in (data or [])]
 

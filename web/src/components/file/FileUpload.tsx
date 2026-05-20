@@ -23,9 +23,9 @@ export default function FileUpload({ folderId }: Props) {
         queryClient.invalidateQueries({ queryKey: ['files', folderId] });
         queryClient.invalidateQueries({ queryKey: ['space'] });
         message.success(`${(file as File).name} 上传成功`);
-      } catch (err: any) {
-        onError?.(err);
-        message.error(`${(file as File).name} 上传失败: ${err.message}`);
+      } catch (err: unknown) {
+        onError?.(err as Error);
+        message.error(`${(file as File).name} 上传失败: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   };

@@ -16,11 +16,11 @@ from .version import DiskFileVersion
 
 __all__ = [
     "DiskFile",
+    "DiskFileVersion",
     "DiskFolder",
     "DiskPermission",
     "DiskRecycleBin",
     "DiskShare",
-    "DiskFileVersion",
     "DownloadByTokenResponse",
     "DownloadTokenResponse",
     "FileDetailResponse",

@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { DiskFile, PreviewResult, DownloadTokenResult } from './types';
+import type { ApiResponse, DiskFile, PreviewResult, DownloadTokenResult } from './types';
 
 export const fileApi = {
   upload: (file: File, folderId: number, onProgress?: (percent: number) => void) => {
@@ -15,10 +15,10 @@ export const fileApi = {
   },
 
   list: (folderId: number) =>
-    apiClient.get<any, { code: number; message: string; data: DiskFile[] }>('/v1/disk/files', { params: { folderId } }).then(r => r.data),
+    apiClient.get<never, ApiResponse<DiskFile[]>>('/v1/disk/files', { params: { folderId } }).then(r => r.data),
 
   get: (id: number) =>
-    apiClient.get<any, { code: number; message: string; data: { file: DiskFile; url: string } }>(`/v1/disk/files/${id}`).then(r => r.data),
+    apiClient.get<never, ApiResponse<{ file: DiskFile; url: string }>>(`/v1/disk/files/${id}`).then(r => r.data),
 
   update: (id: number, file: File) => {
     const formData = new FormData();
@@ -32,8 +32,8 @@ export const fileApi = {
     apiClient.delete(`/v1/disk/files/${id}`),
 
   getDownloadToken: (id: number) =>
-    apiClient.post<any, { code: number; message: string; data: DownloadTokenResult }>(`/v1/disk/files/${id}/download-token`).then(r => r.data),
+    apiClient.post<never, ApiResponse<DownloadTokenResult>>(`/v1/disk/files/${id}/download-token`).then(r => r.data),
 
   preview: (id: number) =>
-    apiClient.get<any, { code: number; message: string; data: PreviewResult }>(`/v1/disk/preview/${id}`).then(r => r.data),
+    apiClient.get<never, ApiResponse<PreviewResult>>(`/v1/disk/preview/${id}`).then(r => r.data),
 };

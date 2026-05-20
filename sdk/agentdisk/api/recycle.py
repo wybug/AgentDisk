@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import TYPE_CHECKING
 
 from ..models.recycle import DiskRecycleBin
 from .base import AsyncBaseAPI, BaseAPI
 
+if TYPE_CHECKING:
+    import builtins
+
 
 class RecycleAPI(BaseAPI):
-
-    def list(self) -> List[DiskRecycleBin]:
+    def list(self) -> builtins.list[DiskRecycleBin]:
         data = self._request("GET", "/recycle")
         return [DiskRecycleBin.from_dict(d) for d in (data or [])]
 
@@ -22,8 +24,7 @@ class RecycleAPI(BaseAPI):
 
 
 class AsyncRecycleAPI(AsyncBaseAPI):
-
-    async def list(self) -> List[DiskRecycleBin]:
+    async def list(self) -> builtins.list[DiskRecycleBin]:
         data = await self._request("GET", "/recycle")
         return [DiskRecycleBin.from_dict(d) for d in (data or [])]
 

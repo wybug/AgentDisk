@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+
 import pytest
 
 from agentdisk import AgentDiskClient, AsyncAgentDiskClient
@@ -12,13 +13,12 @@ DL_SECRET = os.environ.get("AGENTDISK_DL_SECRET", "dev-dl-token-secret-for-testi
 
 
 def _generate_jwt(user_id: str, agent_id: str = "", agent_group_id: str = "") -> str:
-    args = ["go", "run", "scripts/gen_token/main.go",
-            "-secret", JWT_SECRET,
-            "-userId", user_id]
+    args = ["go", "run", "scripts/gen_token/main.go", "-secret", JWT_SECRET, "-userId", user_id]
     if agent_id:
         args += ["-agentId", agent_id]
-    result = subprocess.run(args, capture_output=True, text=True,
-                            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    result = subprocess.run(
+        args, capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    )
     return result.stdout.strip()
 
 
@@ -49,4 +49,5 @@ def async_client(user_token):
     c = AsyncAgentDiskClient(base_url=BASE_URL, token=user_token)
     yield c
     import asyncio
+
     asyncio.get_event_loop().run_until_complete(c.close())

@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { DiskFile } from './types';
+import type { ApiResponse, DiskFile } from './types';
 
 export const tagApi = {
   bind: (fileId: number, tagName: string) =>
@@ -9,5 +9,5 @@ export const tagApi = {
     apiClient.post('/v1/disk/tags/unbind', { fileId, tagName }),
 
   search: (tags: string) =>
-    apiClient.get<any, { code: number; message: string; data: DiskFile[] }>('/v1/disk/tags/search', { params: { tags } }).then(r => r.data),
+    apiClient.get<never, ApiResponse<DiskFile[]>>('/v1/disk/tags/search', { params: { tags } }).then(r => r.data),
 };

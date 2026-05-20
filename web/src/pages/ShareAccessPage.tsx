@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Card, Input, Button, Result, Spin, Typography, Space } from 'antd';
+import { Card, Input, Button, Result, Typography, Space } from 'antd';
 import { LockOutlined, DownloadOutlined } from '@ant-design/icons';
 import { shareApi } from '@/api/share';
 import { fileApi } from '@/api/file';
@@ -34,8 +34,8 @@ export default function ShareAccessPage() {
         await shareApi.accessPublic(code);
       }
       setAccessed(true);
-    } catch (err: any) {
-      setError(err.message || '访问失败');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '访问失败');
     } finally {
       setLoading(false);
     }
@@ -46,8 +46,8 @@ export default function ShareAccessPage() {
     try {
       const tokenResult = await fileApi.getDownloadToken(shareInfo.resourceId);
       window.open(getDownloadUrl(tokenResult.downloadToken), '_blank');
-    } catch (err: any) {
-      setError('下载失败: ' + err.message);
+    } catch (err: unknown) {
+      setError('下载失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 

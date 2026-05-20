@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+
 import pytest
 
 
@@ -48,9 +49,7 @@ def test_get_file(client, uploaded_file):
 
 
 def test_upload_bytes(client, folder):
-    result = client.files.upload_bytes(
-        "test-bytes.txt", b"hello from bytes", folder_id=folder.id
-    )
+    result = client.files.upload_bytes("test-bytes.txt", b"hello from bytes", folder_id=folder.id)
     assert result.id > 0
     client.files.delete(result.id)
 

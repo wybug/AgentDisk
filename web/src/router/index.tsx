@@ -4,14 +4,22 @@ import { Spin } from 'antd';
 import ProtectedRoute from './ProtectedRoute';
 import AppLayout from '@/components/layout/AppLayout';
 
+// eslint-disable-next-line react-refresh/only-export-components
 const ExplorerPage = lazy(() => import('@/pages/ExplorerPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const RecycleBinPage = lazy(() => import('@/pages/RecycleBinPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const SharesPage = lazy(() => import('@/pages/SharesPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const TagsPage = lazy(() => import('@/pages/TagsPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const PermissionsPage = lazy(() => import('@/pages/PermissionsPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const ShareAccessPage = lazy(() => import('@/pages/ShareAccessPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const PreviewPage = lazy(() => import('@/pages/PreviewPage'));
 
+// eslint-disable-next-line react-refresh/only-export-components
 const Loading = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
     <Spin />

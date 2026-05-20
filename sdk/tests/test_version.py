@@ -1,8 +1,5 @@
 """Test version API."""
 
-import tempfile
-import os
-
 
 def test_list_versions(client):
     f = client.files.upload_bytes("ver-test.txt", b"version 1", folder_id=0)

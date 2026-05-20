@@ -1,5 +1,5 @@
 import { Modal, Tag, Input, Button, Space, message } from 'antd';
-import { PlusOutlined, CloseOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { tagApi } from '@/api/tag';
 import { useQueryClient } from '@tanstack/react-query';
@@ -32,8 +32,8 @@ export default function TagInput({ file, open, onClose }: Props) {
       setNewTag('');
       queryClient.invalidateQueries({ queryKey: ['files'] });
       message.success('标签已添加');
-    } catch (err: any) {
-      message.error('添加失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('添加失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -44,8 +44,8 @@ export default function TagInput({ file, open, onClose }: Props) {
       setTags(tags.filter((t) => t !== tagName));
       queryClient.invalidateQueries({ queryKey: ['files'] });
       message.success('标签已移除');
-    } catch (err: any) {
-      message.error('移除失败: ' + err.message);
+    } catch (err: unknown) {
+      message.error('移除失败: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 

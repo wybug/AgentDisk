@@ -20,7 +20,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }
 
   if (!isAuthenticated) {
-    window.location.href = '/auth/login';
+    window.location.replace('/auth/login');
     return null;
   }
 

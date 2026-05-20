@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Table, Tag, Button, Space, message } from 'antd';
+import { Table, Tag, Button, Space } from 'antd';
 import {
   FolderOutlined,
   FileOutlined,
-  EditOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +15,34 @@ import type { DiskFile, DiskFolder } from '@/api/types';
 import FileActions from './FileActions';
 import * as AntdIcons from '@ant-design/icons';
 
+type FolderRow = {
+  key: string;
+  id: number;
+  name: string;
+  type: 'folder';
+  size: string;
+  fileType: string;
+  version: string;
+  tags: null;
+  updatedAt: string;
+  rawData: DiskFolder;
+};
+
+type FileRow = {
+  key: string;
+  id: number;
+  name: string;
+  type: 'file';
+  size: string;
+  fileType: string;
+  version: string;
+  tags: string;
+  updatedAt: string;
+  rawData: DiskFile;
+};
+
+type RowItem = FolderRow | FileRow;
+
 interface Props {
   folderId: number;
   onPreview: (file: DiskFile) => void;
@@ -26,7 +53,7 @@ interface Props {
 
 function IconFor(name: string) {
   const iconName = getFileIcon(name);
-  const IconComponent = (AntdIcons as any)[iconName + 'Outlined'] || FileOutlined;
+  const IconComponent = (AntdIcons as unknown as Record<string, React.ComponentType>)[iconName + 'Outlined'] || FileOutlined;
   return <IconComponent />;
 }
 
@@ -46,7 +73,6 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
   });
 
   const handleDeleteFolder = (folder: DiskFolder) => {
-    AntdIcons.DeleteOutlined;
     import('antd').then(({ Modal, message }) => {
       Modal.confirm({
         title: `确定删除文件夹「${folder.folderName}」？`,
@@ -102,7 +128,7 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
         {
           title: '名称',
           dataIndex: 'name',
-          render: (name: string, record: any) => (
+          render: (name: string, record: RowItem) => (
             <a
               onClick={() => {
                 if (record.type === 'folder') {
@@ -134,7 +160,7 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
         {
           title: '操作',
           width: 120,
-          render: (_: any, record: any) => {
+          render: (_: unknown, record: RowItem) => {
             if (record.type === 'folder') {
               return (
                 <Space size="small">
