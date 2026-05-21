@@ -87,7 +87,7 @@ func TestDownloadByToken_MissingToken(t *testing.T) {
 func TestDownloadByToken_InvalidToken(t *testing.T) {
 	r := setupDownloadRouter("test_secret", 300)
 
-	req := httptest.NewRequest("GET", "/files/download?token=invalid_token", nil)
+	req := httptest.NewRequest("GET", "/files/download?t=invalid_token", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -100,7 +100,7 @@ func TestDownloadByToken_ExpiredToken(t *testing.T) {
 	r := setupDownloadRouter("test_secret", 300)
 
 	token, _ := download_token.Generate("test_secret", "user_001", "123", -1)
-	req := httptest.NewRequest("GET", "/files/download?token="+token, nil)
+	req := httptest.NewRequest("GET", "/files/download?t="+token, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -113,7 +113,7 @@ func TestDownloadByToken_WrongSecret(t *testing.T) {
 	r := setupDownloadRouter("correct_secret", 300)
 
 	token, _ := download_token.Generate("wrong_secret", "user_001", "123", 300)
-	req := httptest.NewRequest("GET", "/files/download?token="+token, nil)
+	req := httptest.NewRequest("GET", "/files/download?t="+token, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -215,7 +215,7 @@ func TestDownloadByToken_TamperedToken(t *testing.T) {
 	// Tamper with the token
 	tampered := token[:len(token)-4] + "XXXX"
 
-	req := httptest.NewRequest("GET", "/files/download?token="+tampered, nil)
+	req := httptest.NewRequest("GET", "/files/download?t="+tampered, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -236,7 +236,7 @@ func TestDownloadToken_FullFlowWithService(t *testing.T) {
 	token, _ := download_token.Generate(secret, "user_full_flow", "42", 300)
 
 	r.GET("/files/download", func(c *gin.Context) {
-		dlToken := c.Query("token")
+		dlToken := c.Query("t")
 		if dlToken == "" {
 			response.BadRequest(c, "download token required")
 			return
@@ -254,7 +254,7 @@ func TestDownloadToken_FullFlowWithService(t *testing.T) {
 		})
 	})
 
-	req := httptest.NewRequest("GET", "/files/download?token="+token, nil)
+	req := httptest.NewRequest("GET", "/files/download?t="+token, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

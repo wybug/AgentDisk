@@ -432,3 +432,93 @@ func TestCreateShare_ResourceIdAsString(t *testing.T) {
 		t.Errorf("expected 400 for string resourceId, got %d", w.Code)
 	}
 }
+
+// ── ShareDownload binding ──
+
+func TestShareDownload_MissingBody(t *testing.T) {
+	r := setupShareRouter()
+	r.POST("/share/download", func(c *gin.Context) {
+		var req ShareDownloadReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.OK(c, nil)
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/share/download", nil)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing body, got %d", w.Code)
+	}
+}
+
+func TestShareDownload_MissingFields(t *testing.T) {
+	r := setupShareRouter()
+	r.POST("/share/download", func(c *gin.Context) {
+		var req ShareDownloadReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.OK(c, nil)
+	})
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"empty JSON", `{}`},
+		{"missing resourceId", `{"code": "abc"}`},
+		{"missing code", `{"resourceId": 1}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("POST", "/share/download", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("expected 400 for %s, got %d", tt.name, w.Code)
+			}
+		})
+	}
+}
+
+func TestShareDownload_ValidBinding(t *testing.T) {
+	r := setupShareRouter()
+	r.POST("/share/download", func(c *gin.Context) {
+		var req ShareDownloadReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.OK(c, gin.H{
+			"code":       req.Code,
+			"resourceId": req.ResourceID,
+		})
+	})
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"code":        "abc123",
+		"resourceId":  42,
+		"extractCode": "pass",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/share/download", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	resp := w.Body.String()
+	if !bytes.Contains([]byte(resp), []byte("42")) {
+		t.Errorf("response should contain resourceId 42, got %s", resp)
+	}
+}

@@ -124,15 +124,63 @@ function navigateTo(page) {
   `);
 }
 
+function shareDownloadAPI(code, resourceId, extractCode) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/share/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: '${code}', resourceId: ${resourceId}, extractCode: '${extractCode || ''}' })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: token=' + (d.data.downloadToken || '').substring(0, 30) + '... expiresIn=' + d.data.expiresIn;
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
+function downloadByTokenAPI(token) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/files/download?t=' + encodeURIComponent('${token}'))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          var f = d.data.file || {};
+          return 'OK: fileId=' + f.id + ' fileName=' + (f.fileName || '') + ' hasUrl=' + (!!d.data.downloadUrl);
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
+
 describe('T9: 分享管理', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
   ab.waitMs(2000);
 
+  // Upload a test file for share tests (in case T9 runs standalone)
+  ab.evalStdin(`
+    (function() {
+      var blob = new Blob(['share test file content'], { type: 'text/plain' });
+      var fd = new FormData();
+      fd.append('file', blob, 'agentdisk-test-upload.txt');
+      return fetch('/v1/disk/files/upload?folderId=0', {
+        method: 'POST', body: fd, credentials: 'include'
+      }).then(function(r) { return r.json(); })
+        .then(function(d) { return d.data ? d.data.id : 'ERR'; })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+  ab.waitMs(1000);
+
   // T9.1 - 找到测试文件
   const fileId = findFileId();
   ab.waitMs(1000);
-  assertCondition(fileId !== 'none' && !fileId.includes('ERR'), 'T9.1: 找到测试文件', 'fileId=' + fileId);
+  assertCondition(fileId !== 'none' && fileId !== '"none"' && !fileId.includes('ERR'), 'T9.1: 找到测试文件', 'fileId=' + fileId);
 
   // T9.2 - 通过 API 创建分享
   const createResult = createShareAPI(fileId, 'abc123', 10, 72);
@@ -179,6 +227,65 @@ describe('T9: 分享管理', () => {
   ab.waitMs(1000);
   const wrongRejected = wrongAccess.includes('ERROR');
   assertCondition(wrongRejected, 'T9.7: 错误提取码被拒绝', wrongAccess);
+
+  // T9.7b - 有提取码分享下载：使用正确提取码调用公开下载端点
+  var dlResult = shareDownloadAPI(shareCode, fileId, 'abc123');
+  ab.waitMs(1000);
+  var dlOk = dlResult.includes('OK:') && dlResult.includes('token=');
+  step('T9.7b: 有提取码分享下载成功', dlOk, dlResult);
+  ab.screenshot('t09-7b-download-with-code');
+
+  // T9.7c - 有提取码 + 错误提取码下载失败
+  var wrongDl = shareDownloadAPI(shareCode, fileId, 'wrongcode');
+  ab.waitMs(1000);
+  var wrongDlRejected = wrongDl.includes('ERROR');
+  step('T9.7c: 错误提取码下载失败', wrongDlRejected, wrongDl);
+
+  // T9.7d - 无提取码分享下载：创建无提取码的分享并下载
+  var noCodeShare = createShareAPI(fileId, '', 10, 72);
+  ab.waitMs(1000);
+  var noCodeMatch = noCodeShare.match(/code=([a-zA-Z0-9]+)/);
+  var noCodeShareCode = noCodeMatch ? noCodeMatch[1] : '';
+  var noCodeDlResult = shareDownloadAPI(noCodeShareCode, fileId, '');
+  ab.waitMs(1000);
+  var noCodeDlOk = noCodeDlResult.includes('OK:') && noCodeDlResult.includes('token=');
+  step('T9.7d: 无提取码分享下载成功', noCodeDlOk, noCodeDlResult);
+
+  // T9.7e - 下载 token 验证：在同一 evalStdin 中完成获取 token + 调用下载
+  var verifyResult = ab.evalStdin(`
+    (function() {
+      return fetch('/v1/disk/share/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: '${shareCode}', resourceId: ${fileId}, extractCode: 'abc123' })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          var token = d.data.downloadToken;
+          if (!token) return 'ERROR: no token';
+          return fetch('/v1/disk/files/download?t=' + encodeURIComponent(token))
+            .then(function(r2) { return r2.json(); })
+            .then(function(d2) {
+              if (d2.code !== undefined && d2.code !== 0) return 'ERROR: ' + d2.message;
+              var f = d2.data.file || {};
+              return 'OK: fileId=' + f.id + ' fileName=' + (f.fileName || '') + ' hasUrl=' + (!!d2.data.downloadUrl);
+            });
+        })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+  ab.waitMs(1500);
+  var verifyOk = verifyResult.includes('OK:') && verifyResult.includes('fileName=');
+  step('T9.7e: 下载 token 验证通过', verifyOk, verifyResult);
+  ab.screenshot('t09-7e-download-verified');
+
+  // Clean up no-code share
+  var noCodeIdMatch = noCodeShare.match(/id=(\d+)/);
+  if (noCodeIdMatch) {
+    revokeShareAPI(noCodeIdMatch[1]);
+    ab.waitMs(300);
+  }
 
   // T9.8 - 验证访问次数增加
   const afterAccess = listSharesAPI();

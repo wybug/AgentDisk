@@ -199,7 +199,7 @@ func (h *FileHandler) CreateDownloadToken(c *gin.Context) {
 
 // DownloadByToken handles the request.
 func (h *FileHandler) DownloadByToken(c *gin.Context) {
-	dlToken := c.Query("token")
+	dlToken := c.Query("t")
 	if dlToken == "" {
 		response.BadRequest(c, "download token required")
 		return

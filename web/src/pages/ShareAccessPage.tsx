@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { Card, Input, Button, Result, Typography, Space } from 'antd';
 import { LockOutlined, DownloadOutlined } from '@ant-design/icons';
 import { shareApi } from '@/api/share';
-import { fileApi } from '@/api/file';
 import { getDownloadUrl } from '@/utils/format';
 import type { DiskShare } from '@/api/types';
 
@@ -42,9 +41,9 @@ export default function ShareAccessPage() {
   };
 
   const handleDownload = async () => {
-    if (!shareInfo) return;
+    if (!shareInfo || !code) return;
     try {
-      const tokenResult = await fileApi.getDownloadToken(shareInfo.resourceId);
+      const tokenResult = await shareApi.downloadPublic(code, shareInfo.resourceId, shareInfo.extractCode || undefined);
       window.open(getDownloadUrl(tokenResult.downloadToken), '_blank');
     } catch (err: unknown) {
       setError('下载失败: ' + (err instanceof Error ? err.message : String(err)));
