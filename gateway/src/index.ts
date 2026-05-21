@@ -47,7 +47,11 @@ function serveView(name: string) {
 // Page routes
 app.get('/login', serveView('login.html'));
 app.get('/authorize', serveView('authorize.html'));
-app.get('/dashboard', serveView('dashboard.html'));
+app.get('/dashboard', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) { res.redirect('/login'); return; }
+  serveView('dashboard.html')(req, res);
+});
 app.get('/chat', serveView('chat.html'));
 
 // Static assets for chat UI
@@ -145,12 +149,14 @@ app.post('/api/login', (req, res) => {
 });
 
 // API: Logout
-app.post('/api/logout', (_req, res) => {
+function handleLogout(_req: express.Request, res: express.Response): void {
   const sid = _req.cookies?.gw_session;
   if (sid) sessions.delete(sid);
   res.clearCookie('gw_session');
-  res.redirect('/login');
-});
+  res.redirect('/');
+}
+app.post('/api/logout', handleLogout);
+app.get('/api/logout', handleLogout);
 
 // API: Current user
 app.get('/api/me', (req, res) => {

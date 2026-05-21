@@ -308,17 +308,53 @@ describe('T16: 网关 Agent 管理', () => {
   var hasResponse = ab.pageContainsText('请问') || ab.pageContainsText('帮助') || hasUserMsg;
   step('T16.17: 对话响应正常', hasResponse || hasErrorMsg, 'response=' + hasResponse + ' error=' + hasErrorMsg);
 
-  // ======== Phase 7: Cleanup ========
+  // ======== Phase 7: Logout Redirect to Main Page ========
 
-  // T16.18 - Clean up all test agents
+  // Navigate back to dashboard
+  ab.open(ab.GATEWAY_URL + '/dashboard');
+  ab.waitMs(2000);
+  ab.waitLoad('networkidle');
+
+  // Click logout link
+  ab.findAndClick('退出登录');
+  ab.waitMs(2000);
+  ab.waitLoad('networkidle');
+  ab.screenshot('t16-logout-clicked');
+
+  // Verify redirect to main page (root / or /login)
+  var logoutUrl = ab.getUrl();
+  var atMainPage = logoutUrl === ab.GATEWAY_URL + '/' || logoutUrl === ab.GATEWAY_URL + '/login';
+  step('T16.19: 退出登录后跳转主页面', atMainPage, 'url=' + logoutUrl);
+
+  // Verify user info is cleared
+  var noUserInfo = !ab.pageContainsText('5001185');
+  step('T16.20: 退出后用户信息已清除', noUserInfo, '');
+
+  // Verify dashboard redirects to login when not authenticated
+  ab.open(ab.GATEWAY_URL + '/dashboard');
+  ab.waitMs(2000);
+  ab.waitLoad('networkidle');
+  ab.screenshot('t16-after-logout-dashboard');
+
+  var afterLogoutUrl = ab.getUrl();
+  var redirectedToLogin = afterLogoutUrl.includes('/login');
+  step('T16.21: 未登录访问 dashboard 重定向到 login', redirectedToLogin, 'url=' + afterLogoutUrl);
+
+  // ======== Phase 8: Cleanup ========
+
+  // Re-login for cleanup (session was cleared by logout)
+  var reLoginResult = gwLogin('5001185', 'test123');
+  ab.waitMs(1000);
+
+  // T16.22 - Clean up all test agents
   gwRemoveAgent('agent-test-chat');
   ab.waitMs(300);
 
   // Verify all test agents removed
   var finalList = gwListAgents();
   var clean = !finalList.includes('agent-test-');
-  step('T16.18: 清理测试 Agent', clean, 'clean=' + clean);
+  step('T16.22: 清理测试 Agent', clean, 'clean=' + clean);
 
-  ab.screenshot('t16-18-cleanup');
+  ab.screenshot('t16-22-cleanup');
   ab.closeBrowser();
 });
