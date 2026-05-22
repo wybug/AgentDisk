@@ -60,3 +60,4 @@ node_modules/
 .dev-logs/
 .agents/
 skills-lock.json
+gateway/src/data/
