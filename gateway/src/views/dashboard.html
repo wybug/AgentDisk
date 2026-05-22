@@ -153,7 +153,7 @@
       <h2>Agent 管理</h2>
       <table class="users-table">
         <thead>
-          <tr><th>Agent ID</th><th>名称</th><th>组</th><th>操作</th></tr>
+          <tr><th>Agent ID</th><th>名称</th><th>组</th><th>端点</th><th>操作</th></tr>
         </thead>
         <tbody id="agentList"></tbody>
       </table>
@@ -161,6 +161,7 @@
         <input type="text" id="newAgentId" placeholder="Agent ID" required>
         <input type="text" id="newAgentName" placeholder="名称" required>
         <input type="text" id="newAgentGroup" placeholder="组 ID (可选)">
+        <input type="text" id="newAgentEndpoint" placeholder="端点全路径 (如 http://localhost:8090/process，可选)">
         <button type="submit">注册</button>
       </form>
     </div>
@@ -240,6 +241,7 @@
           <td>${a.agentId}</td>
           <td>${a.agentName}</td>
           <td>${a.agentGroupId || '-'}</td>
+          <td><code>${a.endpoint || '默认 (http://localhost:8090/process)'}</code></td>
           <td><button class="btn-small btn-danger" onclick="removeAgent('${a.agentId}')">注销</button></td>
         </tr>
       `).join('');
@@ -256,14 +258,16 @@
       const agentId = document.getElementById('newAgentId').value;
       const agentName = document.getElementById('newAgentName').value;
       const agentGroupId = document.getElementById('newAgentGroup').value;
+      const endpoint = document.getElementById('newAgentEndpoint').value;
       await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId, agentName, agentGroupId }),
+        body: JSON.stringify({ agentId, agentName, agentGroupId, endpoint }),
       });
       document.getElementById('newAgentId').value = '';
       document.getElementById('newAgentName').value = '';
       document.getElementById('newAgentGroup').value = '';
+      document.getElementById('newAgentEndpoint').value = '';
       loadAgents();
     });
   </script>

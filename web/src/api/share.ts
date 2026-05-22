@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { ApiResponse, DiskShare, CreateShareRequest } from './types';
+import type { ApiResponse, DiskShare, CreateShareRequest, DownloadTokenResult } from './types';
 
 export const shareApi = {
   create: (data: CreateShareRequest) =>
@@ -16,4 +16,7 @@ export const shareApi = {
 
   accessPublic: (code: string, extractCode?: string) =>
     apiClient.post('/v1/disk/share/access', { code, extractCode }),
+
+  downloadPublic: (code: string, resourceId: number, extractCode?: string) =>
+    apiClient.post<never, ApiResponse<DownloadTokenResult>>('/v1/disk/share/download', { code, resourceId, extractCode }).then(r => r.data),
 };

@@ -9,14 +9,18 @@ import (
 )
 
 type mockPermRepo struct {
-	resources map[string]*repository.ResourceOwner // key: "resType:resourceID"
-	perms     map[string]*model.DiskPermission     // key: "agentId:resType:resourceID"
+	resources     map[string]*repository.ResourceOwner // key: "resType:resourceID"
+	perms         map[string]*model.DiskPermission     // key: "agentId:resType:resourceID"
+	pathPerms     []model.DiskPermission
+	groupPerms    []model.DiskPermission
+	resourcePaths map[string]string // key: "resType:resourceID"
 }
 
 func newMockPermRepo() *mockPermRepo {
 	return &mockPermRepo{
-		resources: make(map[string]*repository.ResourceOwner),
-		perms:     make(map[string]*model.DiskPermission),
+		resources:     make(map[string]*repository.ResourceOwner),
+		perms:         make(map[string]*model.DiskPermission),
+		resourcePaths: make(map[string]string),
 	}
 }
 
@@ -46,6 +50,19 @@ func (m *mockPermRepo) addPerm(agentID string, resourceID uint64, resType, perm 
 	}
 }
 
+func (m *mockPermRepo) addPathPerm(agentID, agentGroupID, resourcePath, perm string) {
+	m.pathPerms = append(m.pathPerms, model.DiskPermission{
+		AgentID:      agentID,
+		AgentGroupID: agentGroupID,
+		ResourcePath: resourcePath,
+		Permission:   perm,
+	})
+}
+
+func (m *mockPermRepo) setResourcePath(resourceID uint64, resType, fullPath string) {
+	m.resourcePaths[m.key(resType, resourceID)] = fullPath
+}
+
 func (m *mockPermRepo) Create(_ *model.DiskPermission) error { return nil }
 func (m *mockPermRepo) ListByUser(_ string) ([]model.DiskPermission, error) {
 	return nil, nil
@@ -60,12 +77,72 @@ func (m *mockPermRepo) GetByAgentAndResource(agentID string, resourceID uint64, 
 	return p, nil
 }
 
+func (m *mockPermRepo) GetByAgentAndResourcePath(agentID, resourcePath string) (*model.DiskPermission, error) {
+	for i := range m.pathPerms {
+		if m.pathPerms[i].AgentID == agentID && m.pathPerms[i].ResourcePath == resourcePath {
+			return &m.pathPerms[i], nil
+		}
+	}
+	return nil, fmt.Errorf("not found")
+}
+
+func (m *mockPermRepo) GetByGroupAndResource(agentGroupID string, resourceID uint64, resType string) (*model.DiskPermission, error) {
+	for i := range m.groupPerms {
+		if m.groupPerms[i].AgentGroupID == agentGroupID && m.groupPerms[i].ResourceID == resourceID && m.groupPerms[i].ResType == resType {
+			return &m.groupPerms[i], nil
+		}
+	}
+	return nil, fmt.Errorf("not found")
+}
+
+func (m *mockPermRepo) GetByGroupAndResourcePath(agentGroupID, resourcePath string) (*model.DiskPermission, error) {
+	for i := range m.pathPerms {
+		if m.pathPerms[i].AgentGroupID == agentGroupID && m.pathPerms[i].ResourcePath == resourcePath {
+			return &m.pathPerms[i], nil
+		}
+	}
+	return nil, fmt.Errorf("not found")
+}
+
 func (m *mockPermRepo) GetResourceDetail(resourceID uint64, resType string) (*repository.ResourceOwner, error) {
 	r, ok := m.resources[m.key(resType, resourceID)]
 	if !ok {
 		return nil, fmt.Errorf("not found")
 	}
 	return r, nil
+}
+
+func (m *mockPermRepo) GetResourcePath(resourceID uint64, resType string) (string, error) {
+	p, ok := m.resourcePaths[m.key(resType, resourceID)]
+	if !ok {
+		return "", fmt.Errorf("not found")
+	}
+	return p, nil
+}
+
+func (m *mockPermRepo) ListPathPermissionsByAgent(agentID string) ([]model.DiskPermission, error) {
+	var result []model.DiskPermission
+	for _, p := range m.pathPerms {
+		if p.AgentID == agentID {
+			result = append(result, p)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockPermRepo) ListGroupPermissions(agentGroupID string) ([]model.DiskPermission, error) {
+	var result []model.DiskPermission
+	for _, p := range m.pathPerms {
+		if p.AgentGroupID == agentGroupID {
+			result = append(result, p)
+		}
+	}
+	for _, p := range m.groupPerms {
+		if p.AgentGroupID == agentGroupID {
+			result = append(result, p)
+		}
+	}
+	return result, nil
 }
 
 func TestHasPermission(t *testing.T) {
@@ -196,5 +273,117 @@ func TestCheckOrAutoGrant_CrossUser_AlwaysDeny(t *testing.T) {
 	ok, err := svc.CheckOrAutoGrant("user002", "agent-01", "group-a", 1, "file", "read")
 	if err != nil || ok {
 		t.Errorf("cross-user should be denied, got ok=%v err=%v", ok, err)
+	}
+}
+
+// --- Path-based permission tests ---
+
+func TestCheckOrAutoGrant_PathPermission_MatchRead(t *testing.T) {
+	repo := newMockPermRepo()
+	repo.addResource(1, "file", "user001", "", "", false)
+	repo.setResourcePath(1, "file", "/Documents/report.pdf")
+	repo.addPathPerm("agent-02", "", "/**", "read")
+	svc := &PermissionService{repo: repo}
+
+	ok, err := svc.CheckOrAutoGrant("user001", "agent-02", "", 1, "file", "read")
+	if err != nil || !ok {
+		t.Errorf("path /** should grant read, got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestCheckOrAutoGrant_PathPermission_ExtensionFilter(t *testing.T) {
+	repo := newMockPermRepo()
+	repo.addResource(1, "file", "user001", "", "", false)
+	repo.setResourcePath(1, "file", "/Documents/report.pdf")
+	repo.addPathPerm("agent-02", "", "/**/*.txt", "read")
+	svc := &PermissionService{repo: repo}
+
+	ok, _ := svc.CheckOrAutoGrant("user001", "agent-02", "", 1, "file", "read")
+	if ok {
+		t.Error("/**/*.txt should not match .pdf file")
+	}
+}
+
+func TestCheckOrAutoGrant_PathPermission_SubfolderOnly(t *testing.T) {
+	repo := newMockPermRepo()
+	repo.addResource(1, "file", "user001", "", "", false)
+	repo.setResourcePath(1, "file", "/Downloads/file.pdf")
+	repo.addPathPerm("agent-02", "", "/Documents/**", "read")
+	svc := &PermissionService{repo: repo}
+
+	ok, _ := svc.CheckOrAutoGrant("user001", "agent-02", "", 1, "file", "read")
+	if ok {
+		t.Error("/Documents/** should not match /Downloads/file.pdf")
+	}
+}
+
+func TestCheckOrAutoGrant_GroupPathPermission(t *testing.T) {
+	repo := newMockPermRepo()
+	repo.addResource(1, "file", "user001", "", "", false)
+	repo.setResourcePath(1, "file", "/Documents/report.pdf")
+	repo.addPathPerm("", "group-a", "/Documents/**", "read")
+	svc := &PermissionService{repo: repo}
+
+	ok, err := svc.CheckOrAutoGrant("user001", "agent-02", "group-a", 1, "file", "read")
+	if err != nil || !ok {
+		t.Errorf("group path permission should grant read, got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestCheckOrAutoGrant_PathPermission_WriteNotAllowed(t *testing.T) {
+	repo := newMockPermRepo()
+	repo.addResource(1, "file", "user001", "", "", false)
+	repo.setResourcePath(1, "file", "/Documents/report.pdf")
+	repo.addPathPerm("agent-02", "", "/**", "read")
+	svc := &PermissionService{repo: repo}
+
+	ok, _ := svc.CheckOrAutoGrant("user001", "agent-02", "", 1, "file", "write")
+	if ok {
+		t.Error("read-only path permission should not allow write")
+	}
+}
+
+func TestCheckOrAutoGrant_ResourceIDAndPathCoexist(t *testing.T) {
+	repo := newMockPermRepo()
+	repo.addResource(1, "file", "user001", "", "", false)
+	// No resource ID perm, but path perm exists
+	repo.setResourcePath(1, "file", "/Documents/report.pdf")
+	repo.addPathPerm("agent-02", "", "/Documents/**", "read")
+	svc := &PermissionService{repo: repo}
+
+	ok, err := svc.CheckOrAutoGrant("user001", "agent-02", "", 1, "file", "read")
+	if err != nil || !ok {
+		t.Errorf("path permission should grant access when no resource ID perm exists, got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestCheckOrAutoGrant_PathPermission_ExactPath(t *testing.T) {
+	repo := newMockPermRepo()
+	repo.addResource(1, "file", "user001", "", "", false)
+	repo.setResourcePath(1, "file", "/Documents/report.pdf")
+	repo.addPathPerm("agent-02", "", "/Documents/report.pdf", "read")
+	svc := &PermissionService{repo: repo}
+
+	ok, err := svc.CheckOrAutoGrant("user001", "agent-02", "", 1, "file", "read")
+	if err != nil || !ok {
+		t.Errorf("exact path should match, got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestGrantPermission_PathMode(t *testing.T) {
+	repo := newMockPermRepo()
+	svc := &PermissionService{repo: repo}
+	err := svc.GrantPermission("user001", "agent-01", "", 0, "", "/**", "read")
+	if err != nil {
+		t.Errorf("GrantPermission with path should succeed, got err=%v", err)
+	}
+}
+
+func TestGrantPermission_GroupMode(t *testing.T) {
+	repo := newMockPermRepo()
+	svc := &PermissionService{repo: repo}
+	err := svc.GrantPermission("user001", "", "group-a", 0, "", "/Documents/**", "write")
+	if err != nil {
+		t.Errorf("GrantPermission with group should succeed, got err=%v", err)
 	}
 }

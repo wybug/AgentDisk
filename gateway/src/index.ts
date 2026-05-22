@@ -47,7 +47,11 @@ function serveView(name: string) {
 // Page routes
 app.get('/login', serveView('login.html'));
 app.get('/authorize', serveView('authorize.html'));
-app.get('/dashboard', serveView('dashboard.html'));
+app.get('/dashboard', (req, res) => {
+  const user: SessionUser | undefined = (req as any).sessionUser;
+  if (!user) { res.redirect('/login'); return; }
+  serveView('dashboard.html')(req, res);
+});
 app.get('/chat', serveView('chat.html'));
 
 // Static assets for chat UI
@@ -84,11 +88,24 @@ app.all('/process', (req, res) => {
   }
 
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '72h' });
+
+  // Resolve target endpoint: agent-specific full URL > default localhost:8090/process
+  let targetUrl: URL;
+  if (agentId) {
+    const agent = agentStore.findByAgentId(agentId);
+    if (agent?.endpoint) {
+      try {
+        targetUrl = new URL(agent.endpoint);
+      } catch { /* keep default */ }
+    }
+  }
+  targetUrl ??= new URL('http://localhost:8090/process');
+
   const proxyReq = http.request(
     {
-      hostname: 'localhost',
-      port: 8090,
-      path: '/process',
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+      path: targetUrl.pathname + targetUrl.search || '/',
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
@@ -132,12 +149,14 @@ app.post('/api/login', (req, res) => {
 });
 
 // API: Logout
-app.post('/api/logout', (_req, res) => {
+function handleLogout(_req: express.Request, res: express.Response): void {
   const sid = _req.cookies?.gw_session;
   if (sid) sessions.delete(sid);
   res.clearCookie('gw_session');
-  res.redirect('/login');
-});
+  res.redirect('/');
+}
+app.post('/api/logout', handleLogout);
+app.get('/api/logout', handleLogout);
 
 // API: Current user
 app.get('/api/me', (req, res) => {
@@ -188,12 +207,12 @@ app.post('/api/agents', (req, res) => {
     res.status(401).json({ error: '请先登录' });
     return;
   }
-  const { agentId, agentName, agentGroupId } = req.body;
+  const { agentId, agentName, agentGroupId, endpoint } = req.body;
   if (!agentId || !agentName) {
     res.status(400).json({ error: 'agentId and agentName required' });
     return;
   }
-  agentStore.register(agentId, agentName, user.userId, agentGroupId || '');
+  agentStore.register(agentId, agentName, user.userId, agentGroupId || '', endpoint || '');
   res.json({ success: true });
 });
 

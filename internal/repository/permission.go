@@ -65,3 +65,73 @@ func (r *PermissionRepo) GetResourceDetail(resourceID uint64, resType string) (*
 	}
 	return &ResourceOwner{OwnerID: fo.UserID, SourceAgent: "", SourceAgentGroup: "", IsArtifact: false}, nil
 }
+
+// ListPathPermissionsByAgent returns all path-based permissions for an agent.
+func (r *PermissionRepo) ListPathPermissionsByAgent(agentID string) ([]model.DiskPermission, error) {
+	var perms []model.DiskPermission
+	err := r.db.Where("agent_id = ? AND resource_path != ''", agentID).Find(&perms).Error
+	return perms, err
+}
+
+// ListGroupPermissions returns all permissions (including path-based) for an agent group.
+func (r *PermissionRepo) ListGroupPermissions(agentGroupID string) ([]model.DiskPermission, error) {
+	var perms []model.DiskPermission
+	err := r.db.Where("agent_group_id = ?", agentGroupID).Find(&perms).Error
+	return perms, err
+}
+
+// GetByAgentAndResourcePath returns the permission for an agent on a specific path.
+func (r *PermissionRepo) GetByAgentAndResourcePath(agentID, resourcePath string) (*model.DiskPermission, error) {
+	var p model.DiskPermission
+	if err := r.db.Where("agent_id = ? AND resource_path = ?", agentID, resourcePath).
+		First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetByGroupAndResourcePath returns the permission for a group on a specific path.
+func (r *PermissionRepo) GetByGroupAndResourcePath(agentGroupID, resourcePath string) (*model.DiskPermission, error) {
+	var p model.DiskPermission
+	if err := r.db.Where("agent_group_id = ? AND resource_path = ?", agentGroupID, resourcePath).
+		First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetByGroupAndResource returns the permission for a group on a specific resource.
+func (r *PermissionRepo) GetByGroupAndResource(agentGroupID string, resourceID uint64, resType string) (*model.DiskPermission, error) {
+	var p model.DiskPermission
+	if err := r.db.Where("agent_group_id = ? AND resource_id = ? AND res_type = ?", agentGroupID, resourceID, resType).
+		First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetResourcePath returns the full path for a resource (file or folder).
+func (r *PermissionRepo) GetResourcePath(resourceID uint64, resType string) (string, error) {
+	if resType == "file" {
+		var f model.DiskFile
+		if err := r.db.Select("file_name, folder_id").Where("id = ?", resourceID).First(&f).Error; err != nil {
+			return "", err
+		}
+		if f.FolderID == 0 {
+			return "/" + f.FileName, nil
+		}
+		var fo model.DiskFolder
+		if err := r.db.Select("full_path").Where("id = ?", f.FolderID).First(&fo).Error; err != nil {
+			return "", err
+		}
+		if fo.FullPath == "" {
+			return "/" + f.FileName, nil
+		}
+		return "/" + fo.FullPath + "/" + f.FileName, nil
+	}
+	var fo model.DiskFolder
+	if err := r.db.Select("full_path").Where("id = ?", resourceID).First(&fo).Error; err != nil {
+		return "", err
+	}
+	return "/" + fo.FullPath, nil
+}

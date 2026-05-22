@@ -4,6 +4,27 @@ const ab = require('../lib/agent-browser');
 describe('T12: 测试网关管理', () => {
   ab.closeAll();
 
+  // Login to gateway first
+  function gwLogin(userId, password) {
+    return ab.evalStdin(`
+      (function() {
+        return fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: '${userId}', password: '${password}' })
+        }).then(function(r) { return r.json(); })
+          .then(function(d) { return d.success ? 'OK' : 'FAIL: ' + (d.message || ''); })
+          .catch(function(e) { return 'ERR: ' + e.message; });
+      })()
+    `);
+  }
+
+  ab.open(ab.GATEWAY_URL + '/login');
+  ab.waitMs(2000);
+  ab.waitLoad('networkidle');
+  var loginResult = gwLogin('user001', 'test123');
+  ab.waitMs(1000);
+
   // T12.1 - 访问网关仪表盘
   ab.open(ab.GATEWAY_URL + '/dashboard');
   ab.waitMs(3000);

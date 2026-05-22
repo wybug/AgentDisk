@@ -92,7 +92,7 @@ describe('T5: 文件下载', () => {
   // T5.3 - 验证下载 URL 可访问
   const tokenMatch = tokenResult.match(/token=([a-zA-Z0-9._-]+)/);
   if (tokenMatch) {
-    const downloadUrl = '/v1/disk/files/download?token=' + tokenMatch[1];
+    const downloadUrl = '/v1/disk/files/download?t=' + tokenMatch[1];
     const downloadCheck = ab.evalStdin(`
       (function() {
         return fetch('${downloadUrl}', { credentials: 'include' })

@@ -409,7 +409,7 @@ paths:
 
   /v1/disk/permissions:
     post:
-      summary: Grant permission to agent
+      summary: Grant permission to agent or agent group
       operationId: grantPermission
       tags: [Permission]
       requestBody:
@@ -417,20 +417,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [agentId, resourceId, resType, permission]
-              properties:
-                agentId:
-                  type: string
-                resourceId:
-                  type: integer
-                  format: uint64
-                resType:
-                  type: string
-                  enum: [file, folder]
-                permission:
-                  type: string
-                  enum: [owner, read, write, delete]
+              $ref: "#/components/schemas/GrantPermissionRequest"
       responses:
         "201":
           description: Created
@@ -479,16 +466,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [agentId, resourceId, resType]
-              properties:
-                agentId:
-                  type: string
-                resourceId:
-                  type: integer
-                  format: uint64
-                resType:
-                  type: string
+              $ref: "#/components/schemas/RevokePermissionRequest"
       responses:
         "200":
           description: OK
@@ -504,6 +482,10 @@ paths:
       tags: [Permission]
       parameters:
         - name: agentId
+          in: query
+          schema:
+            type: string
+        - name: agentGroupId
           in: query
           schema:
             type: string
@@ -1024,12 +1006,20 @@ components:
           type: string
         agentId:
           type: string
+          description: "授权目标 Agent ID"
+        agentGroupId:
+          type: string
+          description: "授权目标 Agent 组 ID"
         resourceId:
           type: integer
           format: uint64
+          description: "精确资源 ID（资源 ID 授权时非零）"
         resType:
           type: string
           enum: [file, folder]
+        resourcePath:
+          type: string
+          description: "路径模式（路径授权时非空），支持通配符"
         permission:
           type: string
           enum: [owner, read, write, delete]
@@ -1039,6 +1029,46 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    GrantPermissionRequest:
+      type: object
+      required: [permission]
+      properties:
+        agentId:
+          type: string
+          description: "授权目标 Agent ID（与 agentGroupId 至少填一个）"
+        agentGroupId:
+          type: string
+          description: "授权目标 Agent 组 ID（与 agentId 至少填一个）"
+        resourceId:
+          type: integer
+          format: uint64
+          description: "精确资源 ID（与 resourcePath 至少填一个）"
+        resType:
+          type: string
+          enum: [file, folder]
+          description: "资源类型（配合 resourceId 使用）"
+        resourcePath:
+          type: string
+          description: "路径模式，支持通配符 * 和 **（与 resourceId 至少填一个）"
+        permission:
+          type: string
+          enum: [owner, read, write, delete]
+
+    RevokePermissionRequest:
+      type: object
+      properties:
+        agentId:
+          type: string
+        agentGroupId:
+          type: string
+        resourceId:
+          type: integer
+          format: uint64
+        resType:
+          type: string
+        resourcePath:
+          type: string
 
     DiskShare:
       type: object

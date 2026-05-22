@@ -159,6 +159,70 @@ Agent 请求通过 JWT 中的 `agentId` 和 `agentGroupId` 字段标识身份。
 
 ---
 
+## 2.7 路径授权
+
+除精确资源 ID 授权外，AgentDisk 支持**路径授权**，通过 glob 通配符模式匹配文件/文件夹路径。
+
+### 两种授权模式
+
+| 模式 | 适用场景 | 来源 |
+|------|---------|------|
+| 资源 ID 授权 | 对特定文件/文件夹授权 | 文件浏览器"授予权限"快捷操作 |
+| 路径授权 | 对一组文件/文件夹批量授权 | PermissionsPage 路径授权表单 |
+
+### 通配符语法
+
+| 模式 | 含义 | 示例 |
+|------|------|------|
+| `*` | 单级匹配（不含 `/`） | `/Documents/*` 匹配 `/Documents/file.pdf` |
+| `**` | 多级匹配（含 `/`） | `/Documents/**` 匹配 `/Documents/a/b/file.pdf` |
+| `*.ext` | 扩展名匹配 | `/**/*.txt` 匹配所有 txt 文件 |
+| 精确路径 | 无通配符时精确匹配 | `/Documents/report.pdf` 仅匹配自身 |
+
+### Agent 目标配置
+
+路径授权支持两种目标（可同时配置）：
+
+```json
+{"agentId": "writer-01"}                      // 授权给单个 Agent
+{"agentGroupId": "team-a"}                    // 授权给整个 Agent 组
+{"agentId": "writer-01", "agentGroupId": "team-a"}  // 同时指定
+```
+
+### 授权 API 示例
+
+```bash
+# 路径授权：让 agent-01 可读所有文件
+curl -X POST http://agentdisk:8080/v1/disk/permissions \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"agentId":"agent-01","resourcePath":"/**","permission":"read"}'
+
+# 组路径授权：让 team-a 组可写 Documents 下所有文件
+curl -X POST http://agentdisk:8080/v1/disk/permissions \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"agentGroupId":"team-a","resourcePath":"/Documents/**","permission":"write"}'
+
+# 资源 ID 快捷授权：对特定文件授权
+curl -X POST http://agentdisk:8080/v1/disk/permissions \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"agentId":"agent-01","resourceId":42,"resType":"file","permission":"read"}'
+```
+
+### 权限检查优先级
+
+```
+1. 精确资源 ID 授权（agentId 匹配）
+2. 路径授权规则（agentId，逐一 glob 匹配）
+3. Agent 组精确资源 ID 授权
+4. Agent 组路径授权规则（逐一 glob 匹配）
+5. 原有 artifact 自动规则（同组、同 Agent）
+```
+
+---
+
 ## 3. 网关代理认证（Agent 对话）
 
 网关为已登录用户签发 JWT，代理到 Agent 服务时携带，使 Agent 能以用户身份访问 AgentDisk API。

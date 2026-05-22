@@ -1,19 +1,24 @@
 package handler
 
 import (
+	"strconv"
+
 	"github.com/agentdisk/agent-disk/internal/service"
+	"github.com/agentdisk/agent-disk/pkg/download_token"
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
 // ShareHandler is a core domain type.
 type ShareHandler struct {
-	svc *service.ShareService
+	svc     *service.ShareService
+	dlSecret string
+	dlExpire int
 }
 
 // NewShareHandler creates and returns a new ShareHandler.
-func NewShareHandler(svc *service.ShareService) *ShareHandler {
-	return &ShareHandler{svc: svc}
+func NewShareHandler(svc *service.ShareService, dlSecret string, dlExpire int) *ShareHandler {
+	return &ShareHandler{svc: svc, dlSecret: dlSecret, dlExpire: dlExpire}
 }
 
 // CreateShareReq is a core domain type.
@@ -108,4 +113,53 @@ func (h *ShareHandler) ListShares(c *gin.Context) {
 		return
 	}
 	response.OK(c, shares)
+}
+
+// ShareDownloadReq represents a public share download request.
+type ShareDownloadReq struct {
+	Code        string `json:"code" binding:"required"`
+	ExtractCode string `json:"extractCode"`
+	ResourceID  uint64 `json:"resourceId" binding:"required"`
+}
+
+// ShareDownload handles public share download token generation.
+func (h *ShareHandler) ShareDownload(c *gin.Context) {
+	var req ShareDownloadReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "code and resourceId required")
+		return
+	}
+
+	share, err := h.svc.GetShareByCode(req.Code)
+	if err != nil {
+		response.NotFound(c, err.Error())
+		return
+	}
+
+	if share.ResourceID != req.ResourceID {
+		response.Forbidden(c, "resource does not match share")
+		return
+	}
+
+	// Extract code validation: required if share has one, skip if share has none
+	if share.ExtractCode != "" && share.ExtractCode != req.ExtractCode {
+		response.Forbidden(c, "invalid extract code")
+		return
+	}
+
+	expire := h.dlExpire
+	if expire <= 0 {
+		expire = 300
+	}
+
+	token, err := download_token.Generate(h.dlSecret, share.UserID, strconv.FormatUint(req.ResourceID, 10), expire)
+	if err != nil {
+		response.InternalError(c, "failed to generate download token")
+		return
+	}
+
+	response.OK(c, gin.H{
+		"downloadToken": token,
+		"expiresIn":     expire,
+	})
 }

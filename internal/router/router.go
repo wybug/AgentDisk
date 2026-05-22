@@ -88,7 +88,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	versionH := handler.NewVersionHandler(versionSvc)
 	recycleH := handler.NewRecycleHandler(recycleSvc)
 	tagH := handler.NewTagHandler(tagSvc)
-	shareH := handler.NewShareHandler(shareSvc)
+	shareH := handler.NewShareHandler(shareSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
 	previewH := handler.NewPreviewHandler(previewSvc)
 
 	// OAuth2 auth routes (public)
@@ -151,6 +151,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// Public routes (no auth required)
 	r.GET("/v1/disk/share/:code", shareH.GetShare)
 	r.POST("/v1/disk/share/access", shareH.AccessShare)
+	r.POST("/v1/disk/share/download", shareH.ShareDownload)
 	r.GET("/v1/disk/files/download", fileH.DownloadByToken)
 
 	return r
