@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MessageInput } from '@nexus-ai/agent-chat-ui';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Copy, Check, BarChart3 } from 'lucide-react';
+import { Copy, Check, BarChart3, Download, FileText, FileCode, FileImage, File as FileIcon, Eye, EyeOff } from 'lucide-react';
 
 interface Metrics {
   inputTokens: number;
@@ -11,6 +11,14 @@ interface Metrics {
   totalTokens: number;
   timeToFirstToken: number;
   duration: number;
+}
+
+interface FileArtifact {
+  filename: string;
+  download_url: string;
+  share_code?: string;
+  size_bytes: number;
+  description?: string;
 }
 
 interface AgentOption {
@@ -24,6 +32,7 @@ interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   metrics?: Metrics;
+  fileArtifact?: FileArtifact;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -95,8 +104,64 @@ function MetricsPopover({ metrics }: { metrics: Metrics }) {
   );
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function fileIcon(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  if (['md', 'txt', 'rtf'].includes(ext)) return <FileText size={28} style={{ color: '#667eea', flexShrink: 0 }} />;
+  if (['js', 'ts', 'py', 'go', 'java', 'html', 'css', 'json', 'yaml', 'yml', 'sh'].includes(ext)) return <FileCode size={28} style={{ color: '#667eea', flexShrink: 0 }} />;
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return <FileImage size={28} style={{ color: '#667eea', flexShrink: 0 }} />;
+  return <FileIcon size={28} style={{ color: '#667eea', flexShrink: 0 }} />;
+}
+
+function FileArtifactCard({ artifact }: { artifact: FileArtifact }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyShareCode = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!artifact.share_code) return;
+    await navigator.clipboard.writeText(artifact.share_code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div style={styles.artifactCard}>
+      <div style={styles.artifactLeft}>
+        {fileIcon(artifact.filename)}
+        <div style={styles.artifactInfo}>
+          <div style={styles.artifactName}>{artifact.filename}</div>
+          <div style={styles.artifactMeta}>
+            {formatSize(artifact.size_bytes)}{artifact.description ? ` · ${artifact.description}` : ''}
+          </div>
+        </div>
+      </div>
+      <div style={styles.artifactActions}>
+        {artifact.download_url && (
+          <a href={artifact.download_url} target="_blank" rel="noopener noreferrer" style={styles.artifactBtn} title="下载">
+            <Download size={14} />
+            <span>下载</span>
+          </a>
+        )}
+        {artifact.share_code && (
+          <button onClick={handleCopyShareCode} style={styles.artifactBtn} title="复制分享码">
+            {copied ? <Check size={14} style={{ color: '#22c55e' }} /> : <Copy size={14} />}
+            <span>{copied ? '已复制' : '分享码'}</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user';
+  const [showMarkdown, setShowMarkdown] = useState(true);
+
   return (
     <div style={{ ...styles.bubbleRow, justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
       <div style={{ ...styles.bubble, ...(isUser ? styles.userBubble : styles.assistantBubble) }}>
@@ -104,12 +169,28 @@ function MessageBubble({ msg }: { msg: Message }) {
           <div style={styles.bubbleContent}>{msg.content}</div>
         ) : (
           <div className="markdown-body" style={styles.bubbleContent}>
-            {msg.content ? <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown> : <span style={{ color: '#aaa' }}>...</span>}
+            {msg.content ? (
+              showMarkdown ? (
+                <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+              ) : (
+                <pre style={styles.rawText}>{msg.content}</pre>
+              )
+            ) : (
+              <span style={{ color: '#aaa' }}>...</span>
+            )}
+            {msg.fileArtifact && <FileArtifactCard artifact={msg.fileArtifact} />}
           </div>
         )}
         {!isUser && msg.content && (
           <div style={styles.bubbleFooter}>
             <CopyButton text={msg.content} />
+            <span
+              style={{ cursor: 'pointer', color: '#999', display: 'inline-flex' }}
+              onClick={() => setShowMarkdown(v => !v)}
+              title={showMarkdown ? '显示原始文本' : '显示 Markdown'}
+            >
+              {showMarkdown ? <EyeOff size={14} /> : <Eye size={14} />}
+            </span>
             {msg.metrics && <MetricsPopover metrics={msg.metrics} />}
           </div>
         )}
@@ -167,6 +248,7 @@ function ChatApp() {
       const decoder = new TextDecoder();
       let accumulated = '';
       let metrics: Metrics | undefined;
+      let fileArtifact: FileArtifact | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -195,10 +277,13 @@ function ChatApp() {
                 timeToFirstToken: u.time_to_first_token ?? 0,
                 duration: u.duration ?? 0,
               };
+              if (parsed.metadata?.file_artifact) {
+                fileArtifact = parsed.metadata.file_artifact;
+              }
             }
           } catch { /* skip */ }
           setMessages(prev =>
-            prev.map(m => m.id === assistantId ? { ...m, content: accumulated, metrics } : m)
+            prev.map(m => m.id === assistantId ? { ...m, content: accumulated, metrics, fileArtifact } : m)
           );
           scrollToBottom();
         }
@@ -258,6 +343,7 @@ const styles: Record<string, React.CSSProperties> = {
   userBubble: { background: '#667eea', color: '#fff', borderBottomRightRadius: '4px' },
   assistantBubble: { background: '#fff', color: '#333', border: '1px solid #e5e7eb', borderBottomLeftRadius: '4px' },
   bubbleContent: { whiteSpace: 'pre-wrap' as const },
+  rawText: { margin: 0, padding: 0, background: 'none', fontSize: 'inherit', lineHeight: 'inherit', whiteSpace: 'pre-wrap' as const, wordBreak: 'break-word' as const, color: 'inherit', fontFamily: 'monospace' },
   bubbleFooter: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f0f0f0' },
   popover: {
     position: 'fixed',
@@ -272,6 +358,35 @@ const styles: Record<string, React.CSSProperties> = {
   },
   popoverRow: { display: 'flex', justifyContent: 'space-between', gap: '16px', padding: '2px 0', color: '#555' },
   popoverValue: { color: '#667eea', fontWeight: 500, whiteSpace: 'nowrap' as const },
+  artifactCard: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 10,
+    padding: '10px 12px',
+    background: '#f8f9fb',
+    border: '1px solid #e5e7eb',
+    borderRadius: 10,
+  },
+  artifactLeft: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 },
+  artifactInfo: { minWidth: 0 },
+  artifactName: { fontSize: 13, fontWeight: 500, color: '#333', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' },
+  artifactMeta: { fontSize: 11, color: '#999', marginTop: 2 },
+  artifactActions: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 },
+  artifactBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '4px 10px',
+    fontSize: 12,
+    color: '#667eea',
+    background: '#fff',
+    border: '1px solid #e0e0e0',
+    borderRadius: 6,
+    cursor: 'pointer',
+    textDecoration: 'none',
+  } as React.CSSProperties,
 };
 
 const container = document.getElementById('chat-root');
