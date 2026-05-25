@@ -249,14 +249,16 @@ function ChatApp() {
       let accumulated = '';
       let metrics: Metrics | undefined;
       let fileArtifact: FileArtifact | undefined;
+      let sseBuffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        sseBuffer += decoder.decode(value, { stream: true });
+        const parts = sseBuffer.split('\n');
+        sseBuffer = parts.pop() || '';
 
-        for (const line of lines) {
+        for (const line of parts) {
           if (!line.startsWith('data: ')) continue;
           const data = line.slice(6).trim();
           if (!data) continue;

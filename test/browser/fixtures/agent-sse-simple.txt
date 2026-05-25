@@ -1,0 +1,430 @@
+data: {"sequence_number":0,"object":"response","status":"created","error":null,"id":"response_b20e8463-7d7e-4ef9-963d-383214988a1c","created_at":1779682180,"completed_at":null,"output":null,"usage":null,"session_id":"20fc7533-235e-48df-9918-4f8befafb7b3"}
+
+data: {"sequence_number":1,"object":"response","status":"in_progress","error":null,"id":"response_b20e8463-7d7e-4ef9-963d-383214988a1c","created_at":1779682180,"completed_at":null,"output":null,"usage":null,"session_id":"20fc7533-235e-48df-9918-4f8befafb7b3"}
+
+data: {"sequence_number":2,"object":"message","status":"in_progress","error":null,"id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","type":"message","role":"assistant","content":null,"code":null,"message":null,"usage":null,"metadata":{}}
+
+data: {"sequence_number":3,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"你好"}
+
+data: {"sequence_number":4,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"！"}
+
+data: {"sequence_number":5,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"欢迎"}
+
+data: {"sequence_number":6,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"使用"}
+
+data: {"sequence_number":7,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"**"}
+
+data: {"sequence_number":8,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"非"}
+
+data: {"sequence_number":9,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"银"}
+
+data: {"sequence_number":10,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"支付"}
+
+data: {"sequence_number":11,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"机构"}
+
+data: {"sequence_number":12,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":13,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"知识"}
+
+data: {"sequence_number":14,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"库"}
+
+data: {"sequence_number":15,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"智能"}
+
+data: {"sequence_number":16,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"体"}
+
+data: {"sequence_number":17,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"**"}
+
+data: {"sequence_number":18,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"。\n\n"}
+
+data: {"sequence_number":19,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"我"}
+
+data: {"sequence_number":20,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"专注于"}
+
+data: {"sequence_number":21,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"为非"}
+
+data: {"sequence_number":22,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"银行"}
+
+data: {"sequence_number":23,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"支付"}
+
+data: {"sequence_number":24,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"机构"}
+
+data: {"sequence_number":25,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"提供"}
+
+data: {"sequence_number":26,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":27,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"合规"}
+
+data: {"sequence_number":28,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"方面的"}
+
+data: {"sequence_number":29,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"专业"}
+
+data: {"sequence_number":30,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"辅助"}
+
+data: {"sequence_number":31,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"服务"}
+
+data: {"sequence_number":32,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"，"}
+
+data: {"sequence_number":33,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"具备"}
+
+data: {"sequence_number":34,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"以下"}
+
+data: {"sequence_number":35,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"三项"}
+
+data: {"sequence_number":36,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"核心"}
+
+data: {"sequence_number":37,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"能力"}
+
+data: {"sequence_number":38,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"：\n\n"}
+
+data: {"sequence_number":39,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"---\n\n"}
+
+data: {"sequence_number":40,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"###"}
+
+data: {"sequence_number":41,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" 📋"}
+
+data: {"sequence_number":42,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" "}
+
+data: {"sequence_number":43,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":44,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"查询"}
+
+data: {"sequence_number":45,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"\n"}
+
+data: {"sequence_number":46,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"可"}
+
+data: {"sequence_number":47,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"检索"}
+
+data: {"sequence_number":48,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"并"}
+
+data: {"sequence_number":49,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"引用"}
+
+data: {"sequence_number":50,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"中国人民银行"}
+
+data: {"sequence_number":51,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"及相关"}
+
+data: {"sequence_number":52,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"监管部门"}
+
+data: {"sequence_number":53,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"发布的"}
+
+data: {"sequence_number":54,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"非"}
+
+data: {"sequence_number":55,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"银行"}
+
+data: {"sequence_number":56,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"支付"}
+
+data: {"sequence_number":57,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"机构"}
+
+data: {"sequence_number":58,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法律法规"}
+
+data: {"sequence_number":59,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"，"}
+
+data: {"sequence_number":60,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"提供"}
+
+data: {"sequence_number":61,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"准确的"}
+
+data: {"sequence_number":62,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"条款"}
+
+data: {"sequence_number":63,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"解读"}
+
+data: {"sequence_number":64,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"和"}
+
+data: {"sequence_number":65,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"适用"}
+
+data: {"sequence_number":66,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"说明"}
+
+data: {"sequence_number":67,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"，"}
+
+data: {"sequence_number":68,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"涵盖"}
+
+data: {"sequence_number":69,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"：\n"}
+
+data: {"sequence_number":70,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"-"}
+
+data: {"sequence_number":71,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" "}
+
+data: {"sequence_number":72,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"支付"}
+
+data: {"sequence_number":73,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"业务"}
+
+data: {"sequence_number":74,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"许可"}
+
+data: {"sequence_number":75,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":76,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"备案"}
+
+data: {"sequence_number":77,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":78,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"变更"}
+
+data: {"sequence_number":79,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"等"}
+
+data: {"sequence_number":80,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"监管"}
+
+data: {"sequence_number":81,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"制度"}
+
+data: {"sequence_number":82,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"\n"}
+
+data: {"sequence_number":83,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"-"}
+
+data: {"sequence_number":84,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" "}
+
+data: {"sequence_number":85,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"反"}
+
+data: {"sequence_number":86,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"洗"}
+
+data: {"sequence_number":87,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"钱"}
+
+data: {"sequence_number":88,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":89,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"支付"}
+
+data: {"sequence_number":90,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"安全"}
+
+data: {"sequence_number":91,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":92,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"客户"}
+
+data: {"sequence_number":93,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"备"}
+
+data: {"sequence_number":94,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"付"}
+
+data: {"sequence_number":95,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"金"}
+
+data: {"sequence_number":96,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"管理等"}
+
+data: {"sequence_number":97,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"合规"}
+
+data: {"sequence_number":98,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"要求"}
+
+data: {"sequence_number":99,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"\n"}
+
+data: {"sequence_number":100,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"-"}
+
+data: {"sequence_number":101,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" "}
+
+data: {"sequence_number":102,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"网络"}
+
+data: {"sequence_number":103,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"支付"}
+
+data: {"sequence_number":104,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":105,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"银行卡"}
+
+data: {"sequence_number":106,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"收"}
+
+data: {"sequence_number":107,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"单"}
+
+data: {"sequence_number":108,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":109,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"预付"}
+
+data: {"sequence_number":110,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"卡"}
+
+data: {"sequence_number":111,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"等"}
+
+data: {"sequence_number":112,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"业务"}
+
+data: {"sequence_number":113,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"规范"}
+
+data: {"sequence_number":114,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"\n\n"}
+
+data: {"sequence_number":115,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"###"}
+
+data: {"sequence_number":116,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" 📝"}
+
+data: {"sequence_number":117,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" "}
+
+data: {"sequence_number":118,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"报告"}
+
+data: {"sequence_number":119,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"编写"}
+
+data: {"sequence_number":120,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"\n"}
+
+data: {"sequence_number":121,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"辅助"}
+
+data: {"sequence_number":122,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"起草"}
+
+data: {"sequence_number":123,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"内部"}
+
+data: {"sequence_number":124,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"合规"}
+
+data: {"sequence_number":125,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"报告"}
+
+data: {"sequence_number":126,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":127,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"风险评估"}
+
+data: {"sequence_number":128,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"报告"}
+
+data: {"sequence_number":129,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":130,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"监管"}
+
+data: {"sequence_number":131,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"报送"}
+
+data: {"sequence_number":132,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"材料"}
+
+data: {"sequence_number":133,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"等"}
+
+data: {"sequence_number":134,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"，"}
+
+data: {"sequence_number":135,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"确保"}
+
+data: {"sequence_number":136,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"内容"}
+
+data: {"sequence_number":137,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"格式"}
+
+data: {"sequence_number":138,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"规范"}
+
+data: {"sequence_number":139,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":140,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":141,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"引用"}
+
+data: {"sequence_number":142,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"准确"}
+
+data: {"sequence_number":143,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"。\n\n"}
+
+data: {"sequence_number":144,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"###"}
+
+data: {"sequence_number":145,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" 🔍"}
+
+data: {"sequence_number":146,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" "}
+
+data: {"sequence_number":147,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"报告"}
+
+data: {"sequence_number":148,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"审核"}
+
+data: {"sequence_number":149,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"\n"}
+
+data: {"sequence_number":150,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"对"}
+
+data: {"sequence_number":151,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"内部"}
+
+data: {"sequence_number":152,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"报告"}
+
+data: {"sequence_number":153,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"进行"}
+
+data: {"sequence_number":154,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"合规"}
+
+data: {"sequence_number":155,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"性"}
+
+data: {"sequence_number":156,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"审查"}
+
+data: {"sequence_number":157,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"，"}
+
+data: {"sequence_number":158,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"检查"}
+
+data: {"sequence_number":159,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":160,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"引用"}
+
+data: {"sequence_number":161,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"准确性"}
+
+data: {"sequence_number":162,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":163,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"内容"}
+
+data: {"sequence_number":164,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"完整性"}
+
+data: {"sequence_number":165,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"，"}
+
+data: {"sequence_number":166,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"识别"}
+
+data: {"sequence_number":167,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"合规"}
+
+data: {"sequence_number":168,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"风险"}
+
+data: {"sequence_number":169,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"点"}
+
+data: {"sequence_number":170,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"并"}
+
+data: {"sequence_number":171,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"给出"}
+
+data: {"sequence_number":172,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"修改"}
+
+data: {"sequence_number":173,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"建议"}
+
+data: {"sequence_number":174,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"。\n\n"}
+
+data: {"sequence_number":175,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"---\n\n"}
+
+data: {"sequence_number":176,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"我"}
+
+data: {"sequence_number":177,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"内置"}
+
+data: {"sequence_number":178,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"了"}
+
+data: {"sequence_number":179,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"涵盖"}
+
+data: {"sequence_number":180,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" **"}
+
+data: {"sequence_number":181,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"105"}
+
+data: {"sequence_number":182,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"个"}
+
+data: {"sequence_number":183,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":184,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"文件"}
+
+data: {"sequence_number":185,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":186,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"385"}
+
+data: {"sequence_number":187,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"个"}
+
+data: {"sequence_number":188,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":189,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"概念"}
+
+data: {"sequence_number":190,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"节点"}
+
+data: {"sequence_number":191,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"**"}
+
+data: {"sequence_number":192,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":" "}
+
+data: {"sequence_number":193,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"的知识"}
+
+data: {"sequence_number":194,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"图谱"}
+
+data: {"sequence_number":195,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"，"}
+
+data: {"sequence_number":196,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"能"}
+
+data: {"sequence_number":197,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"为您"}
+
+data: {"sequence_number":198,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"提供"}
+
+data: {"sequence_number":199,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"专业"}
+
+data: {"sequence_number":200,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"、"}
+
+data: {"sequence_number":201,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"严谨"}
+
+data: {"sequence_number":202,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"的"}
+
+data: {"sequence_number":203,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"法规"}
+
+data: {"sequence_number":204,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"支持"}
+
+data: {"sequence_number":205,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"。\n\n"}
+
+data: {"sequence_number":206,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"请问"}
+
+data: {"sequence_number":207,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"有什么"}
+
+data: {"sequence_number":208,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"可以"}
+
+data: {"sequence_number":209,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"帮"}
+
+data: {"sequence_number":210,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"您的"}
+
+data: {"sequence_number":211,"object":"content","status":"in_progress","error":null,"type":"text","index":0,"delta":true,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"？"}
+
+data: {"sequence_number":212,"object":"content","status":"completed","error":null,"type":"text","index":0,"delta":null,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"你好！欢迎使用**非银支付机构法规知识库智能体**。\n\n我专注于为非银行支付机构提供法规合规方面的专业辅助服务，具备以下三项核心能力：\n\n---\n\n### 📋 法规查询\n可检索并引用中国人民银行及相关监管部门发布的非银行支付机构法律法规，提供准确的条款解读和适用说明，涵盖：\n- 支付业务许可、备案、变更等监管制度\n- 反洗钱、支付安全、客户备付金管理等合规要求\n- 网络支付、银行卡收单、预付卡等业务规范\n\n### 📝 报告编写\n辅助起草内部合规报告、风险评估报告、监管报送材料等，确保内容格式规范、法规引用准确。\n\n### 🔍 报告审核\n对内部报告进行合规性审查，检查法规引用准确性、内容完整性，识别合规风险点并给出修改建议。\n\n---\n\n我内置了涵盖 **105个法规文件、385个法规概念节点** 的知识图谱，能为您提供专业、严谨的法规支持。\n\n请问有什么可以帮您的？"}
+
+data: {"sequence_number":213,"object":"message","status":"completed","error":null,"id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","type":"message","role":"assistant","content":[{"sequence_number":212,"object":"content","status":"completed","error":null,"type":"text","index":0,"delta":null,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"你好！欢迎使用**非银支付机构法规知识库智能体**。\n\n我专注于为非银行支付机构提供法规合规方面的专业辅助服务，具备以下三项核心能力：\n\n---\n\n### 📋 法规查询\n可检索并引用中国人民银行及相关监管部门发布的非银行支付机构法律法规，提供准确的条款解读和适用说明，涵盖：\n- 支付业务许可、备案、变更等监管制度\n- 反洗钱、支付安全、客户备付金管理等合规要求\n- 网络支付、银行卡收单、预付卡等业务规范\n\n### 📝 报告编写\n辅助起草内部合规报告、风险评估报告、监管报送材料等，确保内容格式规范、法规引用准确。\n\n### 🔍 报告审核\n对内部报告进行合规性审查，检查法规引用准确性、内容完整性，识别合规风险点并给出修改建议。\n\n---\n\n我内置了涵盖 **105个法规文件、385个法规概念节点** 的知识图谱，能为您提供专业、严谨的法规支持。\n\n请问有什么可以帮您的？"}],"code":null,"message":null,"usage":{"input_tokens":3235,"output_tokens":228,"total_tokens":3463,"time_to_first_token":0.463,"duration":3.285},"metadata":null}
+
+data: {"sequence_number":214,"object":"response","status":"completed","error":null,"id":"response_b20e8463-7d7e-4ef9-963d-383214988a1c","created_at":1779682180,"completed_at":1779684533,"output":[{"sequence_number":213,"object":"message","status":"completed","error":null,"id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","type":"message","role":"assistant","content":[{"sequence_number":212,"object":"content","status":"completed","error":null,"type":"text","index":0,"delta":null,"msg_id":"msg_8fdaf805-fc90-479b-9540-5fc1e1917d1a","text":"你好！欢迎使用**非银支付机构法规知识库智能体**。\n\n我专注于为非银行支付机构提供法规合规方面的专业辅助服务，具备以下三项核心能力：\n\n---\n\n### 📋 法规查询\n可检索并引用中国人民银行及相关监管部门发布的非银行支付机构法律法规，提供准确的条款解读和适用说明，涵盖：\n- 支付业务许可、备案、变更等监管制度\n- 反洗钱、支付安全、客户备付金管理等合规要求\n- 网络支付、银行卡收单、预付卡等业务规范\n\n### 📝 报告编写\n辅助起草内部合规报告、风险评估报告、监管报送材料等，确保内容格式规范、法规引用准确。\n\n### 🔍 报告审核\n对内部报告进行合规性审查，检查法规引用准确性、内容完整性，识别合规风险点并给出修改建议。\n\n---\n\n我内置了涵盖 **105个法规文件、385个法规概念节点** 的知识图谱，能为您提供专业、严谨的法规支持。\n\n请问有什么可以帮您的？"}],"code":null,"message":null,"usage":{"input_tokens":3235,"output_tokens":228,"total_tokens":3463,"time_to_first_token":0.463,"duration":3.285},"metadata":null}],"usage":{"input_tokens":3235,"output_tokens":228,"total_tokens":3463,"time_to_first_token":0.463,"duration":3.285},"session_id":"20fc7533-235e-48df-9918-4f8befafb7b3"}
+

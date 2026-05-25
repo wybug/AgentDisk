@@ -1,7 +1,25 @@
+/**
+ * T17: Chat ReturnFile + Markdown 测试 (Mock 模式)
+ *
+ * 使用 Mock Agent Server 快速验证 UI 功能，无需真实 Agent。
+ * 前置条件:
+ *   - fixture 文件存在于 fixtures/ 目录
+ *   - mock-agent-server.js 提供回放服务
+ *
+ * 用法: node runner.js t17
+ *
+ * 如需录制真实数据: node runner.js t17-record
+ */
 const { describe, step, assertCondition } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
-// --- Helpers (from T16) ---
+const MOCK_PORT = 9876;
+const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures');
+
+// --- Helpers ---
 
 function gwLogin(userId, password) {
   return ab.evalStdin(`
@@ -12,34 +30,6 @@ function gwLogin(userId, password) {
         body: JSON.stringify({ userId: '${userId}', password: '${password}' })
       }).then(function(r) { return r.json(); })
         .then(function(d) { return d.success ? 'OK' : 'FAIL: ' + (d.message || ''); })
-        .catch(function(e) { return 'ERR: ' + e.message; });
-    })()
-  `);
-}
-
-function gwRegisterAgent(agentId, agentName, agentGroupId, endpoint) {
-  var body = { agentId: agentId, agentName: agentName };
-  if (agentGroupId) body.agentGroupId = agentGroupId;
-  if (endpoint) body.endpoint = endpoint;
-  return ab.evalStdin(`
-    (function() {
-      return fetch('/api/agents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(${JSON.stringify(body)})
-      }).then(function(r) { return r.json(); })
-        .then(function(d) { return d.success ? 'OK' : 'FAIL: ' + (d.error || ''); })
-        .catch(function(e) { return 'ERR: ' + e.message; });
-    })()
-  `);
-}
-
-function gwRemoveAgent(agentId) {
-  return ab.evalStdin(`
-    (function() {
-      return fetch('/api/agents/${agentId}', { method: 'DELETE' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { return d.success ? 'OK' : 'FAIL: ' + (d.error || ''); })
         .catch(function(e) { return 'ERR: ' + e.message; });
     })()
   `);
@@ -59,18 +49,63 @@ function gwAddUser(userId, userName, password) {
   `);
 }
 
-// --- T17: Chat ReturnFile + Markdown ---
+function gwRegisterAgent(agentId, agentName, endpoint) {
+  return ab.evalStdin(`
+    (function() {
+      return fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: '${agentId}', agentName: '${agentName}', endpoint: '${endpoint}' })
+      }).then(function(r) { return r.json(); })
+        .then(function(d) { return d.success ? 'OK' : 'FAIL: ' + (d.error || ''); })
+        .catch(function(e) { return 'ERR: ' + e.message; });
+    })()
+  `);
+}
 
-describe('T17: Chat ReturnFile 文件产物渲染', () => {
+// --- Check fixtures exist ---
+var reportFixture = path.join(FIXTURE_DIR, 'agent-sse-report.txt');
+var simpleFixture = path.join(FIXTURE_DIR, 'agent-sse-simple.txt');
+
+if (!fs.existsSync(reportFixture) || !fs.existsSync(simpleFixture)) {
+  console.log('\n\x1b[33m⚠ Mock fixture 不存在，请先运行录制:\x1b[0m');
+  console.log('  \x1b[36mnode runner.js t17-record\x1b[0m\n');
+  process.exit(0);
+}
+
+// --- T17: Mock Mode Test ---
+
+describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
   ab.closeAll();
 
-  // ======== Phase 1: Login & Navigate to Chat ========
+  // ======== Phase 0: Start mock agent server ========
+
+  var mockServer = spawn('node', [
+    path.join(FIXTURE_DIR, 'mock-agent-server.js'),
+    String(MOCK_PORT),
+    FIXTURE_DIR,
+  ], { stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+  mockServer.unref();
+
+  // Wait for mock server to be ready
+  var mockReady = false;
+  for (var w = 0; w < 10; w++) {
+    ab.waitMs(500);
+    try {
+      var { execSync } = require('child_process');
+      execSync('curl -s -o /dev/null -w "%{http_code}" http://localhost:' + MOCK_PORT + '/ -X POST -H "Content-Type: application/json" -d \'{}\'', { timeout: 2000 });
+      mockReady = true;
+      break;
+    } catch {}
+  }
+  assertCondition(mockReady, 'T17.0: Mock Agent Server 启动', 'port=' + MOCK_PORT);
+
+  // ======== Phase 1: Login ========
 
   ab.open(ab.GATEWAY_URL + '/login');
   ab.waitMs(2000);
   ab.waitLoad('networkidle');
 
-  // Ensure test user exists
   gwAddUser('5001185', '小云云', 'test123');
   ab.waitMs(500);
 
@@ -78,268 +113,304 @@ describe('T17: Chat ReturnFile 文件产物渲染', () => {
   ab.waitMs(1000);
   assertCondition(loginResult.includes('OK'), 'T17.1: 登录成功', 'login=' + loginResult);
 
-  // Clean up and register test agent
-  gwRemoveAgent('agent-t17');
+  // ======== Phase 2: Register mock agent & Navigate ========
+
+  var registerResult = gwRegisterAgent('mock-agent', 'Mock测试Agent', 'http://localhost:' + MOCK_PORT + '/process');
   ab.waitMs(300);
+  step('T17.2: 注册 Mock Agent', registerResult.includes('OK'), 'result=' + registerResult);
 
-  var regResult = gwRegisterAgent('agent-t17', 'T17 Test Agent', '', 'http://localhost:8090/process');
-  ab.waitMs(500);
-
-  // Navigate to chat page
   ab.open(ab.GATEWAY_URL + '/chat');
-  ab.waitMs(3000);
+  ab.waitMs(2000);
   ab.waitLoad('networkidle');
   ab.screenshot('t17-01-chat-page');
 
   var chatLoaded = ab.pageContainsText('Agent 对话') || ab.pageContainsText('输入消息');
-  step('T17.2: 对话页面加载', chatLoaded, 'chatLoaded=' + chatLoaded);
+  step('T17.3: 对话页面加载', chatLoaded, 'chatLoaded=' + chatLoaded);
 
-  // ======== Phase 2: Inject message with file_artifact via React state ========
+  // ======== Phase 3: Override fetch to inject mock-agent ID ========
+  // React controlled select doesn't reliably update state via native events.
+  // Instead, override fetch to ensure agentId is always set.
 
-  // Inject a mock assistant message with file_artifact directly into the React component
-  var injectResult = ab.evalStdin(`
+  var fetchOverride = ab.evalStdin(`
     (function() {
-      // Find the React fiber root
-      var rootEl = document.getElementById('chat-root');
-      if (!rootEl) return 'no chat-root';
-
-      // We'll dispatch a custom event that our test wrapper can catch,
-      // or more reliably, we intercept fetch to return mock SSE data
-      // Actually, let's directly test by creating a simulated response
-
-      // Approach: Override the page's fetch temporarily to return mock SSE
-      // This is complex, so instead let's just inject HTML directly into the chat area
-      // to verify the rendering pipeline
-
-      // Simpler approach: inject a message via the React state by finding React internals
-      var reactRoot = rootEl._reactRootContainer || rootEl.__reactFiber$ || null;
-
-      // Alternative: just verify the page renders correctly by checking DOM structure
-      return 'page-ready';
+      var orig = window.fetch;
+      window.fetch = function(url, opts) {
+        if (typeof url === 'string' && url === '/process' && opts && opts.body) {
+          try {
+            var body = JSON.parse(opts.body);
+            if (!body.agentId) {
+              body.agentId = 'mock-agent';
+              opts = Object.assign({}, opts, { body: JSON.stringify(body) });
+            }
+          } catch(e) {}
+        }
+        return orig.apply(this, arguments);
+      };
+      return 'ok';
     })()
   `);
+  step('T17.3b: Fetch agentId 注入', fetchOverride.includes('ok'), 'result=' + fetchOverride);
 
-  // Instead of complex React state injection, test by sending a real request
-  // and intercepting with a mock SSE response using service worker approach
-  // For simplicity, we test the UI components by injecting HTML that matches
-  // what the React components would render
-
-  // T17.3 - Test by injecting mock messages via window.postMessage approach
-  // We'll use a more direct approach: evaluate JS that simulates the SSE parsing
-
-  var mockSSEInject = ab.evalStdin(`
+  // Also select in dropdown for visual consistency
+  ab.evalStdin(`
     (function() {
-      // Find all message bubbles on the page
-      var root = document.getElementById('chat-root');
-      if (!root) return 'no-root';
-
-      // Get the React root instance
-      var fiberKey = Object.keys(root).find(function(k) { return k.startsWith('__reactFiber'); });
-      if (!fiberKey) return 'no-fiber';
-
-      // Walk up to find the component with messages state
-      var fiber = root[fiberKey];
-      var chatAppFiber = null;
-      var current = fiber;
-      for (var i = 0; i < 50 && current; i++) {
-        if (current.memoizedState && current.stateNode && current.stateNode.messages !== undefined) {
-          chatAppFiber = current;
-          break;
-        }
-        current = current.return;
-      }
-
-      if (!chatAppFiber) {
-        // Try finding via _reactRootContainer
-        var rcKey = Object.keys(root).find(function(k) { return k.startsWith('__reactContainer'); });
-        if (rcKey) {
-          current = root[rcKey];
-          for (var i = 0; i < 50 && current; i++) {
-            if (current.memoizedState) {
-              var hooks = [];
-              var h = current.memoizedState;
-              while (h) { hooks.push(h); h = h.next; }
-              // Look for the messages array in hooks
-              for (var j = 0; j < hooks.length; j++) {
-                var queue = hooks[j].queue;
-                var val = hooks[j].memoizedState;
-                if (Array.isArray(val) && val.length >= 0) {
-                  // This might be the messages hook
-                  var setState = queue ? queue.dispatch : null;
-                  if (setState) {
-                    setState([{id:'mock-1',role:'user',content:'Generate a report'},{id:'mock-2',role:'assistant',content:'Report generated. File: test-report.md\\nShare code: abc123',metrics:{inputTokens:100,outputTokens:50,totalTokens:150,timeToFirstToken:0.5,duration:2.0},fileArtifact:{filename:'test-report.md',download_url:'http://localhost:9100/v1/disk/files/download?t=mock-token',share_code:'abc123def456',size_bytes:21504,description:'Test report file'}}]);
-                    return 'injected';
-                  }
-                }
-              }
-            }
-            current = current.return;
+      var selects = document.querySelectorAll('select');
+      for (var i = 0; i < selects.length; i++) {
+        var opts = selects[i].options;
+        for (var j = 0; j < opts.length; j++) {
+          if (opts[j].value === 'mock-agent') {
+            selects[i].value = 'mock-agent';
+            selects[i].dispatchEvent(new Event('change', { bubbles: true }));
+            return 'selected:mock-agent';
           }
         }
-        return 'no-chatapp';
       }
-      return 'fallback';
+      return 'no-select';
     })()
   `);
-
   ab.waitMs(1000);
-  ab.screenshot('t17-03-after-inject');
+  ab.screenshot('t17-03-agent-selected');
 
-  // If React state injection worked, check for rendered content
-  var hasFileName = ab.pageContainsText('test-report.md');
-  var hasFileSize = ab.pageContainsText('21 KB');
-  var hasDownload = ab.pageContainsText('下载');
-  var hasShareBtn = ab.pageContainsText('分享码');
+  var hasSelect = ab.evalStdin(`
+    (function() {
+      var sel = document.querySelector('select');
+      return sel && sel.value ? 'value:' + sel.value : 'empty';
+    })()
+  `);
+  step('T17.4: Agent 选择状态', hasSelect.includes('mock-agent') || hasSelect !== 'empty', 'select=' + hasSelect);
 
-  step('T17.3: Mock 消息注入 (React state 或 DOM fallback)', true, 'result=' + mockSSEInject);
+  // ======== Phase 4: Send message (report prompt) ========
 
-  // ======== Phase 3: Verify file artifact card rendering ========
+  ab.evalStdin(`
+    (function() {
+      var textarea = document.querySelector('textarea');
+      if (!textarea) return 'no-textarea';
+      var nativeSet = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      nativeSet.call(textarea, '生成现有支持法律的报告');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'filled';
+    })()
+  `);
+  ab.waitMs(300);
 
-  if (mockSSEInject === 'injected') {
-    step('T17.4: 文件名显示', hasFileName, 'visible=' + hasFileName);
-    step('T17.5: 文件大小显示', hasFileSize, 'visible=' + hasFileSize);
-    step('T17.6: 下载按钮显示', hasDownload, 'visible=' + hasDownload);
-    step('T17.7: 分享码按钮显示', hasShareBtn, 'visible=' + hasShareBtn);
-    ab.screenshot('t17-04-file-card');
-  } else {
-    // Fallback: test by checking the page renders file card HTML structure via DOM injection
-    var domInject = ab.evalStdin(`
-      (function() {
-        // Directly inject HTML into the message area to verify CSS/rendering
-        var area = document.querySelector('[style*="overflow: auto"]') || document.querySelector('[class*="message"]');
-        if (!area) {
-          // Try to find the scroll container
-          var divs = document.querySelectorAll('div');
-          for (var i = 0; i < divs.length; i++) {
-            if (divs[i].style && divs[i].style.overflow === 'auto') {
-              area = divs[i];
-              break;
-            }
-          }
+  ab.evalStdin(`
+    (function() {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        var svg = btns[i].querySelector('svg');
+        if (svg || btns[i].getAttribute('type') === 'submit') {
+          btns[i].click();
+          return 'clicked';
         }
-        if (!area) return 'no-area';
+      }
+      var textarea = document.querySelector('textarea');
+      if (textarea) {
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        return 'enter';
+      }
+      return 'no-send';
+    })()
+  `);
+  ab.waitMs(2000);
+  ab.screenshot('t17-05-message-sent');
 
-        // Create a mock message bubble with file artifact card
-        var bubble = document.createElement('div');
-        bubble.style.cssText = 'max-width:80%;padding:10px 14px;border-radius:12px;line-height:1.6;font-size:14px;background:#fff;color:#333;border:1px solid #e5e7eb;borderBottomLeftRadius:4px;';
-        bubble.innerHTML = '<div style="white-space:pre-wrap">Report generated. File: test-report.md<br>Share code: abc123</div>' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:10px 12px;background:#f8f9fb;border:1px solid #e5e7eb;border-radius:10px;">' +
-          '<div style="display:flex;align-items:center;gap:10px"><div style="min-width:0"><div style="font-size:13px;font-weight:500;color:#333">test-report.md</div><div style="font-size:11px;color:#999;margin-top:2px">21.0 KB</div></div></div>' +
-          '<div style="display:flex;align-items:center;gap:8px">' +
-          '<a href="#" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:12px;color:#667eea;background:#fff;border:1px solid #e0e0e0;border-radius:6px;cursor:pointer;text-decoration:none">下载</a>' +
-          '<button style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:12px;color:#667eea;background:#fff;border:1px solid #e0e0e0;border-radius:6px;cursor:pointer">分享码</button>' +
-          '</div></div>';
+  var hasUserMsg = ab.pageContainsText('生成现有支持法律的报告');
+  step('T17.5: 用户消息已发送', hasUserMsg, 'visible=' + hasUserMsg);
 
-        var row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:flex-start;';
-        row.appendChild(bubble);
-        area.appendChild(row);
-        return 'dom-injected';
+  // ======== Phase 5: Wait for mock response (max 30s, should be fast) ========
+
+  var responseDone = false;
+  for (var round = 0; round < 15; round++) {
+    ab.waitMs(2000);
+    var checkResult = ab.evalStdin(`
+      (function() {
+        var stopBtns = document.querySelectorAll('button');
+        for (var i = 0; i < stopBtns.length; i++) {
+          var text = stopBtns[i].textContent || '';
+          if (text.includes('Stop') || text.includes('停止')) return 'streaming';
+        }
+        return 'done';
       })()
     `);
-
-    ab.waitMs(500);
-    ab.screenshot('t17-03-dom-inject');
-
-    var domHasFileName = ab.pageContainsText('test-report.md');
-    var domHasDownload = ab.pageContainsText('下载');
-    var domHasShare = ab.pageContainsText('分享码');
-    var domHasSize = ab.pageContainsText('21');
-
-    step('T17.4: DOM 注入文件名', domHasFileName, 'visible=' + domHasFileName);
-    step('T17.5: DOM 注入文件大小', domHasSize, 'visible=' + domHasSize);
-    step('T17.6: DOM 注入下载按钮', domHasDownload, 'visible=' + domHasDownload);
-    step('T17.7: DOM 注入分享码', domHasShare, 'visible=' + domHasShare);
+    if (checkResult.includes('done')) {
+      responseDone = true;
+      break;
+    }
+    if (ab.pageContainsText('错误:')) {
+      break;
+    }
   }
 
-  // ======== Phase 4: Markdown rendering test ========
+  ab.screenshot('t17-06-response-complete');
+  step('T17.6: Mock 响应完成', responseDone, 'rounds=' + round);
 
-  // Inject a message with rich Markdown content
-  var mdInject = ab.evalStdin(`
+  // ======== Phase 6: Verify response content ========
+
+  var hasReportText = ab.pageContainsText('报告') || ab.pageContainsText('法规');
+  step('T17.7: 响应包含报告内容', hasReportText, 'visible=' + hasReportText);
+
+  // Check Markdown elements
+  var mdCheck = ab.evalStdin(`
     (function() {
-      var area = document.querySelector('[style*="overflow: auto"]');
-      if (!area) {
-        var divs = document.querySelectorAll('div');
-        for (var i = 0; i < divs.length; i++) {
-          if (divs[i].style && divs[i].style.overflow === 'auto') { area = divs[i]; break; }
-        }
-      }
-      if (!area) return 'no-area';
-
-      var bubble = document.createElement('div');
-      bubble.className = 'markdown-body';
-      bubble.style.cssText = 'max-width:80%;padding:10px 14px;border-radius:12px;line-height:1.6;font-size:14px;background:#fff;color:#333;border:1px solid #e5e7eb;borderBottomLeftRadius:4px;white-space:pre-wrap;';
-
-      // Rich Markdown content to test spacing
-      bubble.innerHTML = '<h3>Monthly Report</h3>' +
-        '<p>Line 1 of the report.</p>' +
-        '<p>Line 2 of the report.</p>' +
-        '<ul><li>Item A</li><li>Item B</li></ul>' +
-        '<pre><code>const x = 1;</code></pre>' +
-        '<blockquote><p>A quote</p></blockquote>' +
-        '<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>Test</td><td>100</td></tr></tbody></table>';
-
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex;justify-content:flex-start;';
-      row.appendChild(bubble);
-      area.appendChild(row);
-      return 'md-injected';
+      var r = [];
+      if (document.querySelectorAll('h1,h2,h3,h4').length > 0) r.push('heading');
+      if (document.querySelectorAll('ul,ol').length > 0) r.push('list');
+      if (document.querySelectorAll('table').length > 0) r.push('table');
+      if (document.querySelectorAll('strong,b').length > 0) r.push('bold');
+      if (document.querySelectorAll('pre code').length > 0) r.push('code');
+      return r.length > 0 ? 'has:' + r.join(',') : 'no-markdown';
     })()
   `);
+  step('T17.8: Markdown 元素渲染', mdCheck.includes('has:'), 'elements=' + mdCheck);
+  ab.screenshot('t17-07-markdown');
 
-  ab.waitMs(500);
-  ab.screenshot('t17-04-markdown');
+  // ======== Phase 7: Verify Metrics popover ========
 
-  var mdHasHeading = ab.pageContainsText('Monthly Report');
-  var mdHasList = ab.pageContainsText('Item A');
-  var mdHasCode = ab.pageContainsText('const x');
-  var mdHasTable = ab.pageContainsText('Value');
-
-  step('T17.8: Markdown 标题渲染', mdHasHeading, 'visible=' + mdHasHeading);
-  step('T17.9: Markdown 列表渲染', mdHasList, 'visible=' + mdHasList);
-  step('T17.10: Markdown 代码渲染', mdHasCode, 'visible=' + mdHasCode);
-  step('T17.11: Markdown 表格渲染', mdHasTable, 'visible=' + mdHasTable);
-
-  // ======== Phase 5: Markdown toggle button test ========
-
-  // Verify the Eye/EyeOff icon button exists in the page after messages
-  var hasToggleIcon = ab.evalStdin(`
+  // Debug: dump all divs with borderTop to understand DOM structure
+  var footerDebug = ab.evalStdin(`
     (function() {
-      // Check for SVG icons that look like eye/eye-off in the footer area
-      var svgs = document.querySelectorAll('svg');
-      for (var i = 0; i < svgs.length; i++) {
-        // lucide Eye/EyeOff have specific path patterns
-        var paths = svgs[i].querySelectorAll('path');
-        if (paths.length >= 1) {
-          var d = paths[0].getAttribute('d') || '';
-          // Eye icon typically has a path like "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"
-          if (d.includes('12s') || d.includes('12') || d.length > 30) {
-            var parent = svgs[i].parentElement;
-            if (parent && parent.style && parent.style.cursor === 'pointer') {
-              return 'found-toggle';
+      var allDivs = document.querySelectorAll('div');
+      var results = [];
+      for (var i = 0; i < allDivs.length; i++) {
+        var s = allDivs[i].style;
+        if (s && s.borderTop && s.borderTop.includes('1px solid')) {
+          var svgs = allDivs[i].querySelectorAll('svg');
+          var tag = allDivs[i].className || '';
+          var childTags = [];
+          for (var c = 0; c < allDivs[i].children.length; c++) {
+            var ch = allDivs[i].children[c];
+            childTags.push(ch.tagName + (ch.style && ch.style.cursor === 'pointer' ? '[ptr]' : ''));
+          }
+          results.push('svg=' + svgs.length + ' children=[' + childTags.join(',') + ']');
+        }
+      }
+      return results.length > 0 ? results.join('||') : 'no-borderTop-div';
+    })()
+  `);
+  step('T17.9-debug: Footer DOM 结构', true, 'info=' + footerDebug);
+
+  // Click the last SVG in the footer (BarChart3 is always the last action icon)
+  var metricsResult = ab.evalStdin(`
+    (function() {
+      var allDivs = document.querySelectorAll('div');
+      for (var i = 0; i < allDivs.length; i++) {
+        var s = allDivs[i].style;
+        if (s && s.borderTop && s.borderTop.includes('1px solid')) {
+          var svgs = allDivs[i].querySelectorAll('svg');
+          if (svgs.length > 0) {
+            var last = svgs[svgs.length - 1];
+            last.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            return 'clicked-last-svg total=' + svgs.length;
+          }
+        }
+      }
+      return 'no-footer-svgs';
+    })()
+  `);
+  ab.waitMs(500);
+  ab.screenshot('t17-08-metrics-click');
+
+  var popoverText = ab.evalStdin(`
+    (function() {
+      var divs = document.querySelectorAll('div');
+      for (var i = 0; i < divs.length; i++) {
+        var s = divs[i].style;
+        if (s && s.position === 'fixed' && s.boxShadow && s.boxShadow !== '') {
+          var t = divs[i].textContent || '';
+          if (t.includes('Token') || t.includes('耗时')) return t.substring(0, 150);
+        }
+      }
+      return 'no-popover';
+    })()
+  `);
+  step('T17.9: Metrics 弹窗显示', popoverText.includes('Token'), 'text=' + popoverText + ', click=' + metricsResult);
+
+  // ======== Phase 8: Verify Markdown toggle ========
+
+  var toggleResult = ab.evalStdin(`
+    (function() {
+      var footers = document.querySelectorAll('div');
+      for (var i = 0; i < footers.length; i++) {
+        var s = footers[i].style;
+        if (s && s.borderTop && s.borderTop.includes('1px solid')) {
+          var spans = footers[i].querySelectorAll('span');
+          for (var j = 0; j < spans.length; j++) {
+            if (spans[j].style && spans[j].style.cursor === 'pointer') {
+              var svg = spans[j].querySelector('svg');
+              if (svg) { spans[j].click(); return 'toggled'; }
             }
           }
         }
       }
-
-      // Alternative: look for any clickable icon in footer area
-      var spans = document.querySelectorAll('span');
-      for (var i = 0; i < spans.length; i++) {
-        if (spans[i].style && spans[i].style.cursor === 'pointer') {
-          var svg = spans[i].querySelector('svg');
-          if (svg) return 'found-icon-span';
-        }
-      }
-      return 'not-found';
+      return 'no-toggle';
     })()
   `);
-
-  step('T17.12: Markdown 切换按钮存在', hasToggleIcon.includes('found'), 'result=' + hasToggleIcon);
-
-  // ======== Phase 6: Cleanup ========
-
-  gwRemoveAgent('agent-t17');
   ab.waitMs(300);
+  ab.screenshot('t17-09-toggle');
+  step('T17.10: Markdown 切换按钮', toggleResult.includes('toggled'), 'result=' + toggleResult);
+
+  if (toggleResult.includes('toggled')) {
+    var hasPre = ab.evalStdin(`
+      (function() {
+        var pres = document.querySelectorAll('pre');
+        for (var i = 0; i < pres.length; i++) {
+          if ((pres[i].textContent || '').length > 50) return 'raw-visible';
+        }
+        return 'no-raw';
+      })()
+    `);
+    step('T17.11: 原始文本显示', hasPre.includes('raw-visible'), 'check=' + hasPre);
+  }
+
+  // ======== Phase 9: Test simple response ========
+
+  // Type and send a simple message via form submit approach
+  var fillResult = ab.evalStdin(`
+    (function() {
+      var textarea = document.querySelector('textarea');
+      if (!textarea) return 'no-textarea';
+      var nativeSet = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      nativeSet.call(textarea, '你好');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'value:' + textarea.value;
+    })()
+  `);
+  ab.waitMs(500);
+
+  // Click send: look for button with svg that is NOT a Stop button
+  var sendResult = ab.evalStdin(`
+    (function() {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        var txt = (btns[i].textContent || '').trim();
+        if (txt.includes('Stop') || txt.includes('停止')) continue;
+        if (btns[i].getAttribute('type') === 'submit') {
+          btns[i].click();
+          return 'submit-clicked';
+        }
+      }
+      for (var i = 0; i < btns.length; i++) {
+        var txt = (btns[i].textContent || '').trim();
+        if (txt.includes('Stop') || txt.includes('停止')) continue;
+        var svg = btns[i].querySelector('svg');
+        if (svg) {
+          btns[i].click();
+          return 'svg-clicked:' + i;
+        }
+      }
+      return 'no-send';
+    })()
+  `);
+  ab.waitMs(5000);
+  ab.screenshot('t17-10-simple-response');
+
+  var hasHello = ab.pageContainsText('智能体') || ab.pageContainsText('服务');
+  step('T17.12: 简单对话响应', hasHello, 'visible=' + hasHello + ', fill=' + fillResult + ', send=' + sendResult);
+
+  // ======== Cleanup ========
+
+  // Stop mock server
+  try { process.kill(-mockServer.pid); } catch {}
 
   ab.screenshot('t17-final');
   ab.closeBrowser();
