@@ -1,4 +1,4 @@
-export type FileCategory = 'markdown' | 'code' | 'image' | 'text' | 'binary' | 'video' | 'audio' | 'pdf' | 'archive';
+export type FileCategory = 'markdown' | 'code' | 'image' | 'text' | 'binary' | 'video' | 'audio' | 'pdf' | 'archive' | 'html';
 
 const EXT_MAP: Record<string, FileCategory> = {
   '.md': 'markdown',
@@ -7,7 +7,7 @@ const EXT_MAP: Record<string, FileCategory> = {
   '.py': 'code', '.go': 'code', '.java': 'code', '.c': 'code', '.cpp': 'code',
   '.h': 'code', '.rs': 'code', '.rb': 'code', '.php': 'code', '.swift': 'code',
   '.kt': 'code', '.sh': 'code', '.bash': 'code', '.zsh': 'code',
-  '.css': 'code', '.scss': 'code', '.less': 'code', '.html': 'code', '.xml': 'code',
+  '.css': 'code', '.scss': 'code', '.less': 'code', '.html': 'html', '.htm': 'html', '.xml': 'code',
   '.json': 'code', '.yaml': 'code', '.yml': 'code', '.toml': 'code',
   '.sql': 'code', '.proto': 'code', '.graphql': 'code',
   '.jpg': 'image', '.jpeg': 'image', '.png': 'image', '.gif': 'image',
@@ -32,6 +32,7 @@ export function getFileIcon(fileName: string): string {
   switch (cat) {
     case 'markdown': return 'file-text';
     case 'code': return 'code';
+    case 'html': return 'global';
     case 'image': return 'file-image';
     case 'video': return 'video-camera';
     case 'audio': return 'audio';
@@ -44,5 +45,5 @@ export function getFileIcon(fileName: string): string {
 
 export function isPreviewable(fileName: string): boolean {
   const cat = classifyFile(fileName);
-  return ['markdown', 'code', 'image', 'text', 'pdf'].includes(cat);
+  return ['markdown', 'code', 'image', 'text', 'pdf', 'html'].includes(cat);
 }

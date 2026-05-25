@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"strings"
 
 	"github.com/agentdisk/agent-disk/internal/model"
@@ -37,11 +39,36 @@ func (s *PreviewService) Preview(ctx context.Context, userID string, fileID uint
 	}, nil
 }
 
+const maxHTMLSize = 5 * 1024 * 1024 // 5MB
+
+// PreviewHTML returns raw HTML content for secure sandboxed preview.
+func (s *PreviewService) PreviewHTML(ctx context.Context, userID string, fileID uint64) (string, error) {
+	file, err := s.fileSvc.GetFileRecord(userID, fileID)
+	if err != nil {
+		return "", err
+	}
+
+	obj, err := s.ossClient.Download(ctx, file.OSSKey)
+	if err != nil {
+		return "", fmt.Errorf("download from oss: %w", err)
+	}
+	defer obj.Close()
+
+	data, err := io.ReadAll(io.LimitReader(obj, maxHTMLSize))
+	if err != nil {
+		return "", fmt.Errorf("read file: %w", err)
+	}
+
+	return string(data), nil
+}
+
 func classify(f *model.DiskFile) string {
 	ext := strings.ToLower(f.FileType)
 	switch {
 	case ext == "md", ext == "markdown":
 		return "markdown"
+	case isHTML(ext):
+		return "html"
 	case isCode(ext):
 		return "code"
 	case isImage(ext):
@@ -57,10 +84,14 @@ func isCode(ext string) bool {
 	codeExts := map[string]bool{
 		"go": true, "py": true, "js": true, "ts": true, "java": true,
 		"c": true, "cpp": true, "h": true, "rs": true, "rb": true,
-		"php": true, "sh": true, "sql": true, "html": true, "css": true,
+		"php": true, "sh": true, "sql": true, "css": true,
 		"json": true, "yaml": true, "yml": true, "xml": true, "toml": true,
 	}
 	return codeExts[ext]
+}
+
+func isHTML(ext string) bool {
+	return ext == "html" || ext == "htm"
 }
 
 func isImage(ext string) bool {

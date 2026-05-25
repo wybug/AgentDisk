@@ -96,7 +96,7 @@ export interface DiskPermission {
 }
 
 export interface PreviewResult {
-  fileType: 'markdown' | 'code' | 'image' | 'text' | 'binary';
+  fileType: 'markdown' | 'code' | 'image' | 'text' | 'binary' | 'html';
   url: string;
 }
 

@@ -37,9 +37,11 @@ describe('T3: 文件上传', () => {
   const testTxt = path.join(tmpDir, 'agentdisk-test-upload.txt');
   const testMd = path.join(tmpDir, 'agentdisk-test-upload.md');
   const testPy = path.join(tmpDir, 'agentdisk-test-upload.py');
+  const testHtml = path.join(tmpDir, 'agentdisk-test-upload.html');
   fs.writeFileSync(testTxt, 'Hello AgentDisk 测试文件上传');
   fs.writeFileSync(testMd, '# Test Markdown\n\n这是一个测试 Markdown 文件。\n\n- item 1\n- item 2\n\n```js\nconsole.log("hello");\n```');
   fs.writeFileSync(testPy, 'def hello():\n    print("Hello from AgentDisk!")\n    return 42\n\nif __name__ == "__main__":\n    hello()');
+  fs.writeFileSync(testHtml, '<!DOCTYPE html>\n<html lang="zh">\n<head><meta charset="UTF-8"><title>AI Report</title></head>\n<body>\n<h1 style="color:#1890ff;">AI 生成报告</h1>\n<p>这是一个测试 HTML 文件，模拟 AI 生成的报告。</p>\n<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">\n<tr><th>项目</th><th>状态</th></tr>\n<tr><td>功能A</td><td style="color:green;">通过</td></tr>\n<tr><td>功能B</td><td style="color:red;">失败</td></tr>\n</table>\n</body>\n</html>');
 
   ab.login('user001', 'test123');
 
@@ -84,9 +86,17 @@ describe('T3: 文件上传', () => {
   step('T3.5: py 代码文件上传成功', pyOk, pyResult);
   ab.screenshot('t03-04-py-uploaded');
 
+  // T3.6 - 上传 html 文件
+  const htmlResult = uploadViaAPI(testHtml);
+  ab.waitMs(3000);
+  const htmlOk = htmlResult.includes('OK:');
+  assertCondition(htmlOk, 'T3.6: html 文件上传成功', htmlResult);
+  ab.screenshot('t03-05-html-uploaded');
+
   try { fs.unlinkSync(testTxt); } catch {}
   try { fs.unlinkSync(testMd); } catch {}
   try { fs.unlinkSync(testPy); } catch {}
+  try { fs.unlinkSync(testHtml); } catch {}
 
   ab.closeBrowser();
 });

@@ -147,6 +147,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 
 	// Preview
 	v1.GET("/preview/:id", previewH.PreviewFile)
+		v1.GET("/preview/:id/html", previewH.PreviewHTMLFile)
 
 	// Public routes (no auth required)
 	r.GET("/v1/disk/share/:code", shareH.GetShare)

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log"
+	"net/http"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/service"
@@ -34,4 +35,35 @@ func (h *PreviewHandler) PreviewFile(c *gin.Context) {
 		return
 	}
 	response.OK(c, result)
+}
+
+// PreviewHTMLFile serves raw HTML content with strict security headers for sandboxed iframe preview.
+func (h *PreviewHandler) PreviewHTMLFile(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid id")
+		return
+	}
+	userID := c.GetString("userId")
+	content, err := h.svc.PreviewHTML(c.Request.Context(), userID, id)
+	if err != nil {
+		log.Printf("PreviewHTML error: userId=%s id=%d err=%v", userID, id, err)
+		response.InternalError(c, err.Error())
+		return
+	}
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy",
+		"default-src 'none'; "+
+			"style-src 'unsafe-inline'; "+
+			"img-src * data: blob:; "+
+			"connect-src 'none'; "+
+			"form-action 'none'; "+
+			"frame-ancestors 'none'; "+
+			"base-uri 'none'; "+
+			"object-src 'none'")
+	c.Header("X-Frame-Options", "DENY")
+	c.Header("Referrer-Policy", "no-referrer")
+	c.String(http.StatusOK, content)
 }
