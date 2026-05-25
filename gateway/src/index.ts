@@ -115,7 +115,39 @@ app.all('/process', (req, res) => {
     },
     (proxyRes) => {
       res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
-      proxyRes.pipe(res, { end: true });
+      const requestId = `[Proxy/${Date.now()}]`;
+      console.log(`${requestId} Status: ${proxyRes.statusCode}, User: ${user.userId}, Agent: ${agentId || 'user'}, Target: ${targetUrl.href}`);
+      let sseBuffer = '';
+      proxyRes.on('data', (chunk: Buffer) => {
+        sseBuffer += chunk.toString();
+        const parts = sseBuffer.split('\n');
+        sseBuffer = parts.pop() || '';
+        for (const line of parts) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (!data) continue;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.object === 'response' && parsed.status === 'completed') {
+              console.log(`${requestId} response.completed RAW: ${JSON.stringify(parsed).substring(0, 500)}`);
+            } else if (parsed.object === 'content' && parsed.delta && parsed.text) {
+              // streaming text delta — skip verbose logging
+            } else if (parsed.error) {
+              console.error(`${requestId} error: ${parsed.error}`);
+            } else if (parsed.object) {
+              console.log(`${requestId} SSE event: object=${parsed.object}, status=${parsed.status}, keys=${Object.keys(parsed).join(',')}`);
+            }
+          } catch { /* incomplete JSON in SSE — skip */ }
+        }
+        res.write(chunk);
+      });
+      proxyRes.on('end', () => {
+        if (sseBuffer.trim()) {
+          console.log(`${requestId} SSE buffer remainder: ${sseBuffer.length} bytes`);
+        }
+        console.log(`${requestId} stream ended`);
+        res.end();
+      });
     }
   );
   proxyReq.on('error', (err) => {

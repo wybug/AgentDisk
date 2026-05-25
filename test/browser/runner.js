@@ -44,7 +44,7 @@ function checkServices() {
 
 // 获取测试文件列表
 const testFiles = fs.readdirSync(testDir)
-  .filter(f => f.startsWith('t') && f.endsWith('.js'))
+  .filter(f => f.startsWith('t') && f.endsWith('.js') && !f.includes('record'))
   .sort();
 
 const filter = process.argv[2];
@@ -80,7 +80,7 @@ for (const testFile of filteredTests) {
   try {
     execSync(`node "${testPath}"`, {
       encoding: 'utf-8',
-      timeout: 120000,
+      timeout: testName.includes('record') ? 180000 : 120000,
       stdio: 'inherit',
     });
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

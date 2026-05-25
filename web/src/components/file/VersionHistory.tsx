@@ -37,7 +37,7 @@ export default function VersionHistory({ file, open, onClose }: Props) {
       title={`版本历史 - ${file?.fileName || ''}`}
       open={open}
       onClose={onClose}
-      width={600}
+      size={600}
     >
       <Table
         dataSource={versions}

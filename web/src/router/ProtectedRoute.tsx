@@ -14,7 +14,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Spin size="large" tip="加载中..." />
+        <Spin size="large"><div style={{ padding: 50 }}>加载中...</div></Spin>
       </div>
     );
   }
