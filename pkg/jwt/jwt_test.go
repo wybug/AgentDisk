@@ -150,4 +150,100 @@ func TestGenerateToken_BackwardCompatible(t *testing.T) {
 	if claims.AgentGroupID != "" {
 		t.Errorf("GenerateToken should produce empty agentGroupId, got %s", claims.AgentGroupID)
 	}
+	if claims.Department != "" {
+		t.Errorf("GenerateToken should produce empty department, got %s", claims.Department)
+	}
+}
+
+func TestGenerateTokenWithDepartment(t *testing.T) {
+	token, err := GenerateTokenWithDepartment(testSecret, "user001", "agent001", "group-a", "engineering", 72)
+	if err != nil {
+		t.Fatalf("GenerateTokenWithDepartment failed: %v", err)
+	}
+
+	claims, err := ParseToken(testSecret, token)
+	if err != nil {
+		t.Fatalf("ParseToken failed: %v", err)
+	}
+	if claims.Department != "engineering" {
+		t.Errorf("expected department engineering, got %s", claims.Department)
+	}
+	if claims.AgentGroupID != "group-a" {
+		t.Errorf("expected agentGroupId group-a, got %s", claims.AgentGroupID)
+	}
+}
+
+func TestGenerateTokenWithDepartment_Empty(t *testing.T) {
+	token, err := GenerateTokenWithDepartment(testSecret, "user001", "agent001", "", "", 72)
+	if err != nil {
+		t.Fatalf("GenerateTokenWithDepartment failed: %v", err)
+	}
+
+	claims, err := ParseToken(testSecret, token)
+	if err != nil {
+		t.Fatalf("ParseToken failed: %v", err)
+	}
+	if claims.Department != "" {
+		t.Errorf("expected empty department, got %s", claims.Department)
+	}
+}
+
+func TestGenerateAdminToken(t *testing.T) {
+	token, err := GenerateAdminToken(testSecret, "admin", "admin", 24)
+	if err != nil {
+		t.Fatalf("GenerateAdminToken failed: %v", err)
+	}
+
+	claims, err := ParseAdminToken(testSecret, token)
+	if err != nil {
+		t.Fatalf("ParseAdminToken failed: %v", err)
+	}
+	if claims.Username != "admin" {
+		t.Errorf("expected username admin, got %s", claims.Username)
+	}
+	if claims.Role != "admin" {
+		t.Errorf("expected role admin, got %s", claims.Role)
+	}
+	if !claims.IsAdmin {
+		t.Error("expected IsAdmin to be true")
+	}
+}
+
+func TestParseAdminToken_InvalidToken(t *testing.T) {
+	_, err := ParseAdminToken(testSecret, "invalid-token")
+	if err == nil {
+		t.Fatal("should fail on invalid admin token")
+	}
+}
+
+func TestParseAdminToken_WrongSecret(t *testing.T) {
+	token, _ := GenerateAdminToken(testSecret, "admin", "admin", 24)
+	_, err := ParseAdminToken("wrong-secret", token)
+	if err == nil {
+		t.Fatal("should fail with wrong secret")
+	}
+}
+
+func TestParseAdminToken_ExpiredToken(t *testing.T) {
+	token, _ := GenerateAdminToken(testSecret, "admin", "admin", -1)
+	_, err := ParseAdminToken(testSecret, token)
+	if err == nil {
+		t.Fatal("should fail on expired admin token")
+	}
+}
+
+func TestParseAdminToken_UserJWTRejected(t *testing.T) {
+	token, _ := GenerateToken(testSecret, "user001", "agent001", 72)
+	_, err := ParseAdminToken(testSecret, token)
+	if err == nil {
+		t.Fatal("user JWT should not parse as admin token")
+	}
+}
+
+func TestParseToken_AdminJWTRejected(t *testing.T) {
+	token, _ := GenerateAdminToken(testSecret, "admin", "admin", 72)
+	_, err := ParseToken(testSecret, token)
+	if err == nil {
+		t.Fatal("admin JWT should not parse as user token")
+	}
 }

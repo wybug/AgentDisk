@@ -61,6 +61,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.DiskTagRelation{},
 		&model.DiskShare{},
 		&model.ShareAccessLog{},
+		&model.DiskAdminUser{},
+		&model.DiskAPIKey{},
+		&model.DiskPublicDirectory{},
+		&model.DiskOAuth2Config{},
 	)
 }
 

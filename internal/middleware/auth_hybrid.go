@@ -26,6 +26,7 @@ func HybridAuth(
 				c.Set("userId", claims.UserID)
 				c.Set("agentId", claims.AgentID)
 				c.Set("agentGroupId", claims.AgentGroupID)
+				c.Set("department", claims.Department)
 				c.Set("authMethod", "jwt")
 				c.Next()
 				return

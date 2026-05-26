@@ -68,6 +68,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	recycleRepo := repository.NewRecycleRepo(db)
 	tagRepo := repository.NewTagRepo(db)
 	shareRepo := repository.NewShareRepo(db)
+	adminRepo := repository.NewAdminRepo(db)
 
 	// Services
 	spaceSvc := service.NewSpaceService(spaceRepo)
@@ -79,6 +80,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	tagSvc := service.NewTagService(tagRepo)
 	shareSvc := service.NewShareService(shareRepo, fileRepo, folderRepo)
 	previewSvc := service.NewPreviewService(fileSvc, ossClient)
+	adminSvc := service.NewAdminService(adminRepo)
 
 	// Handlers
 	spaceH := handler.NewSpaceHandler(spaceSvc)
@@ -90,12 +92,28 @@ func Setup(cfg *config.Config) *gin.Engine {
 	tagH := handler.NewTagHandler(tagSvc)
 	shareH := handler.NewShareHandler(shareSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
 	previewH := handler.NewPreviewHandler(previewSvc)
+	adminH := handler.NewAdminHandler(adminSvc, cfg.JWT.Secret, cfg.JWT.ExpireHours)
 
 	// OAuth2 auth routes (public)
 	if authH != nil {
 		r.GET("/auth/login", authH.Login)
 		r.GET("/auth/callback", authH.Callback)
 		r.POST("/auth/logout", authH.Logout)
+	}
+
+	// Admin login (public, no auth required)
+	r.POST("/v1/disk/admin/login", adminH.Login)
+
+	// Admin management routes (AdminAuth + AdminOnly)
+	adminAPI := r.Group("/v1/disk/admin")
+	adminAPI.Use(middleware.AdminAuth(cfg.JWT.Secret))
+	adminAPI.Use(middleware.AdminOnly())
+	{
+		adminAPI.GET("/dashboard", adminH.Dashboard)
+		adminAPI.GET("/users", adminH.ListUsers)
+		adminAPI.POST("/users", adminH.CreateUser)
+		adminAPI.PUT("/users/:username/password", adminH.ChangePassword)
+		adminAPI.DELETE("/users/:username", adminH.DeleteUser)
 	}
 
 	// API v1 group with hybrid auth
