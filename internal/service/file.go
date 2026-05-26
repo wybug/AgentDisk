@@ -101,6 +101,18 @@ func (s *FileService) ensureQuota(userID string) error {
 	return nil
 }
 
+// GetFileRecord returns a file record with ownership check, without generating a presigned URL.
+func (s *FileService) GetFileRecord(userID string, fileID uint64) (*model.DiskFile, error) {
+	file, err := s.fileRepo.GetByID(fileID)
+	if err != nil {
+		return nil, fmt.Errorf("file not found: %w", err)
+	}
+	if file.UserID != userID {
+		return nil, fmt.Errorf("permission denied")
+	}
+	return file, nil
+}
+
 // GetFile handles the request.
 func (s *FileService) GetFile(ctx context.Context, userID string, fileID uint64) (*model.DiskFile, string, error) {
 	file, err := s.fileRepo.GetByID(fileID)

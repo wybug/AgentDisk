@@ -13,6 +13,8 @@ func TestClassify(t *testing.T) {
 	}{
 		{"md", "markdown"},
 		{"markdown", "markdown"},
+		{"html", "html"},
+		{"htm", "html"},
 		{"go", "code"},
 		{"py", "code"},
 		{"js", "code"},
@@ -38,7 +40,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestIsCode(t *testing.T) {
-	codeExts := []string{"go", "py", "js", "ts", "java", "c", "cpp", "rs", "sql", "html", "css", "json", "yaml", "yml"}
+	codeExts := []string{"go", "py", "js", "ts", "java", "c", "cpp", "rs", "sql", "css", "json", "yaml", "yml"}
 	for _, ext := range codeExts {
 		if !isCode(ext) {
 			t.Errorf("isCode(%s) should be true", ext)
@@ -46,6 +48,9 @@ func TestIsCode(t *testing.T) {
 	}
 	if isCode("png") {
 		t.Error("isCode(png) should be false")
+	}
+	if isCode("html") {
+		t.Error("isCode(html) should be false")
 	}
 }
 
@@ -70,5 +75,18 @@ func TestIsText(t *testing.T) {
 	}
 	if isText("go") {
 		t.Error("isText(go) should be false")
+	}
+}
+
+func TestIsHTML(t *testing.T) {
+	for _, ext := range []string{"html", "htm"} {
+		if !isHTML(ext) {
+			t.Errorf("isHTML(%s) should be true", ext)
+		}
+	}
+	for _, ext := range []string{"css", "js", "png", "txt"} {
+		if isHTML(ext) {
+			t.Errorf("isHTML(%s) should be false", ext)
+		}
 	}
 }

@@ -1,5 +1,33 @@
 const { describe, step, assertCondition } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+function uploadViaAPI(filePath) {
+  const fileName = path.basename(filePath);
+  const content = fs.readFileSync(filePath);
+  const base64 = content.toString('base64');
+  return ab.evalStdin(`
+    (function() {
+      var byteString = atob('${base64}');
+      var ab2 = new ArrayBuffer(byteString.length);
+      var ua = new Uint8Array(ab2);
+      for (var i = 0; i < byteString.length; i++) { ua[i] = byteString.charCodeAt(i); }
+      var file = new File([ab2], '${fileName}', { type: 'application/octet-stream' });
+      var formData = new FormData();
+      formData.append('file', file);
+      formData.append('folderId', '0');
+      return fetch('/v1/disk/files/upload', { method: 'POST', body: formData, credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
+          return 'OK: ' + d.data.fileName + ' id=' + d.data.id;
+        })
+        .catch(function(e) { return 'FETCH ERROR: ' + e.message; });
+    })()
+  `);
+}
 
 function goBackToExplorer() {
   ab.evalStdin(`
@@ -87,6 +115,68 @@ describe('T4: 文件预览', () => {
   assertCondition(hasTxtContent, 'T4.5: 纯文本预览正常', hasTxtContent ? '文本内容可见' : 'click=' + txtClicked + ' content=' + pageText2.substring(0, 150));
 
   goBackToExplorer();
+
+  // T4.6 - HTML 文件预览
+  const htmlClicked = clickFileLink('agentdisk-test-upload.html');
+  ab.waitMs(3000);
+  ab.screenshot('t04-06-html-preview');
+
+  const hasIframe = ab.evalStdin(`(function() {
+    var iframe = document.querySelector('iframe');
+    return iframe ? 'iframe found' : 'no iframe';
+  })()`);
+
+  const hasSecurityAlert = ab.pageContainsText('JavaScript') || ab.pageContainsText('禁用');
+  assertCondition(hasIframe.includes('iframe found'), 'T4.6: HTML 预览使用 iframe 渲染', hasIframe);
+  assertCondition(hasSecurityAlert, 'T4.7: HTML 预览显示安全提示', hasSecurityAlert ? '安全提示可见' : '安全提示不可见');
+
+  goBackToExplorer();
+
+  // T4.8 - 安全验证：上传恶意 HTML 并验证沙箱防护
+  const evilHtml = path.join(os.tmpdir(), 'agentdisk-test-xss.html');
+  fs.writeFileSync(evilHtml, '<!DOCTYPE html><html><body>\n<h1>Security Test</h1>\n<script>window.__xss_fired=true;<\/script>\n<img src=x onerror="window.__xss_img=true">\n<form action="https://evil.com"><input type="submit" value="phish"></form>\n<a href="https://evil.com" target="_blank">evil</a>\n</body></html>');
+
+  const evilResult = uploadViaAPI(evilHtml);
+  ab.waitMs(3000);
+
+  ab.evalStdin('location.reload()');
+  ab.waitMs(2000);
+  ab.waitLoad('networkidle');
+
+  const evilClicked = clickFileLink('agentdisk-test-xss.html');
+  ab.waitMs(3000);
+  ab.screenshot('t04-07-security-test');
+
+  // 验证 iframe sandbox 属性
+  const sandboxCheck = ab.evalStdin(`(function() {
+    var iframe = document.querySelector('iframe');
+    if (!iframe) return 'no iframe';
+    var sandbox = iframe.getAttribute('sandbox') || '';
+    var hasAllowSameOrigin = sandbox.includes('allow-same-origin');
+    var hasAllowForms = sandbox.includes('allow-forms');
+    var hasAllowPopups = sandbox.includes('allow-popups');
+    var hasAllowTopNav = sandbox.includes('allow-top-navigation');
+    return 'sandbox=' + JSON.stringify(sandbox) +
+      ' sameOrigin=' + hasAllowSameOrigin +
+      ' forms=' + hasAllowForms +
+      ' popups=' + hasAllowPopups +
+      ' topNav=' + hasAllowTopNav;
+  })()`);
+
+  const noAllowSameOrigin = sandboxCheck.includes('sameOrigin=false');
+  const noAllowForms = sandboxCheck.includes('forms=false');
+  const noAllowPopups = sandboxCheck.includes('popups=false');
+  const noAllowTopNav = sandboxCheck.includes('topNav=false');
+
+  assertCondition(noAllowSameOrigin, 'T4.8: iframe 禁止 allow-same-origin', sandboxCheck);
+  assertCondition(noAllowForms, 'T4.9: iframe 禁止 allow-forms', sandboxCheck);
+  assertCondition(noAllowPopups, 'T4.10: iframe 禁止 allow-popups', sandboxCheck);
+  assertCondition(noAllowTopNav, 'T4.11: iframe 禁止 allow-top-navigation', sandboxCheck);
+
+  try { fs.unlinkSync(evilHtml); } catch {}
+
+  goBackToExplorer();
+  ab.screenshot('t04-08-html-preview-done');
 
   ab.closeBrowser();
 });

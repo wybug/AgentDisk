@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Spin, Image, Button, Typography, Space } from 'antd';
+import { Spin, Image, Button, Typography, Space, Alert } from 'antd';
 import { DownloadOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -31,6 +31,8 @@ export default function FilePreview({ file, onClose }: Props) {
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [content, setContent] = useState<string>('');
+  const [htmlPreviewUrl, setHtmlPreviewUrl] = useState<string | null>(null);
+  const [htmlAllowScripts, setHtmlAllowScripts] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,8 +42,11 @@ export default function FilePreview({ file, onClose }: Props) {
         if (cancelled) return;
         setPreview(result);
 
-        const category = classifyFile(file.fileName);
-        if (['markdown', 'code', 'text'].includes(category) && result.url) {
+        const category = result.fileType || classifyFile(file.fileName);
+        if (category === 'html') {
+          const tokenResult = await fileApi.getDownloadToken(file.id);
+          if (!cancelled) setHtmlPreviewUrl(`/v1/disk/preview/${file.id}/html?t=${encodeURIComponent(tokenResult.downloadToken)}`);
+        } else if (['markdown', 'code', 'text'].includes(category) && result.url) {
           const resp = await fetch(result.url);
           const text = await resp.text();
           if (!cancelled) setContent(text);
@@ -103,6 +108,37 @@ export default function FilePreview({ file, onClose }: Props) {
         <pre style={{ padding: 16, background: '#f5f5f5', borderRadius: 8, maxHeight: 600, overflow: 'auto' }}>
           {content}
         </pre>
+      )}
+
+      {category === 'html' && htmlPreviewUrl && (
+        <div>
+          {!htmlAllowScripts && (
+            <Alert
+              message="JavaScript 已禁用"
+              description="HTML 预览默认禁用 JavaScript 以确保安全。仅在信任此文件时可手动启用。"
+              type="warning"
+              showIcon
+              action={
+                <Button size="small" danger onClick={() => setHtmlAllowScripts(true)}>
+                  启用脚本
+                </Button>
+              }
+              style={{ marginBottom: 12 }}
+            />
+          )}
+          <iframe
+            src={htmlPreviewUrl}
+            sandbox={htmlAllowScripts ? 'allow-scripts' : ''}
+            style={{
+              width: '100%',
+              height: 600,
+              border: '1px solid #d9d9d9',
+              borderRadius: 8,
+            }}
+            title={`Preview of ${file.fileName}`}
+            referrerPolicy="no-referrer"
+          />
+        </div>
       )}
 
       {category === 'binary' && (
