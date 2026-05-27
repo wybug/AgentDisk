@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, Space, message, Tag, Typography, Popconfirm } from 'antd';
+import { Table, Button, Modal, Form, Input, Space, message, Tag, Typography, Popconfirm, Tooltip } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import { adminApi } from '@/api/admin';
 
@@ -19,6 +19,7 @@ export default function ApiKeyManager() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<string>('');
+  const [creating, setCreating] = useState(false);
   const [form] = Form.useForm();
 
   const load = async () => {
@@ -33,6 +34,7 @@ export default function ApiKeyManager() {
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/set-state-in-effect
 
   const handleCreate = async (values: { name: string; department?: string }) => {
+    setCreating(true);
     try {
       const res = await adminApi.createApiKey(values);
       setCreatedKey(res.data.key);
@@ -41,6 +43,7 @@ export default function ApiKeyManager() {
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : '创建失败');
     }
+    setCreating(false);
   };
 
   const handleRevoke = async (id: number) => {
@@ -51,9 +54,13 @@ export default function ApiKeyManager() {
     } catch { message.error('吊销失败'); }
   };
 
-  const copyKey = () => {
-    navigator.clipboard.writeText(createdKey);
-    message.success('已复制');
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success('已复制到剪贴板');
+    } catch {
+      message.error('复制失败，请手动复制');
+    }
   };
 
   return (
@@ -63,7 +70,18 @@ export default function ApiKeyManager() {
       </div>
       <Table dataSource={keys} rowKey="id" loading={loading} pagination={false}>
         <Table.Column title="名称" dataIndex="keyName" />
-        <Table.Column title="前缀" dataIndex="keyPrefix" render={(v: string) => <code>{v}...</code>} />
+        <Table.Column
+          title="前缀"
+          dataIndex="keyPrefix"
+          render={(v: string) => (
+            <Space size={4}>
+              <code>{v}...</code>
+              <Tooltip title="复制前缀">
+                <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(v + '...')} />
+              </Tooltip>
+            </Space>
+          )}
+        />
         <Table.Column title="部门" dataIndex="department" render={(v: string) => v || '全部'} />
         <Table.Column title="状态" dataIndex="isRevoked" render={(v: boolean) => <Tag color={v ? 'red' : 'green'}>{v ? '已吊销' : '有效'}</Tag>} />
         <Table.Column title="创建时间" dataIndex="createdAt" />
@@ -80,23 +98,25 @@ export default function ApiKeyManager() {
         title="创建 API Key"
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
+        onOk={() => form.submit()}
+        confirmLoading={creating}
         footer={createdKey ? <Button onClick={() => setModalOpen(false)}>关闭</Button> : undefined}
       >
         {createdKey ? (
           <div>
             <Typography.Text type="warning">请立即复制，此 Key 仅显示一次：</Typography.Text>
             <Space style={{ marginTop: 8 }}>
-              <Input.TextArea value={createdKey} rows={2} readOnly style={{ fontFamily: 'monospace' }} />
-              <Button icon={<CopyOutlined />} onClick={copyKey}>复制</Button>
+              <Input.TextArea value={createdKey} rows={2} readOnly style={{ fontFamily: 'monospace', width: 360 }} />
+              <Button icon={<CopyOutlined />} onClick={() => copyToClipboard(createdKey)}>复制</Button>
             </Space>
           </div>
         ) : (
           <Form form={form} onFinish={handleCreate} layout="vertical">
             <Form.Item name="name" label="Key 名称" rules={[{ required: true }]}>
-              <Input />
+              <Input placeholder="请输入Key 名称" />
             </Form.Item>
             <Form.Item name="department" label="部门（留空=全部）">
-              <Input />
+              <Input placeholder="请输入部门" />
             </Form.Item>
           </Form>
         )}

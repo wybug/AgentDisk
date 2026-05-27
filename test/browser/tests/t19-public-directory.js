@@ -399,45 +399,55 @@ describe('T19: 公共目录 + Admin 管理 + API Key', () => {
   ab.screenshot('t19-13-ui-create-key-modal');
 
   if (hasKeyModal) {
-    ab.jsFill('Key 名称', 'ui-test-key');
+    var keyInputSnap = ab.snapshot();
+    var keyInputRef = ab.findRefByPlaceholder(keyInputSnap, '请输入Key 名称');
+    if (keyInputRef) {
+      ab.fill(keyInputRef, 'ui-test-key');
+    } else {
+      ab.jsFill('请输入Key 名称', 'ui-test-key');
+    }
     ab.waitMs(300);
 
-    // Submit the form
-    var submitKeyForm = ab.evalStdin(`
-      (function() {
-        var btns = document.querySelectorAll('.ant-modal .ant-btn-primary');
-        for (var i = 0; i < btns.length; i++) {
-          if (btns[i].textContent.includes('确 定') || btns[i].textContent.includes('OK')) {
-            btns[i].click();
-            return 'submitted';
-          }
-        }
-        return 'not found';
-      })()
-    `);
-    ab.waitMs(1500);
+    // Submit the form via click
+    var keyFormSnap = ab.snapshot();
+    var okBtnRef = ab.findRefByRole(keyFormSnap, 'button', '确 定');
+    if (okBtnRef) {
+      ab.click(okBtnRef);
+    } else {
+      ab.jsClickBtn('确 定');
+    }
+    ab.waitMs(2000);
 
-    // Verify the full key is displayed (only shown once)
-    var hasKeyDisplay = ab.pageContainsText('adk_');
-    step('TC-66: UI 创建 API Key 成功，显示完整 key', hasKeyDisplay || true, 'submitted=' + submitKeyForm + ' hasAdk=' + hasKeyDisplay);
+    // Verify the full key is displayed (only shown once) - check for Modal success text
+    var hasKeyDisplay = ab.pageContainsText('请立即复制') && ab.pageContainsText('adk_');
+    step('TC-66: UI 创建 API Key 成功，显示完整 key', hasKeyDisplay, 'okBtnRef=' + !!okBtnRef + ' hasAdk=' + hasKeyDisplay);
     ab.screenshot('t19-14-ui-create-key-result');
 
     // Verify copy button exists
     var hasCopyBtn = ab.pageContainsText('复制');
-    step('TC-66: 显示"复制"按钮', hasCopyBtn || true);
+    step('TC-66: 显示"复制"按钮', hasCopyBtn, 'hasCopyBtn=' + hasCopyBtn);
+
+    // Click copy button
+    if (hasCopyBtn) {
+      var copySnap = ab.snapshot();
+      var copyBtnRef = ab.findRefByText(copySnap, '复制');
+      if (copyBtnRef) {
+        ab.click(copyBtnRef);
+        ab.waitMs(500);
+        step('TC-66: 点击复制按钮', true);
+      }
+    }
 
     // Close modal
-    var closeModal = ab.evalStdin(`
-      (function() {
-        var btns = document.querySelectorAll('.ant-modal button');
-        for (var i = 0; i < btns.length; i++) {
-          if (btns[i].textContent.includes('关闭')) { btns[i].click(); return 'closed'; }
-        }
-        return 'not found';
-      })()
-    `);
+    var closeSnap = ab.snapshot();
+    var closeBtnRef = ab.findRefByText(closeSnap, '关闭');
+    if (closeBtnRef) {
+      ab.click(closeBtnRef);
+    } else {
+      ab.jsClickBtn('关闭');
+    }
     ab.waitMs(500);
-    step('TC-66: 关闭 API Key Modal', closeModal === 'closed' || true, closeModal);
+    step('TC-66: 关闭 API Key Modal', true, 'closeBtnRef=' + !!closeBtnRef);
   }
 
   // ── TC-21: API Key 认证访问公共目录（通过 Vite 代理，避免 CORS 问题）──
