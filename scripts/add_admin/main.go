@@ -8,14 +8,12 @@ import (
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/service"
 	"gorm.io/driver/mysql"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
 func main() {
-	driver := flag.String("driver", "sqlite", "Database driver: mysql or sqlite")
-	dsn := flag.String("dsn", "agentdisk.db", "Database DSN (SQLite path or MySQL DSN)")
+	dsn := flag.String("dsn", "root:@tcp(127.0.0.1:3306)/agentdisk?charset=utf8mb4&parseTime=True&loc=Local", "MySQL DSN")
 	username := flag.String("username", "", "Admin username (required)")
 	password := flag.String("password", "", "Admin password (required)")
 	role := flag.String("role", "admin", "Admin role (admin or super_admin)")
@@ -23,30 +21,21 @@ func main() {
 	flag.Parse()
 
 	if *username == "" || *password == "" {
-		fmt.Fprintln(os.Stderr, "Usage: add_admin -driver <mysql|sqlite> -dsn <dsn> -username <name> -password <pass> [-role <role>] [-displayName <name>]")
+		fmt.Fprintln(os.Stderr, "Usage: add_admin -dsn <mysql-dsn> -username <name> -password <pass> [-role <role>] [-displayName <name>]")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Examples:")
-		fmt.Fprintln(os.Stderr, "  SQLite:   add_admin -driver sqlite -dsn agentdisk.db -username admin -password admin123")
-		fmt.Fprintln(os.Stderr, "  MySQL:    add_admin -driver mysql -dsn 'root:@tcp(172.20.6.37:3306)/agentdisk?parseTime=true' -username admin -password admin123")
+		fmt.Fprintln(os.Stderr, "Example:")
+		fmt.Fprintln(os.Stderr, "  add_admin -dsn 'root:@tcp(172.20.6.37:3306)/agentdisk?parseTime=true' -username admin -password admin123")
 		os.Exit(1)
 	}
 
-	var dialector gorm.Dialector
-	switch *driver {
-	case "mysql":
-		dialector = mysql.Open(*dsn)
-	default:
-		dialector = sqlite.Open(*dsn)
-	}
-
-	db, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := gorm.Open(mysql.Open(*dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Auto-migrate admin table
-	if err := db.AutoMigrate(&model.DiskAdminUser{}); err != nil {
+	if err = db.AutoMigrate(&model.DiskAdminUser{}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error migrating: %v\n", err)
 		os.Exit(1)
 	}
