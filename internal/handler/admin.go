@@ -51,6 +51,38 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	})
 }
 
+// Bootstrap handles POST /v1/disk/admin/bootstrap.
+// Creates the first admin user when no admins exist yet. Public route.
+func (h *AdminHandler) Bootstrap(c *gin.Context) {
+	count, err := h.adminSvc.Count()
+	if err != nil {
+		response.InternalError(c, "failed to check admin count")
+		return
+	}
+	if count > 0 {
+		response.Forbidden(c, "admin already exists, use login instead")
+		return
+	}
+
+	var req createAdminRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "username and password (min 6 chars) required")
+		return
+	}
+
+	admin, err := h.adminSvc.CreateAdmin(req.Username, req.Password, "admin", req.DisplayName, "bootstrap")
+	if err != nil {
+		response.InternalError(c, "failed to create admin")
+		return
+	}
+
+	response.Created(c, gin.H{
+		"username": admin.Username,
+		"role":     admin.Role,
+		"message":  "first admin created successfully",
+	})
+}
+
 type createAdminRequest struct {
 	Username    string `json:"username" binding:"required"`
 	Password    string `json:"password" binding:"required,min=6"`
@@ -146,8 +178,8 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 func (h *AdminHandler) Dashboard(c *gin.Context) {
 	admins, _ := h.adminSvc.ListAdmins()
 	response.OK(c, gin.H{
-		"adminUser": c.GetString("adminUser"),
-		"adminRole": c.GetString("adminRole"),
+		"adminUser":  c.GetString("adminUser"),
+		"adminRole":  c.GetString("adminRole"),
 		"adminCount": len(admins),
 	})
 }

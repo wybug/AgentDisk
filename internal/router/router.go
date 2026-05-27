@@ -69,6 +69,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	tagRepo := repository.NewTagRepo(db)
 	shareRepo := repository.NewShareRepo(db)
 	adminRepo := repository.NewAdminRepo(db)
+	apiKeyRepo := repository.NewAPIKeyRepo(db)
+	publicDirRepo := repository.NewPublicDirectoryRepo(db)
+	oauth2ConfigRepo := repository.NewOAuth2ConfigRepo(db)
 
 	// Services
 	spaceSvc := service.NewSpaceService(spaceRepo)
@@ -81,6 +84,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	shareSvc := service.NewShareService(shareRepo, fileRepo, folderRepo)
 	previewSvc := service.NewPreviewService(fileSvc, ossClient)
 	adminSvc := service.NewAdminService(adminRepo)
+	apiKeySvc := service.NewAPIKeyService(apiKeyRepo)
+	publicDirSvc := service.NewPublicDirectoryService(publicDirRepo, folderRepo)
+	oauth2ConfigSvc := service.NewOAuth2ConfigService(oauth2ConfigRepo)
 
 	// Handlers
 	spaceH := handler.NewSpaceHandler(spaceSvc)
@@ -93,6 +99,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	shareH := handler.NewShareHandler(shareSvc, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
 	previewH := handler.NewPreviewHandler(previewSvc)
 	adminH := handler.NewAdminHandler(adminSvc, cfg.JWT.Secret, cfg.JWT.ExpireHours)
+	apiKeyH := handler.NewAPIKeyHandler(apiKeySvc)
+	publicDirH := handler.NewPublicDirectoryHandler(publicDirSvc)
+	oauth2ConfigH := handler.NewOAuth2ConfigHandler(oauth2ConfigSvc)
 
 	// OAuth2 auth routes (public)
 	if authH != nil {
@@ -103,6 +112,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 
 	// Admin login (public, no auth required)
 	r.POST("/v1/disk/admin/login", adminH.Login)
+	r.POST("/v1/disk/admin/bootstrap", adminH.Bootstrap)
 
 	// Admin management routes (AdminAuth + AdminOnly)
 	adminAPI := r.Group("/v1/disk/admin")
@@ -114,11 +124,26 @@ func Setup(cfg *config.Config) *gin.Engine {
 		adminAPI.POST("/users", adminH.CreateUser)
 		adminAPI.PUT("/users/:username/password", adminH.ChangePassword)
 		adminAPI.DELETE("/users/:username", adminH.DeleteUser)
+
+		keys := adminAPI.Group("/api-keys")
+		keys.POST("", apiKeyH.Create)
+		keys.GET("", apiKeyH.List)
+		keys.DELETE("/:id", apiKeyH.Revoke)
+
+		pd := adminAPI.Group("/public-directories")
+		pd.POST("", publicDirH.Create)
+		pd.GET("", publicDirH.List)
+		pd.PUT("/:id", publicDirH.Update)
+		pd.DELETE("/:id", publicDirH.Delete)
+
+		adminAPI.GET("/oauth2", oauth2ConfigH.Get)
+		adminAPI.PUT("/oauth2", oauth2ConfigH.Update)
+		adminAPI.POST("/oauth2/test", oauth2ConfigH.Test)
 	}
 
 	// API v1 group with hybrid auth
 	v1 := r.Group("/v1/disk")
-	v1.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret))
+	v1.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret, apiKeySvc))
 	// Space
 	v1.GET("/space", spaceH.GetSpace)
 
@@ -165,7 +190,13 @@ func Setup(cfg *config.Config) *gin.Engine {
 
 	// Preview
 	v1.GET("/preview/:id", previewH.PreviewFile)
-		v1.GET("/preview/:id/html", previewH.PreviewHTMLFile)
+	v1.GET("/preview/:id/html", previewH.PreviewHTMLFile)
+
+	// Public directories (browse, all authenticated users + API key)
+	pdBrowse := v1.Group("/public-directories")
+	pdBrowse.GET("", publicDirH.ListVisible)
+	pdBrowse.GET("/:id", publicDirH.Get)
+	pdBrowse.GET("/:id/folders", publicDirH.ListSubFolders)
 
 	// Public routes (no auth required)
 	r.GET("/v1/disk/share/:code", shareH.GetShare)

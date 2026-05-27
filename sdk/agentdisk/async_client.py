@@ -12,6 +12,7 @@ from .api import (
     _AsyncFolderAPI,
     _AsyncPermissionAPI,
     _AsyncPreviewAPI,
+    _AsyncPublicDirectoryAPI,
     _AsyncRecycleAPI,
     _AsyncShareAPI,
     _AsyncSpaceAPI,
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from .models.folder import DiskFolder
     from .models.permission import DiskPermission
     from .models.preview import PreviewResult
+    from .models.public_directory import DiskPublicDirectory
     from .models.recycle import DiskRecycleBin
     from .models.share import DiskShare
     from .models.space import UserDisk
@@ -47,21 +49,26 @@ class AsyncAgentDiskClient:
     def __init__(
         self,
         base_url: str,
-        token: str,
+        token: str = "",
+        api_key: str = "",
         timeout: float = 30.0,
         cache_ttl: float = 60.0,
     ):
+        if not token and not api_key:
+            raise ValueError("either token or api_key must be provided")
         self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout)
         self._token = token
-        self._folders = _AsyncFolderAPI(self._http, token)
-        self._files = _AsyncFileAPI(self._http, token)
-        self._permissions = _AsyncPermissionAPI(self._http, token)
-        self._versions = _AsyncVersionAPI(self._http, token)
-        self._recycle = _AsyncRecycleAPI(self._http, token)
-        self._tags = _AsyncTagAPI(self._http, token)
-        self._shares = _AsyncShareAPI(self._http, token)
-        self._preview = _AsyncPreviewAPI(self._http, token)
-        self._space = _AsyncSpaceAPI(self._http, token)
+        self._api_key = api_key
+        self._folders = _AsyncFolderAPI(self._http, token=token, api_key=api_key)
+        self._files = _AsyncFileAPI(self._http, token=token, api_key=api_key)
+        self._permissions = _AsyncPermissionAPI(self._http, token=token, api_key=api_key)
+        self._versions = _AsyncVersionAPI(self._http, token=token, api_key=api_key)
+        self._recycle = _AsyncRecycleAPI(self._http, token=token, api_key=api_key)
+        self._tags = _AsyncTagAPI(self._http, token=token, api_key=api_key)
+        self._shares = _AsyncShareAPI(self._http, token=token, api_key=api_key)
+        self._preview = _AsyncPreviewAPI(self._http, token=token, api_key=api_key)
+        self._space = _AsyncSpaceAPI(self._http, token=token, api_key=api_key)
+        self._public_dirs = _AsyncPublicDirectoryAPI(self._http, token=token, api_key=api_key)
         self._resolver = _AsyncPathResolver(self._folders, self._files, cache_ttl=cache_ttl)
 
     # --- Folder operations ---
@@ -295,6 +302,14 @@ class AsyncAgentDiskClient:
 
     async def get_space(self) -> UserDisk:
         return await self._space.get()
+
+    # --- Public directory operations ---
+
+    async def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
+        return await self._public_dirs.list_visible()
+
+    async def get_public_directory(self, public_dir_id: int) -> DiskPublicDirectory:
+        return await self._public_dirs.get(public_dir_id)
 
     # --- Cache management ---
 

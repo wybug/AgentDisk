@@ -17,4 +17,5 @@ type DiskAPIKey struct {
 	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"createdAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskAPIKey) TableName() string { return "disk_api_key" }

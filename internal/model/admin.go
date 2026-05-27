@@ -15,4 +15,5 @@ type DiskAdminUser struct {
 	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskAdminUser) TableName() string { return "disk_admin_user" }

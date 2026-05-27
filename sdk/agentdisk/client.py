@@ -12,6 +12,7 @@ from .api import (
     _FolderAPI,
     _PermissionAPI,
     _PreviewAPI,
+    _PublicDirectoryAPI,
     _RecycleAPI,
     _ShareAPI,
     _SpaceAPI,
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from .models.folder import DiskFolder
     from .models.permission import DiskPermission
     from .models.preview import PreviewResult
+    from .models.public_directory import DiskPublicDirectory
     from .models.recycle import DiskRecycleBin
     from .models.share import DiskShare
     from .models.space import UserDisk
@@ -48,21 +50,26 @@ class AgentDiskClient:
     def __init__(
         self,
         base_url: str,
-        token: str,
+        token: str = "",
+        api_key: str = "",
         timeout: float = 30.0,
         cache_ttl: float = 60.0,
     ):
+        if not token and not api_key:
+            raise ValueError("either token or api_key must be provided")
         self._http = httpx.Client(base_url=base_url, timeout=timeout)
         self._token = token
-        self._folders = _FolderAPI(self._http, token)
-        self._files = _FileAPI(self._http, token)
-        self._permissions = _PermissionAPI(self._http, token)
-        self._versions = _VersionAPI(self._http, token)
-        self._recycle = _RecycleAPI(self._http, token)
-        self._tags = _TagAPI(self._http, token)
-        self._shares = _ShareAPI(self._http, token)
-        self._preview = _PreviewAPI(self._http, token)
-        self._space = _SpaceAPI(self._http, token)
+        self._api_key = api_key
+        self._folders = _FolderAPI(self._http, token=token, api_key=api_key)
+        self._files = _FileAPI(self._http, token=token, api_key=api_key)
+        self._permissions = _PermissionAPI(self._http, token=token, api_key=api_key)
+        self._versions = _VersionAPI(self._http, token=token, api_key=api_key)
+        self._recycle = _RecycleAPI(self._http, token=token, api_key=api_key)
+        self._tags = _TagAPI(self._http, token=token, api_key=api_key)
+        self._shares = _ShareAPI(self._http, token=token, api_key=api_key)
+        self._preview = _PreviewAPI(self._http, token=token, api_key=api_key)
+        self._space = _SpaceAPI(self._http, token=token, api_key=api_key)
+        self._public_dirs = _PublicDirectoryAPI(self._http, token=token, api_key=api_key)
         self._resolver = _PathResolver(self._folders, self._files, cache_ttl=cache_ttl)
 
     # --- Folder operations ---
@@ -296,6 +303,14 @@ class AgentDiskClient:
 
     def get_space(self) -> UserDisk:
         return self._space.get()
+
+    # --- Public directory operations ---
+
+    def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
+        return self._public_dirs.list_visible()
+
+    def get_public_directory(self, public_dir_id: int) -> DiskPublicDirectory:
+        return self._public_dirs.get(public_dir_id)
 
     # --- Cache management ---
 

@@ -6,6 +6,7 @@ interface AuthState {
   isLoading: boolean;
   userName: string | null;
   userId: string | null;
+  department: string | null;
   checkAuth: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -15,6 +16,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   userName: null,
   userId: null,
+  department: null,
 
   checkAuth: async () => {
     try {
@@ -35,7 +37,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       // ignore
     }
-    set({ isAuthenticated: false, userName: null, userId: null });
+    set({ isAuthenticated: false, userName: null, userId: null, department: null });
     window.location.href = '/auth/login';
   },
 }));

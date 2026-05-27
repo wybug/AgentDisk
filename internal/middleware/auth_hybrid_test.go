@@ -1,21 +1,37 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/agentdisk/agent-disk/internal/handler"
+	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/pkg/download_token"
 	"github.com/agentdisk/agent-disk/pkg/jwt"
 	"github.com/agentdisk/agent-disk/pkg/oauth2client"
 	"github.com/gin-gonic/gin"
 )
 
+// mockAPIKeyValidator is a test mock for APIKeyValidator.
+type mockAPIKeyValidator struct {
+	key *model.DiskAPIKey
+	err error
+}
+
+func (m *mockAPIKeyValidator) ValidateKey(_ string) (*model.DiskAPIKey, error) {
+	return m.key, m.err
+}
+
 func setupHybridRouter(jwtSecret string, authHandler *handler.AuthHandler, dlSecret string) *gin.Engine {
+	return setupHybridRouterWithAPIKey(jwtSecret, authHandler, dlSecret, nil)
+}
+
+func setupHybridRouterWithAPIKey(jwtSecret string, authHandler *handler.AuthHandler, dlSecret string, apiKeySvc APIKeyValidator) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(HybridAuth(jwtSecret, authHandler, dlSecret))
+	r.Use(HybridAuth(jwtSecret, authHandler, dlSecret, apiKeySvc))
 	r.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"userId":     c.GetString("userId"),
@@ -25,7 +41,7 @@ func setupHybridRouter(jwtSecret string, authHandler *handler.AuthHandler, dlSec
 	return r
 }
 
-// ── JWT Bearer 认证路径 ──
+// ── JWT Bearer ──
 
 func TestHybridAuth_JWTValid(t *testing.T) {
 	secret := "test_jwt_secret"
@@ -77,7 +93,7 @@ func TestHybridAuth_JWTSetsContext(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(HybridAuth(secret, nil, ""))
+	r.Use(HybridAuth(secret, nil, "", nil))
 	r.GET("/test", func(c *gin.Context) {
 		if c.GetString("userId") != "user_ctx_test" {
 			t.Errorf("userId = %q, want user_ctx_test", c.GetString("userId"))
@@ -103,7 +119,7 @@ func TestHybridAuth_JWTWithAgentGroupId(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(HybridAuth(secret, nil, ""))
+	r.Use(HybridAuth(secret, nil, "", nil))
 	r.GET("/test", func(c *gin.Context) {
 		if c.GetString("agentGroupId") != "group-a" {
 			t.Errorf("agentGroupId = %q, want group-a", c.GetString("agentGroupId"))
@@ -141,7 +157,7 @@ func TestIsAgentRequest(t *testing.T) {
 	})
 }
 
-// ── OAuth2 Session 认证路径 ──
+// ── OAuth2 Session ──
 
 func TestHybridAuth_OAuth2Session_NilHandler(t *testing.T) {
 	r := setupHybridRouter("secret", nil, "")
@@ -201,7 +217,7 @@ func TestHybridAuth_OAuth2Session_NoCookie(t *testing.T) {
 	}
 }
 
-// ── 下载令牌认证路径 ──
+// ── Download Token ──
 
 func TestHybridAuth_DownloadTokenValid(t *testing.T) {
 	secret := "test_dl_secret"
@@ -259,7 +275,96 @@ func TestHybridAuth_DownloadTokenWrongSecret(t *testing.T) {
 	}
 }
 
-// ── 全部失败 → 401 ──
+// ── API Key ──
+
+func TestHybridAuth_APIKeyHeader(t *testing.T) {
+	mock := &mockAPIKeyValidator{
+		key: &model.DiskAPIKey{
+			Scope:      "public_read",
+			Department: "engineering",
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(HybridAuth("secret", nil, "", mock))
+	r.GET("/test", func(c *gin.Context) {
+		if c.GetString("userId") != "__system_public__" {
+			t.Errorf("userId = %q, want __system_public__", c.GetString("userId"))
+		}
+		if c.GetString("authMethod") != "api_key" {
+			t.Errorf("authMethod = %q, want api_key", c.GetString("authMethod"))
+		}
+		if c.GetString("apiKeyScope") != "public_read" {
+			t.Errorf("apiKeyScope = %q, want public_read", c.GetString("apiKeyScope"))
+		}
+		if c.GetString("department") != "engineering" {
+			t.Errorf("department = %q, want engineering", c.GetString("department"))
+		}
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-API-Key", "adk_testkey123")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestHybridAuth_APIKeyQueryParam(t *testing.T) {
+	mock := &mockAPIKeyValidator{
+		key: &model.DiskAPIKey{
+			Scope:      "public_read",
+			Department: "",
+		},
+	}
+
+	r := setupHybridRouterWithAPIKey("secret", nil, "", mock)
+	req := httptest.NewRequest("GET", "/test?apiKey=adk_testkey123", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestHybridAuth_APIKeyInvalid(t *testing.T) {
+	mock := &mockAPIKeyValidator{
+		key: nil,
+		err: fmt.Errorf("invalid key"),
+	}
+
+	r := setupHybridRouterWithAPIKey("secret", nil, "", mock)
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-API-Key", "adk_invalid")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+}
+
+func TestHybridAuth_APIKeyNilService(t *testing.T) {
+	r := setupHybridRouter("secret", nil, "")
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-API-Key", "adk_somekey")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (nil apiKeySvc)", w.Code)
+	}
+}
+
+// ── No Auth ──
 
 func TestHybridAuth_NoAuth(t *testing.T) {
 	r := setupHybridRouter("secret", nil, "dl_secret")
@@ -311,7 +416,7 @@ func TestHybridAuth_EmptyDLSecret(t *testing.T) {
 	}
 }
 
-// ── 优先级测试 ──
+// ── Priority ──
 
 func TestHybridAuth_JWTPriorityOverDownloadToken(t *testing.T) {
 	secret := "test_jwt_secret"

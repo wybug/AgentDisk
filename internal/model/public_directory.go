@@ -16,4 +16,5 @@ type DiskPublicDirectory struct {
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskPublicDirectory) TableName() string { return "disk_public_directory" }

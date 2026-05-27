@@ -15,6 +15,7 @@ type adminRepo interface {
 	Delete(username string) error
 	ListAll() ([]model.DiskAdminUser, error)
 	UpdatePassword(username, passwordHash string) error
+	Count() (int64, error)
 }
 
 // AdminService handles admin operations.
@@ -71,6 +72,11 @@ func (s *AdminService) CreateAdmin(username, password, role, displayName, create
 // ListAdmins returns all admin users.
 func (s *AdminService) ListAdmins() ([]model.DiskAdminUser, error) {
 	return s.repo.ListAll()
+}
+
+// Count returns the number of admin users.
+func (s *AdminService) Count() (int64, error) {
+	return s.repo.Count()
 }
 
 // DeleteAdmin removes an admin user.

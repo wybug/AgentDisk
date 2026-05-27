@@ -7,4 +7,5 @@ export interface OAuth2Client {
 export interface SessionUser {
   userId: string;
   userName: string;
+  department?: string;
 }

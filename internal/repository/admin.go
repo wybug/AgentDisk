@@ -41,6 +41,13 @@ func (r *AdminRepo) ListAll() ([]model.DiskAdminUser, error) {
 	return admins, err
 }
 
+// Count returns the number of admin users.
+func (r *AdminRepo) Count() (int64, error) {
+	var n int64
+	err := r.db.Model(&model.DiskAdminUser{}).Count(&n).Error
+	return n, err
+}
+
 // UpdatePassword updates the password hash for an admin user.
 func (r *AdminRepo) UpdatePassword(username, passwordHash string) error {
 	return r.db.Model(&model.DiskAdminUser{}).

@@ -20,4 +20,5 @@ type DiskOAuth2Config struct {
 	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
+// TableName handles the TableName endpoint.
 func (DiskOAuth2Config) TableName() string { return "disk_oauth2_config" }

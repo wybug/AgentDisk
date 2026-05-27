@@ -52,7 +52,7 @@ func (s *PreviewService) PreviewHTML(ctx context.Context, userID string, fileID 
 	if err != nil {
 		return "", fmt.Errorf("download from oss: %w", err)
 	}
-	defer obj.Close()
+	defer func() { _ = obj.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(obj, maxHTMLSize))
 	if err != nil {
