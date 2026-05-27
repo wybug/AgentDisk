@@ -23,7 +23,7 @@ from .api import (
 if TYPE_CHECKING:
     import builtins
 
-    from .models.file import DiskFile, FileDetailResponse
+    from .models.file import DiskFile, DownloadByTokenResponse, FileDetailResponse
     from .models.folder import DiskFolder
     from .models.permission import DiskPermission
     from .models.preview import PreviewResult
@@ -69,7 +69,9 @@ class AsyncAgentDiskClient:
         self._preview = _AsyncPreviewAPI(self._http, token=token, api_key=api_key)
         self._space = _AsyncSpaceAPI(self._http, token=token, api_key=api_key)
         self._public_dirs = _AsyncPublicDirectoryAPI(self._http, token=token, api_key=api_key)
-        self._resolver = _AsyncPathResolver(self._folders, self._files, cache_ttl=cache_ttl)
+        self._resolver = _AsyncPathResolver(
+            self._folders, self._files, cache_ttl=cache_ttl, public_dirs=self._public_dirs
+        )
 
     # --- Folder operations ---
 
@@ -93,6 +95,10 @@ class AsyncAgentDiskClient:
         folder = await self._resolver.resolve_folder(path)
         await self._folders.delete(folder.id)
         self._resolver.invalidate_cache(path)
+
+    async def get_folder_ancestors(self, path: str) -> builtins.list[DiskFolder]:
+        folder = await self._resolver.resolve_folder(path)
+        return await self._folders.ancestors(folder.id)
 
     # --- File operations ---
 
@@ -161,6 +167,19 @@ class AsyncAgentDiskClient:
         file_obj = await self._resolver.resolve_file(path)
         await self._files.delete(file_obj.id)
 
+    async def download_file(self, path: str) -> DownloadByTokenResponse:
+        file_obj = await self._resolver.resolve_file(path)
+        token_resp = await self._files.create_download_token(file_obj.id)
+        return await self._files.download_by_token(token_resp.download_token)
+
+    async def download_file_to(self, path: str, local_path: str) -> str:
+        result = await self.download_file(path)
+        resp = await self._http.get(result.download_url)
+        resp.raise_for_status()
+        with open(local_path, "wb") as f:
+            f.write(resp.content)
+        return local_path
+
     # --- Share operations ---
 
     async def create_share(
@@ -199,6 +218,12 @@ class AsyncAgentDiskClient:
 
     async def access_share(self, code: str, extract_code: str = "") -> DiskShare:
         return await self._shares.access(code, extract_code)
+
+    async def download_shared_file(
+        self, code: str, resource_id: int, extract_code: str = ""
+    ) -> DownloadByTokenResponse:
+        token_resp = await self._shares.download(code, resource_id, extract_code=extract_code)
+        return await self._files.download_by_token(token_resp.download_token)
 
     # --- Permission operations ---
 
@@ -308,8 +333,16 @@ class AsyncAgentDiskClient:
     async def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
         return await self._public_dirs.list_visible()
 
-    async def get_public_directory(self, public_dir_id: int) -> DiskPublicDirectory:
-        return await self._public_dirs.get(public_dir_id)
+    async def get_public_directory(self, path: str) -> DiskPublicDirectory:
+        return await self._resolver.resolve_public_directory(path)
+
+    async def list_public_directory_folders(self, path: str) -> builtins.list[DiskFolder]:
+        _, folder_id = await self._resolver.resolve_public_path(path)
+        return await self._folders.list(folder_id)
+
+    async def list_public_directory_files(self, path: str) -> builtins.list[DiskFile]:
+        _, folder_id = await self._resolver.resolve_public_path(path)
+        return await self._files.list(folder_id)
 
     # --- Cache management ---
 

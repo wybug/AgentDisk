@@ -11,8 +11,10 @@ from .exceptions import NotFoundError
 if TYPE_CHECKING:
     from .api.file import _AsyncFileAPI, _FileAPI
     from .api.folder import _AsyncFolderAPI, _FolderAPI
+    from .api.public_directory import _AsyncPublicDirectoryAPI, _PublicDirectoryAPI
     from .models.file import DiskFile
     from .models.folder import DiskFolder
+    from .models.public_directory import DiskPublicDirectory
 
 
 class PathCache:
@@ -78,10 +80,12 @@ class _PathResolver:
         folders: _FolderAPI,
         files: _FileAPI,
         cache_ttl: float = 60.0,
+        public_dirs: _PublicDirectoryAPI | None = None,
     ) -> None:
         self._folders = folders
         self._files = files
         self._cache = PathCache(ttl=cache_ttl)
+        self._public_dirs = public_dirs
 
     def resolve_folder_id(self, path: str) -> int:
         if not _normalize(path):
@@ -142,6 +146,36 @@ class _PathResolver:
             raise NotFoundError(code=409, message=f"Folder already exists: {path}")
         return self._folders.get(parent_id)
 
+    # --- Public directory resolution ---
+
+    def resolve_public_directory(self, path: str) -> DiskPublicDirectory:
+        if self._public_dirs is None:
+            raise NotFoundError(code=404, message="Public directory API not configured")
+        display_name = _normalize(path).split("/")[0]
+        dirs = self._public_dirs.list_visible()
+        for d in dirs:
+            if d.display_name == display_name:
+                return d
+        raise NotFoundError(code=404, message=f"Public directory not found: {display_name}")
+
+    def resolve_public_path(self, path: str) -> tuple[DiskPublicDirectory, int]:
+        if self._public_dirs is None:
+            raise NotFoundError(code=404, message="Public directory API not configured")
+        segments = _normalize(path).split("/")
+        pub_dir = self.resolve_public_directory(path)
+        folder_id = pub_dir.folder_id
+        for seg in segments[1:]:
+            children = self._folders.list(folder_id)
+            found: DiskFolder | None = None
+            for child in children:
+                if child.folder_name == seg:
+                    found = child
+                    break
+            if found is None:
+                raise NotFoundError(code=404, message=f"Folder not found: {seg}")
+            folder_id = found.id
+        return pub_dir, folder_id
+
     def invalidate_cache(self, path: str = "") -> None:
         if path:
             self._cache.invalidate(path)
@@ -190,10 +224,12 @@ class _AsyncPathResolver:
         folders: _AsyncFolderAPI,
         files: _AsyncFileAPI,
         cache_ttl: float = 60.0,
+        public_dirs: _AsyncPublicDirectoryAPI | None = None,
     ) -> None:
         self._folders = folders
         self._files = files
         self._cache = PathCache(ttl=cache_ttl)
+        self._public_dirs = public_dirs
 
     async def resolve_folder_id(self, path: str) -> int:
         if not _normalize(path):
@@ -292,3 +328,33 @@ class _AsyncPathResolver:
         if folder is None:
             folder = await self._folders.get(parent_id)
         return folder
+
+    # --- Public directory resolution ---
+
+    async def resolve_public_directory(self, path: str) -> DiskPublicDirectory:
+        if self._public_dirs is None:
+            raise NotFoundError(code=404, message="Public directory API not configured")
+        display_name = _normalize(path).split("/")[0]
+        dirs = await self._public_dirs.list_visible()
+        for d in dirs:
+            if d.display_name == display_name:
+                return d
+        raise NotFoundError(code=404, message=f"Public directory not found: {display_name}")
+
+    async def resolve_public_path(self, path: str) -> tuple[DiskPublicDirectory, int]:
+        if self._public_dirs is None:
+            raise NotFoundError(code=404, message="Public directory API not configured")
+        segments = _normalize(path).split("/")
+        pub_dir = await self.resolve_public_directory(path)
+        folder_id = pub_dir.folder_id
+        for seg in segments[1:]:
+            children = await self._folders.list(folder_id)
+            found: DiskFolder | None = None
+            for child in children:
+                if child.folder_name == seg:
+                    found = child
+                    break
+            if found is None:
+                raise NotFoundError(code=404, message=f"Folder not found: {seg}")
+            folder_id = found.id
+        return pub_dir, folder_id

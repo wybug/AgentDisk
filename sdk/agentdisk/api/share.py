@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..models.file import DownloadTokenResponse
 from ..models.share import DiskShare
 from .base import AsyncBaseAPI, BaseAPI
 
 if TYPE_CHECKING:
     import builtins
-
-_PREFIX_PUBLIC = "/v1/disk/share"
 
 
 class _ShareAPI(BaseAPI):
@@ -43,27 +42,20 @@ class _ShareAPI(BaseAPI):
         self._request("DELETE", "/shares", json={"shareId": share_id})
 
     def get_by_code(self, code: str) -> DiskShare:
-        resp = self._client.request(
-            "GET",
-            f"{_PREFIX_PUBLIC}/{code}",
-        )
-        body = resp.json()
-        from ..exceptions import raise_for_response
-
-        raise_for_response(resp.status_code, body)
-        return DiskShare.from_dict(body["data"])
+        data = self._request("GET", f"/share/{code}")
+        return DiskShare.from_dict(data)
 
     def access(self, code: str, extract_code: str = "") -> DiskShare:
-        resp = self._client.request(
-            "POST",
-            f"{_PREFIX_PUBLIC}/access",
-            json={"code": code, "extractCode": extract_code},
-        )
-        body = resp.json()
-        from ..exceptions import raise_for_response
+        data = self._request("POST", "/share/access", json={"code": code, "extractCode": extract_code})
+        return DiskShare.from_dict(data)
 
-        raise_for_response(resp.status_code, body)
-        return DiskShare.from_dict(body["data"])
+    def download(self, code: str, resource_id: int, extract_code: str = "") -> DownloadTokenResponse:
+        data = self._request(
+            "POST",
+            "/share/download",
+            json={"code": code, "extractCode": extract_code, "resourceId": resource_id},
+        )
+        return DownloadTokenResponse.from_dict(data)
 
 
 class _AsyncShareAPI(AsyncBaseAPI):
@@ -96,24 +88,17 @@ class _AsyncShareAPI(AsyncBaseAPI):
         await self._request("DELETE", "/shares", json={"shareId": share_id})
 
     async def get_by_code(self, code: str) -> DiskShare:
-        resp = await self._client.request(
-            "GET",
-            f"{_PREFIX_PUBLIC}/{code}",
-        )
-        body = resp.json()
-        from ..exceptions import raise_for_response
-
-        raise_for_response(resp.status_code, body)
-        return DiskShare.from_dict(body["data"])
+        data = await self._request("GET", f"/share/{code}")
+        return DiskShare.from_dict(data)
 
     async def access(self, code: str, extract_code: str = "") -> DiskShare:
-        resp = await self._client.request(
-            "POST",
-            f"{_PREFIX_PUBLIC}/access",
-            json={"code": code, "extractCode": extract_code},
-        )
-        body = resp.json()
-        from ..exceptions import raise_for_response
+        data = await self._request("POST", "/share/access", json={"code": code, "extractCode": extract_code})
+        return DiskShare.from_dict(data)
 
-        raise_for_response(resp.status_code, body)
-        return DiskShare.from_dict(body["data"])
+    async def download(self, code: str, resource_id: int, extract_code: str = "") -> DownloadTokenResponse:
+        data = await self._request(
+            "POST",
+            "/share/download",
+            json={"code": code, "extractCode": extract_code, "resourceId": resource_id},
+        )
+        return DownloadTokenResponse.from_dict(data)

@@ -63,3 +63,25 @@ def test_update_file(client, folder, uploaded_file):
         assert result.version == 2
     finally:
         os.unlink(path)
+
+
+def test_download_file(client, folder):
+    client.upload_bytes("sdk-file-test/test-download.txt", b"download test content")
+    try:
+        result = client.download_file("sdk-file-test/test-download.txt")
+        assert result.download_url != ""
+        assert result.file.file_name == "test-download.txt"
+    finally:
+        client.delete_file("sdk-file-test/test-download.txt")
+
+
+def test_download_file_to(client, folder, tmp_path):
+    client.upload_bytes("sdk-file-test/test-download-to.txt", b"save to disk content")
+    try:
+        local = str(tmp_path / "downloaded.txt")
+        returned = client.download_file_to("sdk-file-test/test-download-to.txt", local)
+        assert returned == local
+        with open(local) as f:
+            assert f.read() == "save to disk content"
+    finally:
+        client.delete_file("sdk-file-test/test-download-to.txt")
