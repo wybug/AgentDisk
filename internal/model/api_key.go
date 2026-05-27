@@ -15,6 +15,7 @@ type DiskAPIKey struct {
 	LastUsedAt *time.Time `json:"lastUsedAt"`
 	ExpiresAt  *time.Time `json:"expiresAt"`
 	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"createdAt"`
+	UpdatedAt  time.Time  `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
 // TableName handles the TableName endpoint.

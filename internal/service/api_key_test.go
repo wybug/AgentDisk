@@ -67,6 +67,18 @@ func (m *mockAPIKeyRepo) UpdateLastUsed(id uint64) error {
 	return errTestNotFound
 }
 
+func (m *mockAPIKeyRepo) Update(id uint64, updates map[string]interface{}) error {
+	for _, k := range m.keys {
+		if k.ID == id {
+			if name, ok := updates["key_name"].(string); ok {
+				k.KeyName = name
+			}
+			return nil
+		}
+	}
+	return errTestNotFound
+}
+
 func TestAPIKeyService_Create(t *testing.T) {
 	repo := newMockAPIKeyRepo()
 	svc := NewAPIKeyServiceFromRepo(repo)

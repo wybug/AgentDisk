@@ -48,3 +48,8 @@ func (r *APIKeyRepo) UpdateLastUsed(id uint64) error {
 	now := time.Now()
 	return r.db.Model(&model.DiskAPIKey{}).Where("id = ?", id).Update("last_used_at", now).Error
 }
+
+// Update updates specified fields of an API key.
+func (r *APIKeyRepo) Update(id uint64, updates map[string]interface{}) error {
+	return r.db.Model(&model.DiskAPIKey{}).Where("id = ?", id).Updates(updates).Error
+}

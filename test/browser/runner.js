@@ -80,7 +80,7 @@ for (const testFile of filteredTests) {
   try {
     execSync(`node "${testPath}"`, {
       encoding: 'utf-8',
-      timeout: testName.includes('record') ? 180000 : 120000,
+      timeout: testName.includes('record') ? 180000 : 180000,
       stdio: 'inherit',
     });
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

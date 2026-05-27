@@ -1,9 +1,9 @@
 # AgentDisk Browser Test Report
 
-**Date**: 2026-05-27T02:09:37.954Z
+**Date**: 2026-05-27T06:47:49.951Z
 **Result**: ALL PASSED
-**Total**: 37 steps, 37 passed, 0 failed
+**Total**: 4 steps, 4 passed, 0 failed
 
 | Test | Status | Steps |
 |------|--------|-------|
-| T19: 公共目录 + Admin 管理 + API Key | PASS | 37/37 |
+| T19e: Admin 清理 + 退出登录 | PASS | 4/4 |
