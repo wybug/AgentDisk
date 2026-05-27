@@ -23,7 +23,7 @@ from .api import (
 if TYPE_CHECKING:
     import builtins
 
-    from .models.file import DiskFile, FileDetailResponse
+    from .models.file import DiskFile, DownloadByTokenResponse, FileDetailResponse
     from .models.folder import DiskFolder
     from .models.permission import DiskPermission
     from .models.preview import PreviewResult
@@ -70,7 +70,7 @@ class AgentDiskClient:
         self._preview = _PreviewAPI(self._http, token=token, api_key=api_key)
         self._space = _SpaceAPI(self._http, token=token, api_key=api_key)
         self._public_dirs = _PublicDirectoryAPI(self._http, token=token, api_key=api_key)
-        self._resolver = _PathResolver(self._folders, self._files, cache_ttl=cache_ttl)
+        self._resolver = _PathResolver(self._folders, self._files, cache_ttl=cache_ttl, public_dirs=self._public_dirs)
 
     # --- Folder operations ---
 
@@ -94,6 +94,10 @@ class AgentDiskClient:
         folder = self._resolver.resolve_folder(path)
         self._folders.delete(folder.id)
         self._resolver.invalidate_cache(path)
+
+    def get_folder_ancestors(self, path: str) -> builtins.list[DiskFolder]:
+        folder = self._resolver.resolve_folder(path)
+        return self._folders.ancestors(folder.id)
 
     # --- File operations ---
 
@@ -162,6 +166,19 @@ class AgentDiskClient:
         file_obj = self._resolver.resolve_file(path)
         self._files.delete(file_obj.id)
 
+    def download_file(self, path: str) -> DownloadByTokenResponse:
+        file_obj = self._resolver.resolve_file(path)
+        token_resp = self._files.create_download_token(file_obj.id)
+        return self._files.download_by_token(token_resp.download_token)
+
+    def download_file_to(self, path: str, local_path: str) -> str:
+        result = self.download_file(path)
+        resp = self._http.get(result.download_url)
+        resp.raise_for_status()
+        with open(local_path, "wb") as f:
+            f.write(resp.content)
+        return local_path
+
     # --- Share operations ---
 
     def create_share(
@@ -200,6 +217,10 @@ class AgentDiskClient:
 
     def access_share(self, code: str, extract_code: str = "") -> DiskShare:
         return self._shares.access(code, extract_code)
+
+    def download_shared_file(self, code: str, resource_id: int, extract_code: str = "") -> DownloadByTokenResponse:
+        token_resp = self._shares.download(code, resource_id, extract_code=extract_code)
+        return self._files.download_by_token(token_resp.download_token)
 
     # --- Permission operations ---
 
@@ -309,8 +330,16 @@ class AgentDiskClient:
     def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
         return self._public_dirs.list_visible()
 
-    def get_public_directory(self, public_dir_id: int) -> DiskPublicDirectory:
-        return self._public_dirs.get(public_dir_id)
+    def get_public_directory(self, path: str) -> DiskPublicDirectory:
+        return self._resolver.resolve_public_directory(path)
+
+    def list_public_directory_folders(self, path: str) -> builtins.list[DiskFolder]:
+        _, folder_id = self._resolver.resolve_public_path(path)
+        return self._folders.list(folder_id)
+
+    def list_public_directory_files(self, path: str) -> builtins.list[DiskFile]:
+        _, folder_id = self._resolver.resolve_public_path(path)
+        return self._files.list(folder_id)
 
     # --- Cache management ---
 

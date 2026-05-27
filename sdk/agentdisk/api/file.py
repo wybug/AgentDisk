@@ -90,7 +90,7 @@ class _FileAPI(BaseAPI):
         return DownloadTokenResponse.from_dict(data)
 
     def download_by_token(self, token: str) -> DownloadByTokenResponse:
-        data = self._request("GET", "/files/download", params={"token": token})
+        data = self._request("GET", "/files/download", params={"t": token})
         return DownloadByTokenResponse.from_dict(data)
 
 

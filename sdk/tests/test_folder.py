@@ -39,3 +39,16 @@ def test_create_subfolder(client, folder):
     sub = client.create_folder("sdk-renamed/sdk-subfolder")
     assert sub.parent_id == folder.id
     client.delete_folder("sdk-renamed/sdk-subfolder")
+
+
+def test_get_folder_ancestors(client):
+    client.create_folder("sdk-ancestor-test", exist_ok=True)
+    client.create_folder("sdk-ancestor-test/child", exist_ok=True)
+    try:
+        ancestors = client.get_folder_ancestors("sdk-ancestor-test/child")
+        assert len(ancestors) >= 1
+        names = [a.folder_name for a in ancestors]
+        assert "sdk-ancestor-test" in names
+    finally:
+        client.delete_folder("sdk-ancestor-test/child")
+        client.delete_folder("sdk-ancestor-test")
