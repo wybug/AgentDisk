@@ -120,6 +120,38 @@ npm run dev   # 端口 5173
 
 打开浏览器访问 http://localhost:5173，将自动跳转到网关登录页。
 
+### 4. 管理控制台
+
+管理控制台提供系统管理功能，首次访问时需初始化管理员账户。
+
+#### 首次初始化
+
+1. 打开浏览器访问 http://localhost:5173/admin/login
+2. 系统检测到未初始化，自动跳转到管理员创建页面
+3. 设置用户名、密码和显示名称，点击"创建管理员"
+4. 创建成功后自动登录，进入管理后台
+
+#### CLI 创建管理员
+
+也可以通过命令行创建管理员：
+
+```bash
+go run scripts/add_admin/main.go \
+  -dsn 'root:@tcp(127.0.0.1:3306)/agentdisk?charset=utf8mb4&parseTime=True&loc=Local' \
+  -username admin \
+  -password admin123 \
+  -displayName Admin
+```
+
+#### 管理功能
+
+| 功能 | 说明 |
+|------|------|
+| 公共目录 | 创建和管理全局/部门级公共文件目录 |
+| API Key | 生成、重命名、吊销 API 访问密钥 |
+| 管理员 | 创建、删除管理员账户，重置密码 |
+| OAuth2 配置 | 配置和测试 OAuth2 认证集成 |
+
 ## 📁 项目结构
 
 ```
