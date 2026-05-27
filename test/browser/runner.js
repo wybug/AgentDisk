@@ -59,6 +59,23 @@ if (filteredTests.length === 0) {
 
 checkServices();
 
+// T18 前清空数据库，确保 init-status 测试从干净状态开始
+const needsClean = filteredTests.some(f => f.startsWith('t18'));
+if (needsClean) {
+  console.log('\n\x1b[1m清空管理控制台数据...\x1b[0m');
+  try {
+    const projectRoot = path.resolve(__dirname, '../..');
+    execSync(`go run scripts/clean_admin/main.go -config config.yaml`, {
+      encoding: 'utf-8',
+      timeout: 30000,
+      cwd: projectRoot,
+      stdio: 'inherit',
+    });
+  } catch (e) {
+    console.log('\x1b[33m  警告: 数据库清理失败，T18 初始化状态测试可能被跳过\x1b[0m');
+  }
+}
+
 console.log(`\n\x1b[1m\x1b[36m═════════════════════════════════════════════════\x1b[0m`);
 console.log(`\x1b[1m\x1b[36m  AgentDisk Browser Tests - ${filteredTests.length} test(s)\x1b[0m`);
 console.log(`\x1b[1m\x1b[36m═════════════════════════════════════════════════\x1b[0m`);

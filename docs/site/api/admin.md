@@ -3,12 +3,56 @@
 管理接口提供管理员认证、用户管理、API Key 管理、公共目录管理和 OAuth2 配置管理功能。所有管理接口需要管理员权限（`AdminAuth` + `AdminOnly` 中间件），登录和初始化引导接口除外。
 
 ::: warning 权限要求
-除 `POST /v1/disk/admin/login` 和 `POST /v1/disk/admin/bootstrap` 外，所有管理接口均需要在请求头中携带管理员 JWT Token：
+除 `POST /v1/disk/admin/login`、`POST /v1/disk/admin/bootstrap` 和 `GET /v1/disk/admin/init-status` 外，所有管理接口均需要在请求头中携带管理员 JWT Token：
 ```
 Authorization: Bearer <admin-jwt-token>
 ```
 管理员 JWT 与普通用户 JWT 使用相同的签名密钥，但 Payload 中包含 `adminUser` 和 `adminRole` 声明。
 :::
+
+## 检查初始化状态
+
+查询系统中是否已创建管理员账户，用于前端判断是否跳转到初始化页面。
+
+```
+GET /v1/disk/admin/init-status
+```
+
+### 认证方式
+
+公开接口，无需认证。
+
+### 响应示例
+
+未初始化（无管理员）：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "initialized": false
+  }
+}
+```
+
+已初始化（存在管理员）：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "initialized": true
+  }
+}
+```
+
+### curl 示例
+
+```bash
+curl http://localhost:9100/v1/disk/admin/init-status
+```
 
 ## 管理员登录
 

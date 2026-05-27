@@ -1,10 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Form, Input, Button, Card, message } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { adminApi } from '@/api/admin';
 
 export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await adminApi.checkInitStatus();
+        if (!res.data?.initialized) {
+          navigate('/admin/setup', { replace: true });
+        }
+      } catch {
+        // graceful: show login page if check fails
+      }
+    })();
+  }, [navigate]);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);

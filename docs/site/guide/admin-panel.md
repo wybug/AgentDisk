@@ -8,9 +8,23 @@ AgentDisk 提供独立的管理后台，用于系统管理、用户管理、OAut
 
 在浏览器中访问 `http://localhost:9101/admin` 进入管理后台登录页面。
 
-### 初始化超级管理员
+### 首次初始化
 
-首次使用时，系统中没有管理员账户。你需要通过 Bootstrap 接口创建第一个超级管理员：
+首次使用时，系统中没有管理员账户。访问管理后台登录页面时，系统会自动检测初始化状态，并跳转到管理员创建页面：
+
+1. 打开 `http://localhost:9101/admin/login`
+2. 系统检测到未初始化，自动跳转到管理员创建页面（`/admin/setup`）
+3. 填写用户名、密码、确认密码和显示名称（可选）
+4. 点击"创建管理员"，系统自动创建管理员并登录
+5. 创建成功后自动跳转到管理后台首页
+
+::: tip
+初始化状态通过 `GET /v1/disk/admin/init-status` 接口检测。已初始化后访问 `/admin/setup` 会自动跳转回登录页。
+:::
+
+### CLI 创建管理员
+
+也可以通过命令行创建管理员：
 
 ```bash
 curl -X POST http://localhost:9100/v1/disk/admin/bootstrap \
@@ -361,6 +375,7 @@ DELETE /v1/disk/admin/public-directories/:id
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
+| `/v1/disk/admin/init-status` | GET | 检查系统是否已初始化 |
 | `/v1/disk/admin/bootstrap` | POST | 初始化超级管理员（仅首次） |
 | `/v1/disk/admin/login` | POST | 管理员登录 |
 | `/v1/disk/admin/dashboard` | GET | 系统概览 |

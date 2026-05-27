@@ -51,6 +51,17 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	})
 }
 
+// InitStatus handles GET /v1/disk/admin/init-status.
+// Returns whether any admin user has been created. Public route.
+func (h *AdminHandler) InitStatus(c *gin.Context) {
+	count, err := h.adminSvc.Count()
+	if err != nil {
+		response.InternalError(c, "failed to check admin count")
+		return
+	}
+	response.OK(c, gin.H{"initialized": count > 0})
+}
+
 // Bootstrap handles POST /v1/disk/admin/bootstrap.
 // Creates the first admin user when no admins exist yet. Public route.
 func (h *AdminHandler) Bootstrap(c *gin.Context) {

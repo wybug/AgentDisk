@@ -23,6 +23,8 @@ const PublicDirectoriesPage = lazy(() => import('@/pages/PublicDirectoriesPage')
 // eslint-disable-next-line react-refresh/only-export-components
 const AdminLoginPage = lazy(() => import('@/pages/AdminLoginPage'));
 // eslint-disable-next-line react-refresh/only-export-components
+const AdminSetupPage = lazy(() => import('@/pages/AdminSetupPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 // eslint-disable-next-line react-refresh/only-export-components
 const PublicDirManager = lazy(() => import('@/components/admin/PublicDirManager'));
@@ -46,6 +48,14 @@ const router = createBrowserRouter([
     element: (
       <Suspense fallback={<Loading />}>
         <ShareAccessPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: '/admin/setup',
+    element: (
+      <Suspense fallback={<Loading />}>
+        <AdminSetupPage />
       </Suspense>
     ),
   },
