@@ -17,7 +17,7 @@ export default defineConfig({
       { text: '架构文档', link: '/architecture/overview' },
       {
         text: 'OpenAPI',
-        link: 'https://petstore.swagger.io/?url=https://raw.githubusercontent.com/anthropics/agent-disk/main/docs/openapi.yaml',
+        link: 'https://petstore.swagger.io/?url=https://raw.githubusercontent.com/wybug/agent-disk/main/docs/openapi.yaml',
       },
     ],
     sidebar: {
@@ -88,7 +88,7 @@ export default defineConfig({
     search: {
       provider: 'local',
     },
-    socialLinks: [{ icon: 'github', link: 'https://github.com/anthropics/agent-disk' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/wybug/agent-disk' }],
     footer: {
       message: '基于 Apache 2.0 许可发布',
     },

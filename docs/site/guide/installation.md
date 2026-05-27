@@ -143,7 +143,7 @@ services:
 
 ```bash
 # 克隆项目
-git clone https://github.com/anthropics/agent-disk.git
+git clone https://github.com/wybug/agent-disk.git
 cd agent-disk
 
 # 编译

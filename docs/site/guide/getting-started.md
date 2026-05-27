@@ -33,7 +33,7 @@ brew install mysql
 ## 克隆项目
 
 ```bash
-git clone https://github.com/anthropics/agent-disk.git
+git clone https://github.com/wybug/agent-disk.git
 cd agent-disk
 ```
 
