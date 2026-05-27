@@ -61,3 +61,7 @@ node_modules/
 .agents/
 skills-lock.json
 gateway/src/data/
+
+# Docs site build
+docs/site/.vitepress/dist/
+docs/site/.vitepress/cache/

@@ -1,6 +1,6 @@
 GOLANGCI_LINT_VERSION := v1.64.8
 
-.PHONY: build run test clean lint lint-install docker dev-start dev-stop dev-status
+.PHONY: build run test clean lint lint-install docker dev-start dev-stop dev-status docs-install docs-dev docs-build
 
 APP_NAME := agentdisk
 
@@ -72,3 +72,12 @@ web-build:
 
 web-check: web-lint web-build
 	@echo "All web checks passed."
+
+docs-install:
+	cd docs/site && npm install
+
+docs-dev:
+	cd docs/site && npm run docs:dev
+
+docs-build:
+	cd docs/site && npm run docs:build
