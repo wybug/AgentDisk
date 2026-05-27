@@ -29,7 +29,6 @@ type ServerConfig struct {
 
 // DatabaseConfig represents a databaseconfiguration.
 type DatabaseConfig struct {
-	Driver       string `mapstructure:"driver"`
 	Host         string `mapstructure:"host"`
 	Port         int    `mapstructure:"port"`
 	Name         string `mapstructure:"name"`

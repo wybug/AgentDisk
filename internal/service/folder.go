@@ -21,6 +21,11 @@ func NewFolderService(folderRepo *repository.FolderRepo, ossClient *oss.Client) 
 
 // CreateFolder handles the request.
 func (s *FolderService) CreateFolder(userID string, parentID uint64, name string) (*model.DiskFolder, error) {
+	// Protect reserved path prefixes for top-level folders
+	if parentID == 0 && IsReservedPath(name) {
+		return nil, fmt.Errorf("reserved directory name: %s", name)
+	}
+
 	exists, err := s.folderRepo.ExistsByName(userID, parentID, name)
 	if err != nil {
 		return nil, fmt.Errorf("check duplicate: %w", err)

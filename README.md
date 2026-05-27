@@ -26,7 +26,7 @@ AgentDisk 是一款面向 AI 智能体生态的专用云盘，解决多智能体
 
 - 语言：Golang
 - 框架：Gin
-- 数据库：MySQL 8.0 / SQLite
+- 数据库：MySQL 8.0
 - 存储：MinIO SDK（全OSS兼容）
 - 鉴权：JWT（Bearer Token） + OAuth2（Web 登录）
 - 缓存：Redis（可选关闭）

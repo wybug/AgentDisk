@@ -15,11 +15,14 @@ _PREFIX = "/v1/disk"
 class BaseAPI:
     """Shared HTTP helper for all API sub-clients."""
 
-    def __init__(self, client: httpx.Client, token: str):
+    def __init__(self, client: httpx.Client, token: str = "", api_key: str = ""):
         self._client = client
         self._token = token
+        self._api_key = api_key
 
     def _headers(self) -> dict[str, str]:
+        if self._api_key:
+            return {"X-API-Key": self._api_key}
         return {"Authorization": f"Bearer {self._token}"}
 
     def _request(
@@ -50,11 +53,14 @@ class BaseAPI:
 class AsyncBaseAPI:
     """Async version of BaseAPI."""
 
-    def __init__(self, client: httpx.AsyncClient, token: str):
+    def __init__(self, client: httpx.AsyncClient, token: str = "", api_key: str = ""):
         self._client = client
         self._token = token
+        self._api_key = api_key
 
     def _headers(self) -> dict[str, str]:
+        if self._api_key:
+            return {"X-API-Key": self._api_key}
         return {"Authorization": f"Bearer {self._token}"}
 
     async def _request(

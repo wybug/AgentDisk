@@ -11,7 +11,7 @@ import (
 
 // ShareHandler is a core domain type.
 type ShareHandler struct {
-	svc     *service.ShareService
+	svc      *service.ShareService
 	dlSecret string
 	dlExpire int
 }

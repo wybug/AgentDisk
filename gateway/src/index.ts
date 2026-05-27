@@ -82,9 +82,9 @@ app.all('/process', (req, res) => {
       res.status(403).json({ error: 'Agent 未注册或不属于当前用户' });
       return;
     }
-    payload = { userId: user.userId, agentId, agentGroupId: agent.agentGroupId || '' };
+    payload = { userId: user.userId, agentId, agentGroupId: agent.agentGroupId || '', department: user.department || '' };
   } else {
-    payload = { userId: user.userId };
+    payload = { userId: user.userId, department: user.department || '' };
   }
 
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '72h' });
@@ -171,7 +171,7 @@ app.post('/api/login', (req, res) => {
     return;
   }
   const sid = generateSessionId();
-  sessions.set(sid, { userId: user.userId, userName: user.userName });
+  sessions.set(sid, { userId: user.userId, userName: user.userName, department: user.department || '' });
   res.cookie('gw_session', sid, {
     maxAge: 86400000,
     httpOnly: true,
@@ -207,12 +207,12 @@ app.get('/api/users', (_req, res) => {
 
 // API: Add user
 app.post('/api/users', (req, res) => {
-  const { userId, userName, password } = req.body;
+  const { userId, userName, password, department } = req.body;
   if (!userId || !userName || !password) {
     res.status(400).json({ error: 'Missing fields' });
     return;
   }
-  userStore.add({ userId, userName, password });
+  userStore.add({ userId, userName, password, department: department || '' });
   res.json({ success: true });
 });
 

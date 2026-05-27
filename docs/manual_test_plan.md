@@ -50,6 +50,10 @@ T1 (登录 + 全局清理)
 ├── T13 (跨用户隔离，独立)
 └── T14 (页面导航，独立)
 T15 (最终验证，检查数据污染)
+T16 (网关 Agent 管理，独立)
+T17 (Chat ReturnFile + Markdown 渲染，独立)
+T18 (Admin Bootstrap，独立)
+T19 (公共目录 + Admin 管理 + API Key，依赖 T18)
 ```
 
 **清理规则**：
@@ -282,6 +286,92 @@ T15 (最终验证，检查数据污染)
 | T15.4 | 查询根目录文件 `GET /files?folderId=0` | 列表为空（count=0） | | |
 | T15.5 | 查询根目录文件夹 `GET /folders?parentId=0` | 列表为空（count=0） | | |
 
+### T16: 网关 Agent 管理
+
+**目标**：验证网关的 Agent 注册、更新、删除、Chat 页面和用户管理功能
+
+**前置条件**：测试网关（port 3000）已启动
+
+| 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
+|------|------|----------|----------|------|
+| T16.1 | 访问 `http://localhost:3100/login`，输入用户名密码登录 | 登录成功，跳转到网关 dashboard | | |
+| T16.2 | 在用户管理区域添加测试用户（用户 ID/名称/密码） | 用户添加成功，列表更新显示新用户 | | |
+| T16.3 | 通过网关 API 注册 Agent（带 endpoints 配置） | Agent 注册成功，返回 agentId | | |
+| T16.4 | 通过网关 API 注册 Agent（不带 endpoints） | Agent 注册成功 | | |
+| T16.5 | 通过网关 API 更新 Agent 信息（修改名称/描述） | Agent 信息更新成功 | | |
+| T16.6 | 通过网关 API 列出已注册的 Agents | 列表包含所有注册的 Agent | | |
+| T16.7 | 点击 Agent 进入 Chat 页面 | Chat 页面加载，显示消息输入框 | | |
+| T16.8 | 通过网关 API 删除测试 Agent | Agent 删除成功，列表不再显示 | | |
+| T16.9 | 点击退出按钮退出网关登录 | 退出成功，页面回到登录页 | | |
+
+### T17: Chat ReturnFile + Markdown 渲染
+
+**目标**：验证 Chat 流式响应、ReturnFile 文件卡片显示、Markdown 渲染切换和 Metrics 指标展示
+
+**前置条件**：
+- 测试网关（port 3000）已启动
+- Mock Agent 服务器（port 9876）已启动：`cd test/browser && node runner.js t17-record`
+- 已注册带 endpoints 的 Agent（Chat URL 指向 `http://localhost:9876/chat`）
+
+| 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
+|------|------|----------|----------|------|
+| T17.1 | 启动 Mock Agent 服务器（port 9876） | 服务启动成功，监听 9876 端口 | | |
+| T17.2 | 在网关注册 Agent（endpoints.chat 指向 Mock 服务器） | 注册成功，获取 agentId | | |
+| T17.3 | 进入该 Agent 的 Chat 页面 | Chat 页面加载，显示消息输入区域 | | |
+| T17.4 | 输入测试消息并发送 | 流式响应正确显示，内容逐步渲染 | | |
+| T17.5 | 验证 ReturnFile 卡片显示 | 消息中出现文件卡片，显示文件名、大小等信息 | | |
+| T17.6 | 点击 Markdown 切换按钮（如有） | 内容在 Markdown 渲染和原始文本之间正确切换 | | |
+| T17.7 | 验证 Metrics Popover | 点击指标图标显示 token 用量、延迟等指标信息 | | |
+| T17.8 | 清理测试 Agent | Agent 删除成功 | | |
+
+### T18: Admin Bootstrap
+
+**目标**：验证 Admin 初始化引导（首次创建 admin）、Admin 登录验证、登录页 UI 显示、UI 登录跳转
+
+**前置条件**：所有服务已启动
+
+| 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
+|------|------|----------|----------|------|
+| T18.1 | 调用 `POST /v1/disk/admin/bootstrap`（username=admin, password=admin123） | 首次调用返回 code=0（创建成功），再次调用返回 code=403（已存在） | | |
+| T18.2 | 调用 `POST /v1/disk/admin/login`（admin / admin123） | 返回 code=0，包含 token | | |
+| T18.3 | 访问 `http://localhost:5173/admin/login` | Admin 登录页显示，标题包含「管理后台」 | | |
+| T18.4 | 输入正确凭据（admin / admin123），点击「登录」 | 登录成功，页面跳转到 `/admin` 管理后台 | | |
+| T18.5 | 验证管理后台 Header 显示正常 | 页面显示「管理后台」标题和「退出」按钮 | | |
+
+### T19: 公共目录 + Admin 管理 + API Key
+
+**目标**：验证 Admin 独立登录、管理后台侧边栏导航、公共目录 CRUD、API Key 管理、用户端公共文件浏览、Admin 退出登录
+
+**前置条件**：
+- 已通过 T18 Bootstrap 创建 admin 账户（用户名 admin，密码 admin123）
+- 所有服务已启动
+
+| 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
+|------|------|----------|----------|------|
+| T19.1 | 访问 `http://localhost:5173/admin/login` | Admin 登录页显示，标题包含「管理后台」 | | |
+| T19.2 | 输入错误密码（admin / wrongpassword），点击「登录」 | 页面显示错误提示（「失败」或「错误」），页面不崩溃 | | |
+| T19.3 | 输入正确凭据（admin / admin123），点击「登录」 | 登录成功，页面跳转到 `/admin` 管理后台 | | |
+| T19.4a | 点击管理后台侧边栏「公共目录」 | URL 变为 `/admin/public-dirs`，显示公共目录列表 | | |
+| T19.4b | 点击管理后台侧边栏「API Key」 | URL 变为 `/admin/api-keys`，显示 API Key 列表 | | |
+| T19.4c | 点击管理后台侧边栏「管理员」 | URL 变为 `/admin/users`，显示管理员用户表格 | | |
+| T19.4d | 点击管理后台侧边栏「OAuth2 配置」 | URL 变为 `/admin/oauth2`，显示 OAuth2 配置表单 | | |
+| T19.5 | 在「公共目录」Tab 点击「创建公共目录」按钮 | 弹出创建 Modal，包含目录名称、类型、部门标识字段 | | |
+| T19.6 | 填写目录名称 `test-global`，类型选「全局公共」，点击确定 | 创建成功，列表中出现新目录，类型标签为「全局」 | | |
+| T19.7 | 再次点击「创建公共目录」，名称 `test-dept`，类型选「部门公共」，部门填 `engineering` | 创建成功，列表中出现部门目录，类型标签为「部门」 | | |
+| T19.8 | 在「API Key」Tab 点击「创建 API Key」按钮 | 弹出创建 Modal，包含 Key 名称、部门字段 | | |
+| T19.9 | 填写 Key 名称 `test-key`，点击确定 | 创建成功，Modal 显示完整 Key（`adk_` 前缀），提示仅显示一次 | | |
+| T19.10 | 点击「复制」按钮后关闭 Modal | 列表更新，显示新 Key 的 prefix（`adk_xxxx...`），状态为「有效」 | | |
+| T19.11 | 在「管理员」Tab 查看管理员列表 | 表格加载，显示 admin 用户，包含「创建管理员」按钮 | | |
+| T19.12 | 在「OAuth2 配置」Tab 查看配置表单 | 表单包含 Client ID、Client Secret、Auth URL、Token URL 等字段，显示「保存」和「测试连接」按钮 | | |
+| T19.13 | 用户端：通过网关登录 user001 | 登录成功，跳转到 AgentDisk 主界面 | | |
+| T19.14 | 点击侧边栏「公共文件」菜单项 | URL 变为 `/public`，显示公共文件页面标题 | | |
+| T19.15 | 验证公共目录列表内容 | 列表包含管理员创建的全局公共目录（如 `test-global-reports`） | | |
+| T19.16 | 点击公共目录列表中的目录项 | URL 变为 `/public/{id}`，进入目录详情页 | | |
+| T19.17 | 点击侧边栏「全部文件」返回 | URL 变为 `/explorer`，回到文件列表页 | | |
+| T19.18 | 返回管理后台，在 API Key Tab 吊销测试 Key | 点击「吊销」→ 确认 → 状态变为「已吊销」 | | |
+| T19.19 | 在公共目录 Tab 删除测试目录 | 点击「删除」→ 确认 → 目录从列表消失 | | |
+| T19.20 | 点击管理后台 Header 的「退出」按钮 | 页面跳转到 `/admin/login`，admin_token 被清除 | | |
+
 ---
 
 ## 测试结果汇总
@@ -303,6 +393,10 @@ T15 (最终验证，检查数据污染)
 | T13 | 跨用户隔离 | | |
 | T14 | 页面导航与响应式 | | |
 | T15 | 最终数据验证 | | |
+| T16 | 网关 Agent 管理 | | |
+| T17 | Chat ReturnFile + Markdown | | |
+| T18 | Admin Bootstrap | | |
+| T19 | 公共目录 + Admin + API Key | | |
 
 **测试人**：___________ **测试日期**：___________
 
