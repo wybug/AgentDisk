@@ -53,6 +53,8 @@ export const adminApi = {
     adminClient.get('/v1/disk/admin/api-keys'),
   createApiKey: (data: { name: string; department?: string }) =>
     adminClient.post('/v1/disk/admin/api-keys', data),
+  renameApiKey: (id: number, data: { name: string }) =>
+    adminClient.put(`/v1/disk/admin/api-keys/${id}`, data),
   revokeApiKey: (id: number) =>
     adminClient.delete(`/v1/disk/admin/api-keys/${id}`),
 

@@ -128,6 +128,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 		keys := adminAPI.Group("/api-keys")
 		keys.POST("", apiKeyH.Create)
 		keys.GET("", apiKeyH.List)
+		keys.PUT("/:id", apiKeyH.Update)
 		keys.DELETE("/:id", apiKeyH.Revoke)
 
 		pd := adminAPI.Group("/public-directories")

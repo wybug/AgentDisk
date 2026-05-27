@@ -19,6 +19,7 @@ type apiKeyRepo interface {
 	List() ([]model.DiskAPIKey, error)
 	Revoke(id uint64) error
 	UpdateLastUsed(id uint64) error
+	Update(id uint64, updates map[string]interface{}) error
 }
 
 // APIKeyService handles API key operations.
@@ -101,6 +102,11 @@ func (s *APIKeyService) ListAPIKeys() ([]model.DiskAPIKey, error) {
 // RevokeAPIKey revokes an API key by ID.
 func (s *APIKeyService) RevokeAPIKey(id uint64) error {
 	return s.repo.Revoke(id)
+}
+
+// RenameAPIKey updates the name of an API key.
+func (s *APIKeyService) RenameAPIKey(id uint64, name string) error {
+	return s.repo.Update(id, map[string]interface{}{"key_name": name})
 }
 
 // generateRawKey creates a random key with adk_ prefix (32 bytes = 64 hex chars).

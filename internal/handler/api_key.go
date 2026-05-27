@@ -23,6 +23,10 @@ type createAPIKeyRequest struct {
 	Department string `json:"department"`
 }
 
+type updateAPIKeyRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
 // Create handles POST /v1/disk/admin/api-keys.
 func (h *APIKeyHandler) Create(c *gin.Context) {
 	var req createAPIKeyRequest
@@ -68,6 +72,7 @@ func (h *APIKeyHandler) List(c *gin.Context) {
 		ExpiresAt  *string `json:"expiresAt,omitempty"`
 		CreatedBy  string  `json:"createdBy"`
 		CreatedAt  string  `json:"createdAt"`
+		UpdatedAt  string  `json:"updatedAt"`
 	}
 
 	items := make([]keyItem, 0, len(keys))
@@ -81,6 +86,7 @@ func (h *APIKeyHandler) List(c *gin.Context) {
 			IsRevoked:  k.IsRevoked,
 			CreatedBy:  k.CreatedBy,
 			CreatedAt:  k.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:  k.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
 		if k.LastUsedAt != nil {
 			s := k.LastUsedAt.Format("2006-01-02T15:04:05Z07:00")
@@ -109,4 +115,26 @@ func (h *APIKeyHandler) Revoke(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"message": "API key revoked"})
+}
+
+// Update handles PUT /v1/disk/admin/api-keys/:id.
+func (h *APIKeyHandler) Update(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid key id")
+		return
+	}
+
+	var req updateAPIKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "name is required")
+		return
+	}
+
+	if err := h.apiKeySvc.RenameAPIKey(id, req.Name); err != nil {
+		response.InternalError(c, "failed to update API key")
+		return
+	}
+	response.OK(c, gin.H{"message": "API key updated"})
 }
