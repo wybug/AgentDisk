@@ -35,6 +35,12 @@ export const adminApi = {
   login: (username: string, password: string) =>
     adminClient.post('/v1/disk/admin/login', { username, password }),
 
+  checkInitStatus: () =>
+    adminClient.get('/v1/disk/admin/init-status'),
+
+  bootstrap: (data: { username: string; password: string; displayName?: string }) =>
+    adminClient.post('/v1/disk/admin/bootstrap', data),
+
   dashboard: () =>
     adminClient.get('/v1/disk/admin/dashboard'),
 

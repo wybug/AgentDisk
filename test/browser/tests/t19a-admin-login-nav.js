@@ -23,6 +23,24 @@ describe('T19a: Admin 登录 + 侧边栏导航', () => {
   assertCondition(hasAdminTitle, 'TC-44: 显示管理后台标题');
   ab.screenshot('t19a-01-admin-login-page');
 
+  // ── TC-44b: 已初始化时访问 setup 页面跳转回 login ──
+  ab.open(WEB_BASE + '/admin/setup');
+  ab.waitMs(3000);
+  ab.waitLoad('networkidle');
+
+  var setupRedirectUrl = ab.getUrl();
+  assertCondition(
+    setupRedirectUrl.includes('/admin/login'),
+    'TC-44b: 已初始化时 setup 页面跳转回 login',
+    setupRedirectUrl
+  );
+  ab.screenshot('t19a-01b-setup-redirect');
+
+  // Go back to login page for remaining tests
+  ab.open(WEB_BASE + '/admin/login');
+  ab.waitMs(2000);
+  ab.waitLoad('networkidle');
+
   // ── TC-46: Admin 登录失败（错误密码）──
   ab.jsFill('用户名', 'admin');
   ab.jsFill('密码', 'wrongpassword');

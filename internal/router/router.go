@@ -113,6 +113,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// Admin login (public, no auth required)
 	r.POST("/v1/disk/admin/login", adminH.Login)
 	r.POST("/v1/disk/admin/bootstrap", adminH.Bootstrap)
+	r.GET("/v1/disk/admin/init-status", adminH.InitStatus)
 
 	// Admin management routes (AdminAuth + AdminOnly)
 	adminAPI := r.Group("/v1/disk/admin")

@@ -27,6 +27,54 @@ describe('T18: Admin Bootstrap', () => {
   ab.waitMs(3000);
   ab.waitLoad('networkidle');
 
+  // ── TC-44.0a: 调用 init-status API，验证未初始化 ──
+  var initStatus = apiCall(`
+    (function() {
+      return fetch('${API_BASE}/v1/disk/admin/init-status')
+      .then(function(r) { return r.json(); })
+      .then(function(d) { return JSON.stringify(d); })
+      .catch(function(e) { return JSON.stringify({error: e.message}); });
+    })()
+  `);
+
+  var initStatusOk = initStatus.code === 0 && initStatus.data && initStatus.data.initialized === false;
+  var initStatusAlreadyInit = initStatus.code === 0 && initStatus.data && initStatus.data.initialized === true;
+  assertCondition(
+    initStatusOk || initStatusAlreadyInit,
+    'TC-44.0a: Init Status API 可用',
+    initStatusOk ? 'initialized=false' : (initStatusAlreadyInit ? 'initialized=true (已存在管理员)' : JSON.stringify(initStatus).substring(0, 200))
+  );
+  ab.screenshot('t18-00a-init-status');
+
+  // ── TC-44.0b: 未初始化时，登录页跳转到 setup 页面 ──
+  if (initStatusOk) {
+    ab.open(WEB_BASE + '/admin/login');
+    ab.waitMs(3000);
+    ab.waitLoad('networkidle');
+
+    var setupUrl = ab.getUrl();
+    var redirectedToSetup = setupUrl.includes('/admin/setup');
+    assertCondition(
+      redirectedToSetup,
+      'TC-44.0b: 未初始化时登录页跳转到 setup 页面',
+      setupUrl
+    );
+    ab.screenshot('t18-00b-redirect-to-setup');
+
+    // ── TC-44.0c: Setup 页面显示初始化表单 ──
+    if (redirectedToSetup) {
+      var hasSetupTitle = ab.pageContainsText('初始化管理员账户');
+      assertCondition(hasSetupTitle, 'TC-44.0c: Setup 页面显示初始化管理员账户标题');
+
+      var hasSetupForm = ab.pageContainsText('首次使用') || ab.pageContainsText('创建管理员');
+      assertCondition(hasSetupForm, 'TC-44.0c: Setup 页面显示创建管理员按钮');
+      ab.screenshot('t18-00c-setup-page');
+    }
+  } else {
+    step('TC-44.0b: 跳过（管理员已存在）', true, 'init-status=initialized');
+    step('TC-44.0c: 跳过（管理员已存在）', true, 'init-status=initialized');
+  }
+
   // ── TC-44.1: 调用 bootstrap API 创建首个 admin（已存在则跳过）──
   var bootstrap = apiCall(`
     (function() {
@@ -50,6 +98,21 @@ describe('T18: Admin Bootstrap', () => {
   );
   ab.screenshot('t18-01-bootstrap');
 
+  // ── TC-44.0d: Bootstrap 后再次检查 init-status，验证已初始化 ──
+  if (bootstrapOk) {
+    var initStatusAfter = apiCall(`
+      (function() {
+        return fetch('${API_BASE}/v1/disk/admin/init-status')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { return JSON.stringify(d); })
+        .catch(function(e) { return JSON.stringify({error: e.message}); });
+      })()
+    `);
+    var initDone = initStatusAfter.code === 0 && initStatusAfter.data && initStatusAfter.data.initialized === true;
+    assertCondition(initDone, 'TC-44.0d: Bootstrap 后 init-status 返回 initialized=true', JSON.stringify(initStatusAfter).substring(0, 200));
+    ab.screenshot('t18-01b-init-status-after');
+  }
+
   // ── TC-44.2: Admin 登录验证 ──
   var login = apiCall(`
     (function() {
@@ -69,6 +132,11 @@ describe('T18: Admin Bootstrap', () => {
   ab.screenshot('t18-02-login');
 
   // ── TC-44.3: Admin 登录页 UI 显示 ──
+  // Navigate to login page (may still be on /admin/setup from TC-44.0b)
+  ab.open(WEB_BASE + '/admin/login');
+  ab.waitMs(3000);
+  ab.waitLoad('networkidle');
+
   var loginPageUrl = ab.getUrl();
   assertCondition(
     loginPageUrl.includes('/admin/login'),
