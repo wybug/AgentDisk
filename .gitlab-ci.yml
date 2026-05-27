@@ -46,3 +46,16 @@ build:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "master"'
+
+pages:
+  stage: build
+  image: node:20-alpine
+  script:
+    - cd docs/site && npm install && npm run docs:build
+    - mv .vitepress/dist ../../public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "master"'

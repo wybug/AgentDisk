@@ -40,7 +40,7 @@ stop_all() {
   fi
 
   # 兜底：按端口清理残留进程
-  for port in 9100 3100 9101; do
+  for port in 9100 3100 9101 9102; do
     local pids
     pids=$(lsof -ti:$port 2>/dev/null || true)
     if [ -n "$pids" ]; then
@@ -119,6 +119,15 @@ start_all() {
     "cd web && node_modules/.bin/vite --host" \
     || { warn "前端启动失败"; }
 
+  # 4. 帮助文档（如已安装依赖）
+  if [ -d "$PROJECT_ROOT/docs/site/node_modules" ]; then
+    start_service "docs" 9102 \
+      "cd docs/site && node_modules/.bin/vitepress dev --port 9102" \
+      || { warn "文档站点启动失败"; }
+  else
+    warn "跳过文档站点（未安装依赖，运行 make docs-install）"
+  fi
+
   echo ""
   echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║     所有服务已启动                        ║${NC}"
@@ -126,6 +135,7 @@ start_all() {
   echo -e "${GREEN}║  后端 API:   http://localhost:9100       ║${NC}"
   echo -e "${GREEN}║  测试网关:   http://localhost:3100       ║${NC}"
   echo -e "${GREEN}║  Web 前端:   http://localhost:9101       ║${NC}"
+  echo -e "${GREEN}║  帮助文档:   http://localhost:9102       ║${NC}"
   echo -e "${GREEN}╠══════════════════════════════════════════╣${NC}"
   echo -e "${GREEN}║  日志目录: $LOG_DIR/"
   echo -e "${GREEN}║  停止命令: $0 stop"
@@ -138,7 +148,7 @@ show_status() {
   echo ""
   echo "AgentDisk 服务状态:"
   echo "─────────────────────────────"
-  for svc in "backend:9100" "gateway:3100" "web:9101"; do
+  for svc in "backend:9100" "gateway:3100" "web:9101" "docs:9102"; do
     local name="${svc%%:*}"
     local port="${svc##*:}"
     if lsof -ti:$port 2>/dev/null | grep -q .; then
