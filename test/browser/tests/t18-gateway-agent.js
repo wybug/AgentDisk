@@ -81,14 +81,14 @@ function gwAgentExists(agentId) {
   } catch (e) { return false; }
 }
 
-// --- T16: Gateway Agent Management ---
+// --- T18: Gateway Agent Management ---
 
-describe('T16: 网关 Agent 管理', () => {
+describe('T18: 网关 Agent 管理', () => {
   ab.closeAll();
 
   // ======== Phase 1: Login & Dashboard ========
 
-  // T16.1 - Ensure test user 5001185 exists and login
+  // T18.1 - Ensure test user 5001185 exists and login
   ab.open(ab.GATEWAY_URL + '/login');
   ab.waitMs(2000);
   ab.waitLoad('networkidle');
@@ -100,7 +100,7 @@ describe('T16: 网关 Agent 管理', () => {
   // Login via API
   var loginResult = gwLogin('5001185', 'test123');
   ab.waitMs(1000);
-  assertCondition(loginResult.includes('OK'), 'T16.1: 5001185 登录成功', 'login=' + loginResult);
+  assertCondition(loginResult.includes('OK'), 'T18.1: 5001185 登录成功', 'login=' + loginResult);
 
   // Navigate to dashboard
   ab.open(ab.GATEWAY_URL + '/dashboard');
@@ -109,7 +109,7 @@ describe('T16: 网关 Agent 管理', () => {
   ab.screenshot('t16-01-dashboard');
 
   var dashLoaded = ab.pageContainsText('Agent 管理') || ab.pageContainsText('Agent');
-  assertCondition(dashLoaded, 'T16.2: 仪表盘加载成功', 'dashLoaded=' + dashLoaded);
+  assertCondition(dashLoaded, 'T18.2: 仪表盘加载成功', 'dashLoaded=' + dashLoaded);
 
   // ======== Phase 2: Register Agent with Endpoint ========
 
@@ -121,7 +121,7 @@ describe('T16: 网关 Agent 管理', () => {
   gwRemoveAgent('agent-test-chat');
   ab.waitMs(300);
 
-  // T16.3 - Register agent with full URL endpoint via UI
+  // T18.3 - Register agent with full URL endpoint via UI
   // Use JS to fill the form fields directly
   var fillResult = ab.evalStdin(`
     (function() {
@@ -158,19 +158,19 @@ describe('T16: 网关 Agent 管理', () => {
 
   // Verify agent appears in the list with endpoint
   var hasEndpoint = ab.pageContainsText('agent-test-ep') && ab.pageContainsText('localhost:8090');
-  step('T16.3: 注册带端点的 Agent', hasEndpoint, 'fill=' + fillResult + ' submit=' + submitResult + ' hasAgent=' + ab.pageContainsText('agent-test-ep'));
+  step('T18.3: 注册带端点的 Agent', hasEndpoint, 'fill=' + fillResult + ' submit=' + submitResult + ' hasAgent=' + ab.pageContainsText('agent-test-ep'));
 
-  // T16.4 - Verify via API
+  // T18.4 - Verify via API
   var apiList = gwListAgents();
   var apiHasAgent = apiList.includes('agent-test-ep') && apiList.includes('http://localhost:8090/process');
-  step('T16.4: API 验证端点配置', apiHasAgent, apiList.substring(0, 200));
+  step('T18.4: API 验证端点配置', apiHasAgent, apiList.substring(0, 200));
 
   // ======== Phase 3: Register Agent without Endpoint (default) ========
 
-  // T16.5 - Register agent with empty endpoint via API
+  // T18.5 - Register agent with empty endpoint via API
   var regDefault = gwRegisterAgent('agent-test-default', 'Default Agent', '', '');
   ab.waitMs(500);
-  assertCondition(regDefault.includes('OK'), 'T16.5: 注册默认端点 Agent', 'reg=' + regDefault);
+  assertCondition(regDefault.includes('OK'), 'T18.5: 注册默认端点 Agent', 'reg=' + regDefault);
 
   // Refresh dashboard and verify default endpoint display
   ab.open(ab.GATEWAY_URL + '/dashboard');
@@ -179,14 +179,14 @@ describe('T16: 网关 Agent 管理', () => {
   ab.screenshot('t16-05-default-agent');
 
   var hasDefault = ab.pageContainsText('agent-test-default');
-  step('T16.6: 默认端点 Agent 显示', hasDefault, 'visible=' + hasDefault);
+  step('T18.6: 默认端点 Agent 显示', hasDefault, 'visible=' + hasDefault);
 
   // ======== Phase 4: Update Endpoint via Re-registration ========
 
-  // T16.7 - Re-register same agent with different endpoint (update)
+  // T18.7 - Re-register same agent with different endpoint (update)
   var updateResult = gwRegisterAgent('agent-test-ep', 'Updated Agent', 'test-group', 'http://192.168.1.100:9000/v1/chat');
   ab.waitMs(500);
-  assertCondition(updateResult.includes('OK'), 'T16.7: 更新 Agent 端点', 'update=' + updateResult);
+  assertCondition(updateResult.includes('OK'), 'T18.7: 更新 Agent 端点', 'update=' + updateResult);
 
   // Verify updated endpoint
   ab.open(ab.GATEWAY_URL + '/dashboard');
@@ -195,18 +195,18 @@ describe('T16: 网关 Agent 管理', () => {
   ab.screenshot('t16-07-updated-endpoint');
 
   var hasUpdated = ab.pageContainsText('192.168.1.100');
-  step('T16.8: 验证端点更新', hasUpdated, 'hasUpdated=' + hasUpdated);
+  step('T18.8: 验证端点更新', hasUpdated, 'hasUpdated=' + hasUpdated);
 
   // ======== Phase 5: Delete Agent ========
 
-  // T16.9 - Delete agent via API
+  // T18.9 - Delete agent via API
   var delResult = gwRemoveAgent('agent-test-ep');
   ab.waitMs(500);
-  assertCondition(delResult.includes('OK'), 'T16.9: 删除 Agent', 'del=' + delResult);
+  assertCondition(delResult.includes('OK'), 'T18.9: 删除 Agent', 'del=' + delResult);
 
   // Verify deletion
   var delCheck = !gwAgentExists('agent-test-ep');
-  step('T16.10: 验证 Agent 已删除', delCheck, '');
+  step('T18.10: 验证 Agent 已删除', delCheck, '');
 
   // Refresh dashboard and verify
   ab.open(ab.GATEWAY_URL + '/dashboard');
@@ -215,7 +215,7 @@ describe('T16: 网关 Agent 管理', () => {
   ab.screenshot('t16-10-after-delete');
 
   var notVisible = !ab.pageContainsText('agent-test-ep');
-  step('T16.11: 仪表盘不再显示已删除 Agent', notVisible, '');
+  step('T18.11: 仪表盘不再显示已删除 Agent', notVisible, '');
 
   // Delete remaining test agent
   gwRemoveAgent('agent-test-default');
@@ -223,7 +223,7 @@ describe('T16: 网关 Agent 管理', () => {
 
   // ======== Phase 6: Agent Chat Page ========
 
-  // T16.12 - Register an agent for chat testing
+  // T18.12 - Register an agent for chat testing
   gwRegisterAgent('agent-test-chat', 'Chat Test Agent', '', 'http://localhost:8090/process');
   ab.waitMs(500);
 
@@ -234,14 +234,14 @@ describe('T16: 网关 Agent 管理', () => {
   ab.screenshot('t16-12-chat-page');
 
   var chatLoaded = ab.pageContainsText('Agent 对话') || ab.pageContainsText('输入消息');
-  step('T16.12: Agent 对话页面加载', chatLoaded, 'chatLoaded=' + chatLoaded);
+  step('T18.12: Agent 对话页面加载', chatLoaded, 'chatLoaded=' + chatLoaded);
 
-  // T16.13 - Verify agent selector exists
+  // T18.13 - Verify agent selector exists
   var snap = ab.snapshot();
   var hasAgentSelect = ab.pageContainsText('身份') || ab.pageContainsText('Chat Test Agent') || ab.pageContainsText('agent-test-chat');
-  step('T16.13: Agent 选择器显示', hasAgentSelect, 'hasSelect=' + hasAgentSelect);
+  step('T18.13: Agent 选择器显示', hasAgentSelect, 'hasSelect=' + hasAgentSelect);
 
-  // T16.14 - Select agent and send a message
+  // T18.14 - Select agent and send a message
   // Select the agent from dropdown via JS
   var selectResult = ab.evalStdin(`
     (function() {
@@ -262,7 +262,7 @@ describe('T16: 网关 Agent 管理', () => {
   ab.waitMs(500);
   ab.screenshot('t16-14-agent-selected');
 
-  // T16.15 - Send a test message (expect connection error since no real agent backend at 8090)
+  // T18.15 - Send a test message (expect connection error since no real agent backend at 8090)
   var sendResult = ab.evalStdin(`
     (function() {
       var textarea = document.querySelector('textarea');
@@ -298,15 +298,15 @@ describe('T16: 网关 Agent 管理', () => {
   ab.waitMs(3000);
   ab.screenshot('t16-15-message-sent');
 
-  // T16.16 - Verify message was sent (either user message displayed, or error from no backend)
+  // T18.16 - Verify message was sent (either user message displayed, or error from no backend)
   var hasUserMsg = ab.pageContainsText('Hello, this is a test message from 5001185');
   var hasErrorMsg = ab.pageContainsText('错误') || ab.pageContainsText('Error') || ab.pageContainsText('unavailable') || ab.pageContainsText('failed');
-  step('T16.16: 消息已发送', hasUserMsg, 'sent=' + hasUserMsg);
+  step('T18.16: 消息已发送', hasUserMsg, 'sent=' + hasUserMsg);
   ab.screenshot('t16-16-after-send');
 
-  // T16.17 - Verify assistant response or error (either means SSE pipeline works)
+  // T18.17 - Verify assistant response or error (either means SSE pipeline works)
   var hasResponse = ab.pageContainsText('请问') || ab.pageContainsText('帮助') || hasUserMsg;
-  step('T16.17: 对话响应正常', hasResponse || hasErrorMsg, 'response=' + hasResponse + ' error=' + hasErrorMsg);
+  step('T18.17: 对话响应正常', hasResponse || hasErrorMsg, 'response=' + hasResponse + ' error=' + hasErrorMsg);
 
   // ======== Phase 7: Logout Redirect to Main Page ========
 
@@ -324,11 +324,11 @@ describe('T16: 网关 Agent 管理', () => {
   // Verify redirect to main page (root / or /login)
   var logoutUrl = ab.getUrl();
   var atMainPage = logoutUrl === ab.GATEWAY_URL + '/' || logoutUrl === ab.GATEWAY_URL + '/login';
-  step('T16.19: 退出登录后跳转主页面', atMainPage, 'url=' + logoutUrl);
+  step('T18.19: 退出登录后跳转主页面', atMainPage, 'url=' + logoutUrl);
 
   // Verify user info is cleared
   var noUserInfo = !ab.pageContainsText('5001185');
-  step('T16.20: 退出后用户信息已清除', noUserInfo, '');
+  step('T18.20: 退出后用户信息已清除', noUserInfo, '');
 
   // Verify dashboard redirects to login when not authenticated
   ab.open(ab.GATEWAY_URL + '/dashboard');
@@ -338,7 +338,7 @@ describe('T16: 网关 Agent 管理', () => {
 
   var afterLogoutUrl = ab.getUrl();
   var redirectedToLogin = afterLogoutUrl.includes('/login');
-  step('T16.21: 未登录访问 dashboard 重定向到 login', redirectedToLogin, 'url=' + afterLogoutUrl);
+  step('T18.21: 未登录访问 dashboard 重定向到 login', redirectedToLogin, 'url=' + afterLogoutUrl);
 
   // ======== Phase 8: Cleanup ========
 
@@ -346,14 +346,14 @@ describe('T16: 网关 Agent 管理', () => {
   var reLoginResult = gwLogin('5001185', 'test123');
   ab.waitMs(1000);
 
-  // T16.22 - Clean up all test agents
+  // T18.22 - Clean up all test agents
   gwRemoveAgent('agent-test-chat');
   ab.waitMs(300);
 
   // Verify all test agents removed
   var finalList = gwListAgents();
   var clean = !finalList.includes('agent-test-');
-  step('T16.22: 清理测试 Agent', clean, 'clean=' + clean);
+  step('T18.22: 清理测试 Agent', clean, 'clean=' + clean);
 
   ab.screenshot('t16-22-cleanup');
   ab.closeBrowser();

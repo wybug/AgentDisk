@@ -72,42 +72,42 @@ function getSpaceUIText() {
   `);
 }
 
-describe('T11: 存储空间显示', () => {
+describe('T13: 存储空间显示', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
   ab.waitMs(2000);
 
-  // T11.1 - 获取当前空间用量
+  // T13.1 - 获取当前空间用量
   const space1 = getSpaceAPI();
   ab.waitMs(1000);
   const hasSpace = space1.includes('OK:');
-  assertCondition(hasSpace, 'T11.1: 获取空间用量', space1);
+  assertCondition(hasSpace, 'T13.1: 获取空间用量', space1);
 
-  // T11.1b - 验证前端空间显示不含 NaN 或 undefined
+  // T13.1b - 验证前端空间显示不含 NaN 或 undefined
   const spaceText = ab.pageContainsText('NaN') || ab.pageContainsText('undefined');
   const noNaN = !spaceText;
-  assertCondition(noNaN, 'T11.1b: 空间显示无 NaN/undefined', noNaN ? '正常' : '发现NaN或undefined');
+  assertCondition(noNaN, 'T13.1b: 空间显示无 NaN/undefined', noNaN ? '正常' : '发现NaN或undefined');
   ab.screenshot('t11-01-space-display');
 
-  // T11.1c - 验证界面空间用量格式正确
+  // T13.1c - 验证界面空间用量格式正确
   const uiText1 = getSpaceUIText();
   ab.waitMs(500);
   // 验证 UI 文本包含合理的格式化值（如 "0 B / 1.0 GB" 或 "100.0 KB / 1.0 GB"）
   const uiHasUnit = /(\d+\.?\d*)\s*(B|KB|MB|GB|TB)\s*\/\s*(\d+\.?\d*)\s*(B|KB|MB|GB|TB)/.test(uiText1);
-  assertCondition(uiHasUnit, 'T11.1c: 界面空间用量格式正确', 'ui=' + uiText1 + ' api=' + space1);
+  assertCondition(uiHasUnit, 'T13.1c: 界面空间用量格式正确', 'ui=' + uiText1 + ' api=' + space1);
   ab.screenshot('t11-01c-space-ui');
 
   const usedBefore = space1.match(/used=(\d+)/);
   const usedValue = usedBefore ? parseInt(usedBefore[1]) : 0;
 
-  // T11.2 - 上传文件后验证用量变化
+  // T13.2 - 上传文件后验证用量变化
   const tmpFile = path.join(os.tmpdir(), 'agentdisk-space-test.bin');
   fs.writeFileSync(tmpFile, Buffer.alloc(1024 * 100, 'x')); // 100KB
 
   const uploadResult = uploadViaAPI(tmpFile);
   ab.waitMs(3000);
   const uploadOk = uploadResult.includes('OK:');
-  assertCondition(uploadOk, 'T11.2: 上传文件成功', uploadResult);
+  assertCondition(uploadOk, 'T13.2: 上传文件成功', uploadResult);
 
   const idMatch = uploadResult.match(/id=(\d+)/);
   const fileId = idMatch ? idMatch[1] : null;
@@ -117,16 +117,16 @@ describe('T11: 存储空间显示', () => {
   const usedAfter = space2.match(/used=(\d+)/);
   const usedAfterValue = usedAfter ? parseInt(usedAfter[1]) : 0;
   const increased = usedAfterValue > usedValue;
-  assertCondition(increased, 'T11.2b: 上传后用量增加', 'before=' + usedValue + ' after=' + usedAfterValue);
+  assertCondition(increased, 'T13.2b: 上传后用量增加', 'before=' + usedValue + ' after=' + usedAfterValue);
 
-  // T11.2c - 验证上传后界面空间用量增加
+  // T13.2c - 验证上传后界面空间用量增加
   const uiText2 = getSpaceUIText();
   ab.waitMs(500);
   const uiIncreased = uiText2.length > 0 && !uiText2.startsWith('0 B /');
-  step('T11.2c: 上传后界面空间用量变化', uiIncreased, 'ui=' + uiText2);
+  step('T13.2c: 上传后界面空间用量变化', uiIncreased, 'ui=' + uiText2);
   ab.screenshot('t11-02-space-after-upload');
 
-  // T11.3 - 软删除文件后验证用量不变（只有回收站彻底删除才释放配额）
+  // T13.3 - 软删除文件后验证用量不变（只有回收站彻底删除才释放配额）
   if (fileId) {
     deleteFileViaAPI(fileId);
     ab.waitMs(2000);
@@ -137,9 +137,9 @@ describe('T11: 存储空间显示', () => {
   const usedSoftDel = spaceAfterSoftDel.match(/used=(\d+)/);
   const usedSoftDelValue = usedSoftDel ? parseInt(usedSoftDel[1]) : 0;
   const unchanged = usedSoftDelValue === usedAfterValue;
-  assertCondition(unchanged, 'T11.3: 软删除后用量不变', 'before=' + usedAfterValue + ' softDel=' + usedSoftDelValue);
+  assertCondition(unchanged, 'T13.3: 软删除后用量不变', 'before=' + usedAfterValue + ' softDel=' + usedSoftDelValue);
 
-  // T11.4 - 从回收站彻底删除后验证用量减少
+  // T13.4 - 从回收站彻底删除后验证用量减少
   const cleanRecycle = ab.evalStdin(`
     (function() {
       return fetch('/v1/disk/recycle', { credentials: 'include' })
@@ -166,7 +166,7 @@ describe('T11: 存储空间显示', () => {
   const usedAfterDel = space3.match(/used=(\d+)/);
   const usedAfterDelValue = usedAfterDel ? parseInt(usedAfterDel[1]) : 0;
   const decreased = usedAfterDelValue < usedAfterValue || usedAfterDelValue <= usedValue;
-  assertCondition(decreased, 'T11.4: 回收站彻底删除后用量减少', 'before=' + usedValue + ' afterPurge=' + usedAfterDelValue + ' clean=' + cleanRecycle);
+  assertCondition(decreased, 'T13.4: 回收站彻底删除后用量减少', 'before=' + usedValue + ' afterPurge=' + usedAfterDelValue + ' clean=' + cleanRecycle);
   ab.screenshot('t11-04-space-after-purge');
 
   try { fs.unlinkSync(tmpFile); } catch {}

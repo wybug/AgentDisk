@@ -36,8 +36,8 @@
 - 运行全部测试：`cd test/browser && node runner.js`
 - 运行指定测试：`cd test/browser && node runner.js t01`
 - 测试前必须启动所有服务（`bash scripts/dev.sh start`）
-- 测试按 T1→T15 顺序执行，存在数据依赖，不可乱序
-- T1 负责全局清理，各用例需自行清理创建的数据，T15 验证无数据污染
+- 测试按 T01→T19 顺序执行，存在数据依赖，不可乱序
+- T03 负责全局清理，各用例需自行清理创建的数据，T17 验证无数据污染
 - 测试截图保存在 `test/browser/screenshots/`
 
 ## 4 通用强制开发规范（所有智能体）

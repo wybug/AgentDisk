@@ -151,12 +151,12 @@ function navigateTo(page) {
   `);
 }
 
-describe('T10: 权限管理', () => {
+describe('T12: 权限管理', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
   ab.waitMs(2000);
 
-  // Upload a test file for permission tests (in case T10 runs standalone)
+  // Upload a test file for permission tests (in case T12 runs standalone)
   ab.evalStdin(`
     (function() {
       var blob = new Blob(['permission test file content'], { type: 'text/plain' });
@@ -171,84 +171,84 @@ describe('T10: 权限管理', () => {
   `);
   ab.waitMs(1000);
 
-  // T10.1 - 导航到权限管理页面
+  // T12.1 - 导航到权限管理页面
   navigateTo('权限管理');
   ab.waitMs(2000);
   const urlPerm = ab.getUrl();
-  assertCondition(urlPerm.includes('/permissions'), 'T10.1: 导航到权限管理页面', urlPerm);
+  assertCondition(urlPerm.includes('/permissions'), 'T12.1: 导航到权限管理页面', urlPerm);
   ab.screenshot('t10-01-permissions-page');
 
-  // T10.2 - 获取文件 ID 用于授权
+  // T12.2 - 获取文件 ID 用于授权
   const fileId = findFileByName('perm-test.txt');
   ab.waitMs(1000);
-  assertCondition(fileId !== 'none' && !fileId.includes('ERR'), 'T10.2: 获取文件 ID', 'fileId=' + fileId);
+  assertCondition(fileId !== 'none' && !fileId.includes('ERR'), 'T12.2: 获取文件 ID', 'fileId=' + fileId);
 
-  // T10.3 - 授予权限（资源 ID 模式）
+  // T12.3 - 授予权限（资源 ID 模式）
   const grantResult = grantPermAPI('agent-test-001', fileId, 'file', 'read');
   ab.waitMs(1000);
-  assertCondition(grantResult.includes('OK'), 'T10.3: 资源ID授权成功', grantResult);
+  assertCondition(grantResult.includes('OK'), 'T12.3: 资源ID授权成功', grantResult);
   ab.screenshot('t10-03-granted');
 
-  // T10.4 - 验证权限记录
+  // T12.4 - 验证权限记录
   const listResult = listPermsAPI();
   ab.waitMs(1000);
   const hasRecord = listResult.includes('agent-test-001');
-  assertCondition(hasRecord, 'T10.4: 权限列表显示记录', listResult);
+  assertCondition(hasRecord, 'T12.4: 权限列表显示记录', listResult);
   ab.screenshot('t10-04-permission-list');
 
-  // T10.5 - 检查权限
+  // T12.5 - 检查权限
   const checkResult = checkPermAPI('agent-test-001', fileId, 'file', 'read');
   ab.waitMs(1000);
-  assertCondition(checkResult.includes('allowed=true'), 'T10.5: 权限检查通过', checkResult);
+  assertCondition(checkResult.includes('allowed=true'), 'T12.5: 权限检查通过', checkResult);
 
-  // T10.6 - 撤销权限
+  // T12.6 - 撤销权限
   const revokeResult = revokePermAPI('agent-test-001', fileId, 'file');
   ab.waitMs(1000);
-  assertCondition(revokeResult.includes('OK'), 'T10.6: 撤销权限成功', revokeResult);
+  assertCondition(revokeResult.includes('OK'), 'T12.6: 撤销权限成功', revokeResult);
   ab.screenshot('t10-06-revoked');
 
-  // T10.7 - 验证撤销后权限不存在
+  // T12.7 - 验证撤销后权限不存在
   const checkAfter = checkPermAPI('agent-test-001', fileId, 'file', 'read');
   ab.waitMs(1000);
   const notAllowed = checkAfter.includes('allowed=false') || checkAfter.includes('ERROR');
-  assertCondition(notAllowed, 'T10.7: 撤销后权限已失效', checkAfter);
+  assertCondition(notAllowed, 'T12.7: 撤销后权限已失效', checkAfter);
 
-  // T10.8 - 路径授权：授予 agent-test-002 对 /** 的 read 权限
+  // T12.8 - 路径授权：授予 agent-test-002 对 /** 的 read 权限
   const pathGrantResult = grantPathPermAPI({ agentId: 'agent-test-002' }, '/**', 'read');
   ab.waitMs(1000);
-  assertCondition(pathGrantResult.includes('OK'), 'T10.8: 路径授权成功', pathGrantResult);
+  assertCondition(pathGrantResult.includes('OK'), 'T12.8: 路径授权成功', pathGrantResult);
   ab.screenshot('t10-08-path-granted');
 
-  // T10.9 - 路径权限验证：路径授权生效
+  // T12.9 - 路径权限验证：路径授权生效
   const pathCheckResult = checkPermAPI('agent-test-002', fileId, 'file', 'read');
   ab.waitMs(1000);
-  assertCondition(pathCheckResult.includes('allowed=true'), 'T10.9: 路径权限检查通过', pathCheckResult);
+  assertCondition(pathCheckResult.includes('allowed=true'), 'T12.9: 路径权限检查通过', pathCheckResult);
 
-  // T10.10 - AgentGroup 路径授权
+  // T12.10 - AgentGroup 路径授权
   const groupGrantResult = grantPathPermAPI({ agentGroupId: 'group-test-001' }, '/Documents/**', 'write');
   ab.waitMs(1000);
-  assertCondition(groupGrantResult.includes('OK'), 'T10.10: 组路径授权成功', groupGrantResult);
+  assertCondition(groupGrantResult.includes('OK'), 'T12.10: 组路径授权成功', groupGrantResult);
   ab.screenshot('t10-10-group-path-granted');
 
-  // T10.11 - 验证权限列表包含路径和组授权
+  // T12.11 - 验证权限列表包含路径和组授权
   const listResult2 = listPermsAPI();
   ab.waitMs(1000);
-  assertCondition(listResult2.includes('/**'), 'T10.11: 权限列表包含路径 /**', listResult2);
-  assertCondition(listResult2.includes('/Documents/**'), 'T10.11: 权限列表包含路径 /Documents/**', listResult2);
+  assertCondition(listResult2.includes('/**'), 'T12.11: 权限列表包含路径 /**', listResult2);
+  assertCondition(listResult2.includes('/Documents/**'), 'T12.11: 权限列表包含路径 /Documents/**', listResult2);
   ab.screenshot('t10-11-list-with-path');
 
-  // T10.12 - 通配符匹配：/**/*.txt 只匹配 txt 文件
+  // T12.12 - 通配符匹配：/**/*.txt 只匹配 txt 文件
   const txtGrantResult = grantPathPermAPI({ agentId: 'agent-test-003' }, '/**/*.txt', 'read');
   ab.waitMs(1000);
-  assertCondition(txtGrantResult.includes('OK'), 'T10.12: txt 路径授权成功', txtGrantResult);
+  assertCondition(txtGrantResult.includes('OK'), 'T12.12: txt 路径授权成功', txtGrantResult);
 
-  // T10.13 - 路径权限撤销
+  // T12.13 - 路径权限撤销
   const pathRevokeResult = revokePathPermAPI({ agentId: 'agent-test-002' }, '/**');
   ab.waitMs(1000);
-  assertCondition(pathRevokeResult.includes('OK'), 'T10.13: 路径权限撤销成功', pathRevokeResult);
+  assertCondition(pathRevokeResult.includes('OK'), 'T12.13: 路径权限撤销成功', pathRevokeResult);
   ab.screenshot('t10-13-path-revoked');
 
-  // T10.14 - 权限页面路径授权 UI
+  // T12.14 - 权限页面路径授权 UI
   navigateTo('权限管理');
   ab.waitMs(2000);
   // Fill in the agent config JSON
@@ -263,7 +263,7 @@ describe('T10: 权限管理', () => {
   ab.waitMs(2000);
   ab.screenshot('t10-14-after-grant');
 
-  // T10.15 - 文件浏览器快捷授权
+  // T12.15 - 文件浏览器快捷授权
   navigateTo('全部文件');
   ab.waitMs(2000);
   var snap = ab.snapshot();
@@ -283,12 +283,12 @@ describe('T10: 权限管理', () => {
     }
   }
 
-  // T10.16 - 权限列表展示验证
+  // T12.16 - 权限列表展示验证
   navigateTo('权限管理');
   ab.waitMs(2000);
   ab.screenshot('t10-16-permission-list-final');
 
-  // T10.17 - 清理：撤销所有测试授权
+  // T12.17 - 清理：撤销所有测试授权
   revokePathPermAPI({ agentId: 'agent-test-003' }, '/**/*.txt');
   ab.waitMs(500);
   revokePathPermAPI({ agentGroupId: 'group-test-001' }, '/Documents/**');

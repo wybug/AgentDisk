@@ -99,7 +99,7 @@ function navigateTo(page) {
   `);
 }
 
-describe('T8: 版本历史与回滚', () => {
+describe('T10: 版本历史与回滚', () => {
   ab.closeAll();
 
   const tmpFile = path.join(os.tmpdir(), 'agentdisk-version-test.txt');
@@ -109,45 +109,45 @@ describe('T8: 版本历史与回滚', () => {
   navigateTo('全部文件');
   ab.waitMs(2000);
 
-  // T8.1 - 上传 version 1
+  // T10.1 - 上传 version 1
   fs.writeFileSync(tmpFile, 'version 1 - initial content');
   const uploadResult = uploadViaAPI(tmpFile);
   ab.waitMs(3000);
   const uploadOk = uploadResult.includes('OK:');
-  assertCondition(uploadOk, 'T8.1: version-test 文件上传成功 (v1)', uploadResult);
+  assertCondition(uploadOk, 'T10.1: version-test 文件上传成功 (v1)', uploadResult);
 
   const idMatch = uploadResult.match(/id=(\d+)/);
   const fileId = idMatch ? idMatch[1] : null;
-  assertCondition(fileId !== null, 'T8.1b: 获取文件 ID', fileId || 'not found');
+  assertCondition(fileId !== null, 'T10.1b: 获取文件 ID', fileId || 'not found');
   ab.screenshot('t08-01-uploaded-v1');
 
-  // T8.2 - 查看版本历史（v1 上传后无历史快照，版本号为 1）
+  // T10.2 - 查看版本历史（v1 上传后无历史快照，版本号为 1）
   const versions1 = listVersions(fileId);
   ab.waitMs(1000);
   const hasV1 = versions1.includes('OK:');
-  assertCondition(hasV1, 'T8.2: 版本历史可查询', versions1);
+  assertCondition(hasV1, 'T10.2: 版本历史可查询', versions1);
   ab.screenshot('t08-02-version-history');
 
-  // T8.3 - 上传同名文件更新（version 2）
+  // T10.3 - 上传同名文件更新（version 2）
   fs.writeFileSync(tmpFile, 'version 2 - updated content');
   const updateResult = updateFileViaAPI(fileId, tmpFile);
   ab.waitMs(3000);
   const updateOk = updateResult.includes('OK');
-  assertCondition(updateOk, 'T8.3: 文件更新为 v2', updateResult);
+  assertCondition(updateOk, 'T10.3: 文件更新为 v2', updateResult);
   ab.screenshot('t08-03-updated-v2');
 
-  // T8.4 - 再次查看版本历史，应有 v1 快照
+  // T10.4 - 再次查看版本历史，应有 v1 快照
   const versions2 = listVersions(fileId);
   ab.waitMs(1000);
   const hasSnapshot = versions2.includes('v1');
-  assertCondition(hasSnapshot, 'T8.4: 版本历史显示 v1 快照', versions2);
+  assertCondition(hasSnapshot, 'T10.4: 版本历史显示 v1 快照', versions2);
   ab.screenshot('t08-04-two-versions');
 
-  // T8.5 & T8.6 - 回滚到 v1
+  // T10.5 & T10.6 - 回滚到 v1
   const rollbackResult = rollbackVersion(fileId, 1);
   ab.waitMs(2000);
   const rollbackOk = rollbackResult.includes('OK');
-  assertCondition(rollbackOk, 'T8.5-T8.6: 回滚到 v1 成功', rollbackResult);
+  assertCondition(rollbackOk, 'T10.5-T10.6: 回滚到 v1 成功', rollbackResult);
   ab.screenshot('t08-05-rolled-back');
 
   // 验证回滚后版本号递增
@@ -164,9 +164,9 @@ describe('T8: 版本历史与回滚', () => {
   `);
   ab.waitMs(1000);
   const versionIncreased = verifyResult.includes('version=') && !verifyResult.includes('version=1') && !verifyResult.includes('version=2');
-  step('T8.6b: 回滚后版本号递增', versionIncreased || verifyResult.includes('OK'), verifyResult);
+  step('T10.6b: 回滚后版本号递增', versionIncreased || verifyResult.includes('OK'), verifyResult);
 
-  // T8.7 - 清理：删除版本测试文件 + 回收站记录
+  // T10.7 - 清理：删除版本测试文件 + 回收站记录
   if (fileId) {
     ab.evalStdin(`
       (function() {
@@ -190,7 +190,7 @@ describe('T8: 版本历史与回滚', () => {
       })()
     `);
     ab.waitMs(2000);
-    step('T8.7: 清理版本测试文件', true, 'fileId=' + fileId);
+    step('T10.7: 清理版本测试文件', true, 'fileId=' + fileId);
   }
 
   try { fs.unlinkSync(tmpFile); } catch {}

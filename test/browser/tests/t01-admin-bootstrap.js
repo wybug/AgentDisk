@@ -19,7 +19,7 @@ function apiCall(code) {
   }
 }
 
-describe('T18: Admin Bootstrap', () => {
+describe('T01: Admin Bootstrap', () => {
   ab.closeBrowser();
 
   // Open admin login page to establish browser context

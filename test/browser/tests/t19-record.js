@@ -1,5 +1,5 @@
 /**
- * T17-Record: 调用真实 Agent 并录制 SSE 响应为 Mock fixture
+ * T19-Record: 调用真实 Agent 并录制 SSE 响应为 Mock fixture
  *
  * 用法: node runner.js t17-record
  *
@@ -59,9 +59,9 @@ function gwRegisterAgent(agentId, agentName, endpoint) {
   `);
 }
 
-// --- T17-Record ---
+// --- T19-Record ---
 
-describe('T17-Record: 真实 Agent 调用录制', () => {
+describe('T19-Record: 真实 Agent 调用录制', () => {
   ab.closeAll();
 
   // ======== Phase 1: Login ========
@@ -75,7 +75,7 @@ describe('T17-Record: 真实 Agent 调用录制', () => {
 
   var loginResult = gwLogin('5001185', 'test123');
   ab.waitMs(1000);
-  assertCondition(loginResult.includes('OK'), 'T17-R.1: 登录成功', 'login=' + loginResult);
+  assertCondition(loginResult.includes('OK'), 'T19-R.1: 登录成功', 'login=' + loginResult);
 
   // ======== Phase 2: Navigate to Chat & Select Agent ========
 
@@ -108,7 +108,7 @@ describe('T17-Record: 真实 Agent 调用录制', () => {
     })()
   `);
   ab.waitMs(500);
-  step('T17-R.2: 选择 Agent', selectResult.includes('selected'), 'result=' + selectResult);
+  step('T19-R.2: 选择 Agent', selectResult.includes('selected'), 'result=' + selectResult);
 
   // ======== Phase 3: Send message ========
 
@@ -146,7 +146,7 @@ describe('T17-Record: 真实 Agent 调用录制', () => {
   ab.screenshot('t17r-03-message-sent');
 
   var hasUserMsg = ab.pageContainsText('生成现有支持法律的报告');
-  step('T17-R.3: 用户消息已发送', hasUserMsg, 'visible=' + hasUserMsg);
+  step('T19-R.3: 用户消息已发送', hasUserMsg, 'visible=' + hasUserMsg);
 
   // ======== Phase 4: Wait for response (poll every 5s, max 120s) ========
 
@@ -174,12 +174,12 @@ describe('T17-Record: 真实 Agent 调用录制', () => {
   }
 
   ab.screenshot('t17r-04-response-complete');
-  step('T17-R.4: 智能体响应完成', responseDone, 'rounds=' + round);
+  step('T19-R.4: 智能体响应完成', responseDone, 'rounds=' + round);
 
   // ======== Phase 5: Verify response ========
 
   var hasReportText = ab.pageContainsText('报告') || ab.pageContainsText('法规');
-  step('T17-R.5: 响应包含报告内容', hasReportText, 'visible=' + hasReportText);
+  step('T19-R.5: 响应包含报告内容', hasReportText, 'visible=' + hasReportText);
 
   var mdCheck = ab.evalStdin(`
     (function() {
@@ -190,7 +190,7 @@ describe('T17-Record: 真实 Agent 调用录制', () => {
       return r.length > 0 ? 'has:' + r.join(',') : 'no-markdown';
     })()
   `);
-  step('T17-R.6: Markdown 元素渲染', mdCheck.includes('has:'), 'elements=' + mdCheck);
+  step('T19-R.6: Markdown 元素渲染', mdCheck.includes('has:'), 'elements=' + mdCheck);
 
   // ======== Phase 6: Record SSE fixture ========
   // The gateway proxy already logged the full SSE stream.
@@ -210,7 +210,7 @@ describe('T17-Record: 真实 Agent 调用录制', () => {
     })()
   `);
 
-  step('T17-R.7: SSE 录制完成', true, 'fixture=agent-sse-report.txt, response_length=' + responseText.length);
+  step('T19-R.7: SSE 录制完成', true, 'fixture=agent-sse-report.txt, response_length=' + responseText.length);
   ab.screenshot('t17r-05-final');
 
   ab.closeBrowser();

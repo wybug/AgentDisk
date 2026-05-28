@@ -48,10 +48,10 @@ function listFoldersAPI() {
   `);
 }
 
-describe('T13: 跨用户隔离', () => {
+describe('T15: 跨用户隔离', () => {
   ab.closeAll();
 
-  // T13.1 - user001 登录，创建文件夹（使用时间戳避免重复）
+  // T15.1 - user001 登录，创建文件夹（使用时间戳避免重复）
   ab.login('user001', 'test123');
   ab.waitMs(2000);
 
@@ -59,33 +59,33 @@ describe('T13: 跨用户隔离', () => {
   const createResult = createFolderAPI(folderName);
   ab.waitMs(2000);
   const createOk = createResult.includes('OK:');
-  assertCondition(createOk, 'T13.1: user001 创建文件夹', createResult);
+  assertCondition(createOk, 'T15.1: user001 创建文件夹', createResult);
   ab.screenshot('t13-01-user1-folder');
 
   // 验证文件夹存在
   const folders1 = listFoldersAPI();
   ab.waitMs(1000);
   const hasFolder = folders1.includes(folderName);
-  assertCondition(hasFolder, 'T13.1b: user001 可见自己的文件夹', folders1);
+  assertCondition(hasFolder, 'T15.1b: user001 可见自己的文件夹', folders1);
 
-  // T13.2 - 关闭 user001 会话
+  // T15.2 - 关闭 user001 会话
   ab.closeBrowser();
 
-  // T13.3 - user002 登录
+  // T15.3 - user002 登录
   ab.login('user002', 'test123');
   ab.waitMs(2000);
 
-  // T13.4 - 验证 user002 看不到 user001 的数据
+  // T15.4 - 验证 user002 看不到 user001 的数据
   const folders2 = listFoldersAPI();
   ab.waitMs(1000);
   const files2 = listFilesAPI();
   ab.waitMs(1000);
 
   const noFolder = !folders2.includes(folderName);
-  assertCondition(noFolder, 'T13.4: user002 看不到 user001 的文件夹', folders2 + ' | ' + files2);
+  assertCondition(noFolder, 'T15.4: user002 看不到 user001 的文件夹', folders2 + ' | ' + files2);
   ab.screenshot('t13-04-user2-isolated');
 
-  // T13.5 - 清理：切回 user001 删除测试文件夹
+  // T15.5 - 清理：切回 user001 删除测试文件夹
   ab.closeBrowser();
   ab.login('user001', 'test123');
   ab.waitMs(2000);
@@ -105,9 +105,9 @@ describe('T13: 跨用户隔离', () => {
     })()
   `);
   ab.waitMs(1500);
-  step('T13.5: user001 清理测试文件夹', cleanResult.includes('OK'), cleanResult);
+  step('T15.5: user001 清理测试文件夹', cleanResult.includes('OK'), cleanResult);
 
-  // 清理回收站中 T13 产生的记录
+  // 清理回收站中 T15 产生的记录
   ab.evalStdin(`
     (function() {
       return fetch('/v1/disk/recycle', { credentials: 'include' })

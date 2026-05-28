@@ -1,7 +1,7 @@
 const { describe, step, assertCondition, printReport } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
 
-describe('T2: 文件夹管理', () => {
+describe('T04: 文件夹管理', () => {
   ab.closeBrowser();
   ab.login('user001', 'test123');
 
@@ -29,13 +29,13 @@ describe('T2: 文件夹管理', () => {
   }
 
   // ============================================================
-  // T2.1 - 创建一级文件夹
+  // T04.1 - 创建一级文件夹
   // ============================================================
-  assertCondition(createFolder('一级目录A'), 'T2.1: 一级目录A创建成功');
+  assertCondition(createFolder('一级目录A'), 'T04.1: 一级目录A创建成功');
   ab.screenshot('t02-01-create-level1');
 
   // ============================================================
-  // T2.2 - 同名文件夹不允许重复创建
+  // T04.2 - 同名文件夹不允许重复创建
   // ============================================================
   ab.jsClickBtn('新建文件夹');
   ab.waitMs(1500);
@@ -49,7 +49,7 @@ describe('T2: 文件夹管理', () => {
   // Also check for error message
   const fullSnapDup = ab.snapshotFull();
   const hasDupError = fullSnapDup.includes('同名') || fullSnapDup.includes('已存在');
-  step('T2.2: 同名文件夹被拒绝', modalStillOpen || hasDupError);
+  step('T04.2: 同名文件夹被拒绝', modalStillOpen || hasDupError);
   // Close modal
   if (modalStillOpen) {
     ab.jsClickBtn('取 消');
@@ -58,57 +58,57 @@ describe('T2: 文件夹管理', () => {
   ab.screenshot('t02-02-duplicate-rejected');
 
   // ============================================================
-  // T2.3 - 进入一级目录A
+  // T04.3 - 进入一级目录A
   // ============================================================
   let url = enterFolder('一级目录A');
-  assertCondition(url.includes('/explorer/'), 'T2.3: 进入一级目录A', url);
+  assertCondition(url.includes('/explorer/'), 'T04.3: 进入一级目录A', url);
   ab.screenshot('t02-03-enter-level1');
 
   // ============================================================
-  // T2.4 - 一级面包屑显示正确
+  // T04.4 - 一级面包屑显示正确
   // ============================================================
   ab.waitMs(1000);
   const bc1 = ab.pageContainsText('一级目录A');
-  assertCondition(bc1, 'T2.4: 一级面包屑显示一级目录A');
+  assertCondition(bc1, 'T04.4: 一级面包屑显示一级目录A');
   ab.screenshot('t02-04-breadcrumb-level1');
 
   // ============================================================
-  // T2.5 - 创建二级文件夹
+  // T04.5 - 创建二级文件夹
   // ============================================================
-  assertCondition(createFolder('二级目录B'), 'T2.5: 二级目录B创建成功');
+  assertCondition(createFolder('二级目录B'), 'T04.5: 二级目录B创建成功');
   ab.screenshot('t02-05-create-level2');
 
   // ============================================================
-  // T2.6 - 进入二级目录B
+  // T04.6 - 进入二级目录B
   // ============================================================
   url = enterFolder('二级目录B');
-  assertCondition(url.includes('/explorer/'), 'T2.6: 进入二级目录B', url);
+  assertCondition(url.includes('/explorer/'), 'T04.6: 进入二级目录B', url);
   ab.screenshot('t02-06-enter-level2');
 
   // ============================================================
-  // T2.7 - 二级面包屑显示完整路径
+  // T04.7 - 二级面包屑显示完整路径
   // ============================================================
   ab.waitMs(1000);
   const bc2a = ab.pageContainsText('一级目录A');
   const bc2b = ab.pageContainsText('二级目录B');
-  assertCondition(bc2a && bc2b, 'T2.7: 二级面包屑显示完整路径', `A=${bc2a} B=${bc2b}`);
+  assertCondition(bc2a && bc2b, 'T04.7: 二级面包屑显示完整路径', `A=${bc2a} B=${bc2b}`);
   ab.screenshot('t02-07-breadcrumb-level2');
 
   // ============================================================
-  // T2.8 - 创建三级文件夹
+  // T04.8 - 创建三级文件夹
   // ============================================================
-  assertCondition(createFolder('三级目录C'), 'T2.8: 三级目录C创建成功');
+  assertCondition(createFolder('三级目录C'), 'T04.8: 三级目录C创建成功');
   ab.screenshot('t02-08-create-level3');
 
   // ============================================================
-  // T2.9 - 进入三级目录C
+  // T04.9 - 进入三级目录C
   // ============================================================
   url = enterFolder('三级目录C');
-  assertCondition(url.includes('/explorer/'), 'T2.9: 进入三级目录C', url);
+  assertCondition(url.includes('/explorer/'), 'T04.9: 进入三级目录C', url);
   ab.screenshot('t02-09-enter-level3');
 
   // ============================================================
-  // T2.10 - 三级面包屑显示完整路径
+  // T04.10 - 三级面包屑显示完整路径
   // ============================================================
   ab.waitMs(1000);
   const bc3a = ab.pageContainsText('一级目录A');
@@ -116,13 +116,13 @@ describe('T2: 文件夹管理', () => {
   const bc3c = ab.pageContainsText('三级目录C');
   assertCondition(
     bc3a && bc3b && bc3c,
-    'T2.10: 三级面包屑显示完整路径',
+    'T04.10: 三级面包屑显示完整路径',
     `A=${bc3a} B=${bc3b} C=${bc3c}`
   );
   ab.screenshot('t02-10-breadcrumb-level3');
 
   // ============================================================
-  // T2.11 - 面包屑导航：从三级跳回二级
+  // T04.11 - 面包屑导航：从三级跳回二级
   // ============================================================
   ab.jsClickLink('二级目录B');
   ab.waitMs(2500);
@@ -130,13 +130,13 @@ describe('T2: 文件夹管理', () => {
   let hasDirC = ab.pageContainsText('三级目录C');
   assertCondition(
     urlBack2.includes('/explorer/') && hasDirC,
-    'T2.11: 面包屑跳回二级，可见三级目录C',
+    'T04.11: 面包屑跳回二级，可见三级目录C',
     `url=${urlBack2} hasC=${hasDirC}`
   );
   ab.screenshot('t02-11-nav-to-level2');
 
   // ============================================================
-  // T2.12 - 面包屑导航：从二级跳回一级
+  // T04.12 - 面包屑导航：从二级跳回一级
   // ============================================================
   ab.jsClickLink('一级目录A');
   ab.waitMs(2500);
@@ -144,13 +144,13 @@ describe('T2: 文件夹管理', () => {
   let hasDirB = ab.pageContainsText('二级目录B');
   assertCondition(
     urlBack1.includes('/explorer/') && hasDirB,
-    'T2.12: 面包屑跳回一级，可见二级目录B',
+    'T04.12: 面包屑跳回一级，可见二级目录B',
     `url=${urlBack1} hasB=${hasDirB}`
   );
   ab.screenshot('t02-12-nav-to-level1');
 
   // ============================================================
-  // T2.13 - 面包屑导航：从一级跳回根目录
+  // T04.13 - 面包屑导航：从一级跳回根目录
   // ============================================================
   ab.jsClickLink('全部文件');
   ab.waitMs(2500);
@@ -158,13 +158,13 @@ describe('T2: 文件夹管理', () => {
   let hasDirA = ab.pageContainsText('一级目录A');
   assertCondition(
     hasDirA && urlRoot.includes('/explorer'),
-    'T2.13: 面包屑跳回根目录，可见一级目录A',
+    'T04.13: 面包屑跳回根目录，可见一级目录A',
     `url=${urlRoot} hasA=${hasDirA}`
   );
   ab.screenshot('t02-13-nav-to-root');
 
   // ============================================================
-  // T2.14 - 重新进入三级目录，验证深路径可达
+  // T04.14 - 重新进入三级目录，验证深路径可达
   // ============================================================
   enterFolder('一级目录A');
   ab.waitMs(1500);
@@ -174,11 +174,11 @@ describe('T2: 文件夹管理', () => {
   ab.waitMs(2500);
 
   let urlDeep = ab.getUrl();
-  assertCondition(urlDeep.includes('/explorer/'), 'T2.14: 重新进入三级目录', urlDeep);
+  assertCondition(urlDeep.includes('/explorer/'), 'T04.14: 重新进入三级目录', urlDeep);
   ab.screenshot('t02-14-reenter-deep');
 
   // ============================================================
-  // T2.15 - 重命名文件夹：回到根目录，重命名一级目录A为一级目录D
+  // T04.15 - 重命名文件夹：回到根目录，重命名一级目录A为一级目录D
   // ============================================================
   ab.jsClickLink('全部文件');
   ab.waitMs(2000);
@@ -205,7 +205,7 @@ describe('T2: 文件夹管理', () => {
 
   let snapRename = ab.snapshot();
   const hasRenameModal = snapRename.includes('重命名文件夹') || snapRename.includes('新名称');
-  step('T2.15a: 重命名弹窗打开', hasRenameModal, renameResult);
+  step('T04.15a: 重命名弹窗打开', hasRenameModal, renameResult);
   ab.screenshot('t02-15a-rename-modal');
 
   if (hasRenameModal) {
@@ -242,11 +242,11 @@ describe('T2: 文件夹管理', () => {
         return 'not-in-table';
       })()
     `) === 'not-in-table';
-  assertCondition(hasD, 'T2.15b: 文件夹重命名成功', `hasD=${hasD}`);
+  assertCondition(hasD, 'T04.15b: 文件夹重命名成功', `hasD=${hasD}`);
   ab.screenshot('t02-15b-renamed');
 
   // ============================================================
-  // T2.16 - 删除所有测试文件夹（递归 API 删除）
+  // T04.16 - 删除所有测试文件夹（递归 API 删除）
   // ============================================================
   const deletedViaApi = ab.evalStdin(`
     (function() {
@@ -281,9 +281,9 @@ describe('T2: 文件夹管理', () => {
   ab.waitMs(3000);
 
   const allDeleted = !ab.pageContainsText('一级目录D');
-  assertCondition(allDeleted, 'T2.16: 所有测试文件夹已删除', deletedViaApi);
+  assertCondition(allDeleted, 'T04.16: 所有测试文件夹已删除', deletedViaApi);
 
-  // 清理回收站中 T2 产生的记录
+  // 清理回收站中 T04 产生的记录
   ab.evalStdin(`
     (function() {
       return fetch('/v1/disk/recycle', { credentials: 'include' })

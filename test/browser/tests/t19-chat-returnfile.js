@@ -1,5 +1,5 @@
 /**
- * T17: Chat ReturnFile + Markdown 测试 (Mock 模式)
+ * T19: Chat ReturnFile + Markdown 测试 (Mock 模式)
  *
  * 使用 Mock Agent Server 快速验证 UI 功能，无需真实 Agent。
  * 前置条件:
@@ -73,9 +73,9 @@ if (!fs.existsSync(reportFixture) || !fs.existsSync(simpleFixture)) {
   process.exit(0);
 }
 
-// --- T17: Mock Mode Test ---
+// --- T19: Mock Mode Test ---
 
-describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
+describe('T19: Chat ReturnFile + Markdown 测试 (Mock)', () => {
   ab.closeAll();
 
   // ======== Phase 0: Start mock agent server ========
@@ -98,7 +98,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
       break;
     } catch {}
   }
-  assertCondition(mockReady, 'T17.0: Mock Agent Server 启动', 'port=' + MOCK_PORT);
+  assertCondition(mockReady, 'T19.0: Mock Agent Server 启动', 'port=' + MOCK_PORT);
 
   // ======== Phase 1: Login ========
 
@@ -111,13 +111,13 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
 
   var loginResult = gwLogin('5001185', 'test123');
   ab.waitMs(1000);
-  assertCondition(loginResult.includes('OK'), 'T17.1: 登录成功', 'login=' + loginResult);
+  assertCondition(loginResult.includes('OK'), 'T19.1: 登录成功', 'login=' + loginResult);
 
   // ======== Phase 2: Register mock agent & Navigate ========
 
   var registerResult = gwRegisterAgent('mock-agent', 'Mock测试Agent', 'http://localhost:' + MOCK_PORT + '/process');
   ab.waitMs(300);
-  step('T17.2: 注册 Mock Agent', registerResult.includes('OK'), 'result=' + registerResult);
+  step('T19.2: 注册 Mock Agent', registerResult.includes('OK'), 'result=' + registerResult);
 
   ab.open(ab.GATEWAY_URL + '/chat');
   ab.waitMs(2000);
@@ -125,7 +125,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
   ab.screenshot('t17-01-chat-page');
 
   var chatLoaded = ab.pageContainsText('Agent 对话') || ab.pageContainsText('输入消息');
-  step('T17.3: 对话页面加载', chatLoaded, 'chatLoaded=' + chatLoaded);
+  step('T19.3: 对话页面加载', chatLoaded, 'chatLoaded=' + chatLoaded);
 
   // ======== Phase 3: Override fetch to inject mock-agent ID ========
   // React controlled select doesn't reliably update state via native events.
@@ -149,7 +149,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
       return 'ok';
     })()
   `);
-  step('T17.3b: Fetch agentId 注入', fetchOverride.includes('ok'), 'result=' + fetchOverride);
+  step('T19.3b: Fetch agentId 注入', fetchOverride.includes('ok'), 'result=' + fetchOverride);
 
   // Also select in dropdown for visual consistency
   ab.evalStdin(`
@@ -177,7 +177,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
       return sel && sel.value ? 'value:' + sel.value : 'empty';
     })()
   `);
-  step('T17.4: Agent 选择状态', hasSelect.includes('mock-agent') || hasSelect !== 'empty', 'select=' + hasSelect);
+  step('T19.4: Agent 选择状态', hasSelect.includes('mock-agent') || hasSelect !== 'empty', 'select=' + hasSelect);
 
   // ======== Phase 4: Send message (report prompt) ========
 
@@ -215,7 +215,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
   ab.screenshot('t17-05-message-sent');
 
   var hasUserMsg = ab.pageContainsText('生成现有支持法律的报告');
-  step('T17.5: 用户消息已发送', hasUserMsg, 'visible=' + hasUserMsg);
+  step('T19.5: 用户消息已发送', hasUserMsg, 'visible=' + hasUserMsg);
 
   // ======== Phase 5: Wait for mock response (max 30s, should be fast) ========
 
@@ -242,12 +242,12 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
   }
 
   ab.screenshot('t17-06-response-complete');
-  step('T17.6: Mock 响应完成', responseDone, 'rounds=' + round);
+  step('T19.6: Mock 响应完成', responseDone, 'rounds=' + round);
 
   // ======== Phase 6: Verify response content ========
 
   var hasReportText = ab.pageContainsText('报告') || ab.pageContainsText('法规');
-  step('T17.7: 响应包含报告内容', hasReportText, 'visible=' + hasReportText);
+  step('T19.7: 响应包含报告内容', hasReportText, 'visible=' + hasReportText);
 
   // Check Markdown elements
   var mdCheck = ab.evalStdin(`
@@ -261,7 +261,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
       return r.length > 0 ? 'has:' + r.join(',') : 'no-markdown';
     })()
   `);
-  step('T17.8: Markdown 元素渲染', mdCheck.includes('has:'), 'elements=' + mdCheck);
+  step('T19.8: Markdown 元素渲染', mdCheck.includes('has:'), 'elements=' + mdCheck);
   ab.screenshot('t17-07-markdown');
 
   // ======== Phase 7: Verify Metrics popover ========
@@ -287,7 +287,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
       return results.length > 0 ? results.join('||') : 'no-borderTop-div';
     })()
   `);
-  step('T17.9-debug: Footer DOM 结构', true, 'info=' + footerDebug);
+  step('T19.9-debug: Footer DOM 结构', true, 'info=' + footerDebug);
 
   // Click the last SVG in the footer (BarChart3 is always the last action icon)
   var metricsResult = ab.evalStdin(`
@@ -323,7 +323,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
       return 'no-popover';
     })()
   `);
-  step('T17.9: Metrics 弹窗显示', popoverText.includes('Token'), 'text=' + popoverText + ', click=' + metricsResult);
+  step('T19.9: Metrics 弹窗显示', popoverText.includes('Token'), 'text=' + popoverText + ', click=' + metricsResult);
 
   // ======== Phase 8: Verify Markdown toggle ========
 
@@ -347,7 +347,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
   `);
   ab.waitMs(300);
   ab.screenshot('t17-09-toggle');
-  step('T17.10: Markdown 切换按钮', toggleResult.includes('toggled'), 'result=' + toggleResult);
+  step('T19.10: Markdown 切换按钮', toggleResult.includes('toggled'), 'result=' + toggleResult);
 
   if (toggleResult.includes('toggled')) {
     var hasPre = ab.evalStdin(`
@@ -359,7 +359,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
         return 'no-raw';
       })()
     `);
-    step('T17.11: 原始文本显示', hasPre.includes('raw-visible'), 'check=' + hasPre);
+    step('T19.11: 原始文本显示', hasPre.includes('raw-visible'), 'check=' + hasPre);
   }
 
   // ======== Phase 9: Test simple response ========
@@ -405,7 +405,7 @@ describe('T17: Chat ReturnFile + Markdown 测试 (Mock)', () => {
   ab.screenshot('t17-10-simple-response');
 
   var hasHello = ab.pageContainsText('智能体') || ab.pageContainsText('服务');
-  step('T17.12: 简单对话响应', hasHello, 'visible=' + hasHello + ', fill=' + fillResult + ', send=' + sendResult);
+  step('T19.12: 简单对话响应', hasHello, 'visible=' + hasHello + ', fill=' + fillResult + ', send=' + sendResult);
 
   // ======== Cleanup ========
 
