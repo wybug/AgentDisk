@@ -4,7 +4,7 @@ const ab = require('../lib/agent-browser');
 const API_BASE = 'http://localhost:9100';
 const WEB_BASE = ab.BASE_URL;
 
-describe('T19d: 用户端公共目录浏览', () => {
+describe('T02d: 用户端公共目录浏览', () => {
   ab.closeBrowser();
 
   function apiCall(code) {

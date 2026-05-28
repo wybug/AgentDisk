@@ -58,7 +58,7 @@ function clickFileLink(fileName) {
   `);
 }
 
-describe('T4: 文件预览', () => {
+describe('T06: 文件预览', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
 
@@ -70,7 +70,7 @@ describe('T4: 文件预览', () => {
     ab.waitMs(2000);
   }
 
-  // T4.1 - 点击 md 文件名称预览
+  // T06.1 - 点击 md 文件名称预览
   let snap = ab.snapshot();
   const mdFile = ab.findRefByText(snap, 'agentdisk-test-upload.md');
   if (mdFile) {
@@ -80,43 +80,43 @@ describe('T4: 文件预览', () => {
     ab.screenshot('t04-01-md-preview');
 
     const hasMdContent = ab.pageContainsText('Markdown') || ab.pageContainsText('item');
-    assertCondition(hasMdContent, 'T4.1: Markdown 预览正常渲染');
+    assertCondition(hasMdContent, 'T06.1: Markdown 预览正常渲染');
 
-    // T4.2 - 返回文件列表
+    // T06.2 - 返回文件列表
     goBackToExplorer();
     const backUrl = ab.getUrl();
-    assertCondition(backUrl.includes('/explorer'), 'T4.2: 返回文件列表', backUrl);
+    assertCondition(backUrl.includes('/explorer'), 'T06.2: 返回文件列表', backUrl);
     ab.screenshot('t04-02-back-to-list');
   } else {
-    step('T4.1: 找不到 md 文件，跳过预览测试', false, '请先运行 T3 上传文件');
+    step('T06.1: 找不到 md 文件，跳过预览测试', false, '请先运行 T05 上传文件');
     ab.screenshot('t04-01-no-md-file');
     ab.closeBrowser();
     return;
   }
 
-  // T4.3 - 点击 py 代码文件预览（用 JS 精确点击 link 元素）
+  // T06.3 - 点击 py 代码文件预览（用 JS 精确点击 link 元素）
   const pyClicked = clickFileLink('agentdisk-test-upload.py');
   ab.waitMs(3000);
   ab.screenshot('t04-03-py-preview');
 
   const pageText = ab.evalStdin('document.body.innerText');
   const hasCodeContent = pageText.includes('def') || pageText.includes('print') || pageText.includes('hello');
-  assertCondition(hasCodeContent, 'T4.3: 代码文件预览正常', hasCodeContent ? '代码内容可见' : 'click=' + pyClicked + ' content=' + pageText.substring(0, 150));
+  assertCondition(hasCodeContent, 'T06.3: 代码文件预览正常', hasCodeContent ? '代码内容可见' : 'click=' + pyClicked + ' content=' + pageText.substring(0, 150));
 
   goBackToExplorer();
 
-  // T4.5 - 点击 txt 文件预览
+  // T06.5 - 点击 txt 文件预览
   const txtClicked = clickFileLink('agentdisk-test-upload.txt');
   ab.waitMs(3000);
   ab.screenshot('t04-05-txt-preview');
 
   const pageText2 = ab.evalStdin('document.body.innerText');
   const hasTxtContent = pageText2.includes('Hello') || pageText2.includes('AgentDisk');
-  assertCondition(hasTxtContent, 'T4.5: 纯文本预览正常', hasTxtContent ? '文本内容可见' : 'click=' + txtClicked + ' content=' + pageText2.substring(0, 150));
+  assertCondition(hasTxtContent, 'T06.5: 纯文本预览正常', hasTxtContent ? '文本内容可见' : 'click=' + txtClicked + ' content=' + pageText2.substring(0, 150));
 
   goBackToExplorer();
 
-  // T4.6 - HTML 文件预览
+  // T06.6 - HTML 文件预览
   const htmlClicked = clickFileLink('agentdisk-test-upload.html');
   ab.waitMs(3000);
   ab.screenshot('t04-06-html-preview');
@@ -127,12 +127,12 @@ describe('T4: 文件预览', () => {
   })()`);
 
   const hasSecurityAlert = ab.pageContainsText('JavaScript') || ab.pageContainsText('禁用');
-  assertCondition(hasIframe.includes('iframe found'), 'T4.6: HTML 预览使用 iframe 渲染', hasIframe);
-  assertCondition(hasSecurityAlert, 'T4.7: HTML 预览显示安全提示', hasSecurityAlert ? '安全提示可见' : '安全提示不可见');
+  assertCondition(hasIframe.includes('iframe found'), 'T06.6: HTML 预览使用 iframe 渲染', hasIframe);
+  assertCondition(hasSecurityAlert, 'T06.7: HTML 预览显示安全提示', hasSecurityAlert ? '安全提示可见' : '安全提示不可见');
 
   goBackToExplorer();
 
-  // T4.8 - 安全验证：上传恶意 HTML 并验证沙箱防护
+  // T06.8 - 安全验证：上传恶意 HTML 并验证沙箱防护
   const evilHtml = path.join(os.tmpdir(), 'agentdisk-test-xss.html');
   fs.writeFileSync(evilHtml, '<!DOCTYPE html><html><body>\n<h1>Security Test</h1>\n<script>window.__xss_fired=true;<\/script>\n<img src=x onerror="window.__xss_img=true">\n<form action="https://evil.com"><input type="submit" value="phish"></form>\n<a href="https://evil.com" target="_blank">evil</a>\n</body></html>');
 
@@ -168,10 +168,10 @@ describe('T4: 文件预览', () => {
   const noAllowPopups = sandboxCheck.includes('popups=false');
   const noAllowTopNav = sandboxCheck.includes('topNav=false');
 
-  assertCondition(noAllowSameOrigin, 'T4.8: iframe 禁止 allow-same-origin', sandboxCheck);
-  assertCondition(noAllowForms, 'T4.9: iframe 禁止 allow-forms', sandboxCheck);
-  assertCondition(noAllowPopups, 'T4.10: iframe 禁止 allow-popups', sandboxCheck);
-  assertCondition(noAllowTopNav, 'T4.11: iframe 禁止 allow-top-navigation', sandboxCheck);
+  assertCondition(noAllowSameOrigin, 'T06.8: iframe 禁止 allow-same-origin', sandboxCheck);
+  assertCondition(noAllowForms, 'T06.9: iframe 禁止 allow-forms', sandboxCheck);
+  assertCondition(noAllowPopups, 'T06.10: iframe 禁止 allow-popups', sandboxCheck);
+  assertCondition(noAllowTopNav, 'T06.11: iframe 禁止 allow-top-navigation', sandboxCheck);
 
   try { fs.unlinkSync(evilHtml); } catch {}
 

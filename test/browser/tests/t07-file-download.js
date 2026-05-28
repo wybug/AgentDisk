@@ -63,7 +63,7 @@ function listFilesViaAPI() {
   `);
 }
 
-describe('T5: 文件下载', () => {
+describe('T07: 文件下载', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
 
@@ -71,25 +71,25 @@ describe('T5: 文件下载', () => {
   navigateToExplorer();
   ab.screenshot('t05-00-explorer');
 
-  // T5.1 - 列出文件，找到一个可下载的文件
+  // T07.1 - 列出文件，找到一个可下载的文件
   const fileList = listFilesViaAPI();
   ab.waitMs(1000);
   const hasFiles = fileList.includes('agentdisk-test-upload');
-  assertCondition(hasFiles, 'T5.1: 找到已上传的测试文件', hasFiles ? fileList.substring(0, 200) : '请先运行 T3 上传文件');
+  assertCondition(hasFiles, 'T07.1: 找到已上传的测试文件', hasFiles ? fileList.substring(0, 200) : '请先运行 T05 上传文件');
 
   // 提取第一个文件ID
   const fileIdMatch = fileList.match(/(\d+):agentdisk-test-upload/);
   const fileId = fileIdMatch ? fileIdMatch[1] : null;
-  assertCondition(fileId !== null, 'T5.1b: 获取文件 ID', fileId || 'not found');
+  assertCondition(fileId !== null, 'T07.1b: 获取文件 ID', fileId || 'not found');
 
-  // T5.2 - 通过 API 获取下载令牌
+  // T07.2 - 通过 API 获取下载令牌
   const tokenResult = getDownloadTokenViaAPI(fileId);
   ab.waitMs(2000);
   const tokenOk = tokenResult.includes('OK: token=');
-  assertCondition(tokenOk, 'T5.2: 获取下载令牌成功', tokenResult.substring(0, 200));
+  assertCondition(tokenOk, 'T07.2: 获取下载令牌成功', tokenResult.substring(0, 200));
   ab.screenshot('t05-02-download-token');
 
-  // T5.3 - 验证下载 URL 可访问
+  // T07.3 - 验证下载 URL 可访问
   const tokenMatch = tokenResult.match(/token=([a-zA-Z0-9._-]+)/);
   if (tokenMatch) {
     const downloadUrl = '/v1/disk/files/download?t=' + tokenMatch[1];
@@ -105,13 +105,13 @@ describe('T5: 文件下载', () => {
     `);
     ab.waitMs(2000);
     const downloadOk = downloadCheck.includes('status=200');
-    assertCondition(downloadOk, 'T5.3: 下载 URL 可访问', downloadCheck);
+    assertCondition(downloadOk, 'T07.3: 下载 URL 可访问', downloadCheck);
   } else {
-    step('T5.3: 无法提取 token，跳过下载验证', false, tokenResult);
+    step('T07.3: 无法提取 token，跳过下载验证', false, tokenResult);
   }
   ab.screenshot('t05-03-download-url');
 
-  // T5.4 - 通过 UI 点击操作菜单下载
+  // T07.4 - 通过 UI 点击操作菜单下载
   const uiFile = 'agentdisk-test-upload.txt';
   const clickResult = clickFileAction(uiFile, '下载');
   ab.waitMs(500);
@@ -128,7 +128,7 @@ describe('T5: 文件下载', () => {
     })()
   `);
   ab.waitMs(2000);
-  step('T5.4: 通过 UI 触发下载操作', menuClick.includes('clicked'), menuClick);
+  step('T07.4: 通过 UI 触发下载操作', menuClick.includes('clicked'), menuClick);
   ab.screenshot('t05-04-download-triggered');
 
   ab.closeBrowser();

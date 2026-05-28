@@ -4,7 +4,7 @@ const ab = require('../lib/agent-browser');
 const API_BASE = 'http://localhost:9100';
 const WEB_BASE = ab.BASE_URL;
 
-describe('T19e: Admin 清理 + 退出登录', () => {
+describe('T02e: Admin 清理 + 退出登录', () => {
   ab.closeBrowser();
 
   function apiCall(code) {
@@ -36,7 +36,7 @@ describe('T19e: Admin 清理 + 退出登录', () => {
 
   var bootstrapOk = bootstrap.code === 0 && (bootstrap.data || {}).token;
   if (!bootstrapOk) {
-    step('TC-prep: Admin 登录失败，请先运行 T18 bootstrap', true, (bootstrap.message || JSON.stringify(bootstrap)).substring(0, 200));
+    step('TC-prep: Admin 登录失败，请先运行 T01 bootstrap', true, (bootstrap.message || JSON.stringify(bootstrap)).substring(0, 200));
     ab.closeBrowser();
     printReport();
     return;

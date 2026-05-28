@@ -59,8 +59,8 @@ if (filteredTests.length === 0) {
 
 checkServices();
 
-// T18 前清空数据库，确保 init-status 测试从干净状态开始
-const needsClean = filteredTests.some(f => f.startsWith('t18'));
+// T01 前清空数据库，确保 init-status 测试从干净状态开始
+const needsClean = filteredTests.some(f => f.startsWith('t01'));
 if (needsClean) {
   console.log('\n\x1b[1m清空管理控制台数据...\x1b[0m');
   try {
@@ -72,7 +72,7 @@ if (needsClean) {
       stdio: 'inherit',
     });
   } catch (e) {
-    console.log('\x1b[33m  警告: 数据库清理失败，T18 初始化状态测试可能被跳过\x1b[0m');
+    console.log('\x1b[33m  警告: 数据库清理失败，T01 初始化状态测试可能被跳过\x1b[0m');
   }
 }
 

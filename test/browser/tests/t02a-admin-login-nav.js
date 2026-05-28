@@ -4,7 +4,7 @@ const ab = require('../lib/agent-browser');
 const API_BASE = 'http://localhost:9100';
 const WEB_BASE = ab.BASE_URL;
 
-describe('T19a: Admin 登录 + 侧边栏导航', () => {
+describe('T02a: Admin 登录 + 侧边栏导航', () => {
   ab.closeBrowser();
 
   // ── TC-44: Admin 独立登录页显示 ──
@@ -51,7 +51,7 @@ describe('T19a: Admin 登录 + 侧边栏导航', () => {
   step('TC-46: Admin 登录失败（错误密码）显示错误', hasLoginError || true, '表单已提交，页面未崩溃');
   ab.screenshot('t19a-02-admin-login-fail');
 
-  // ── Bootstrap: 通过 API 登录获取 admin token（T18 已保证 admin 存在）──
+  // ── Bootstrap: 通过 API 登录获取 admin token（T01 已保证 admin 存在）──
   function apiCall(code) {
     var raw = ab.evalStdin(code);
     ab.waitMs(1200);
@@ -80,7 +80,7 @@ describe('T19a: Admin 登录 + 侧边栏导航', () => {
 
   var bootstrapOk = bootstrap.code === 0 && (bootstrap.data || {}).token;
   if (!bootstrapOk) {
-    step('TC-prep: Admin 登录失败，请先运行 T18 bootstrap', true, (bootstrap.message || JSON.stringify(bootstrap)).substring(0, 200));
+    step('TC-prep: Admin 登录失败，请先运行 T01 bootstrap', true, (bootstrap.message || JSON.stringify(bootstrap)).substring(0, 200));
     ab.screenshot('t19a-03-no-admin');
     ab.closeBrowser();
     printReport();

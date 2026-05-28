@@ -30,7 +30,7 @@ function uploadViaAPI(filePath) {
   `);
 }
 
-describe('T3: 文件上传', () => {
+describe('T05: 文件上传', () => {
   ab.closeAll();
 
   const tmpDir = os.tmpdir();
@@ -52,45 +52,45 @@ describe('T3: 文件上传', () => {
     ab.waitMs(2000);
   }
 
-  // T3.1 - 找到上传按钮
+  // T05.1 - 找到上传按钮
   let snap = ab.snapshot();
   const uploadBtn = ab.findRefByText(snap, '上传文件') || ab.findRefByText(snap, '上传');
-  assertCondition(uploadBtn !== null, 'T3.1: 找到上传按钮', uploadBtn || 'not found');
+  assertCondition(uploadBtn !== null, 'T05.1: 找到上传按钮', uploadBtn || 'not found');
   ab.screenshot('t03-01-before-upload');
 
-  // T3.2 - 上传 txt 文件
+  // T05.2 - 上传 txt 文件
   const txtResult = uploadViaAPI(testTxt);
   ab.waitMs(3000);
   const txtOk = txtResult.includes('OK:');
-  assertCondition(txtOk, 'T3.2: txt 文件上传成功', txtResult);
+  assertCondition(txtOk, 'T05.2: txt 文件上传成功', txtResult);
   ab.screenshot('t03-02-txt-uploaded');
 
-  // T3.3 - 验证列表中文件信息（刷新页面以加载新上传的文件）
+  // T05.3 - 验证列表中文件信息（刷新页面以加载新上传的文件）
   ab.evalStdin('location.reload()');
   ab.waitMs(2000);
   ab.waitLoad('networkidle');
   const hasFileInfo = ab.pageContainsText('agentdisk-test-upload.txt');
-  step('T3.3: 验证列表中文件信息', hasFileInfo, hasFileInfo ? '文件名可见' : '文件名不可见');
+  step('T05.3: 验证列表中文件信息', hasFileInfo, hasFileInfo ? '文件名可见' : '文件名不可见');
 
-  // T3.4 - 上传 md 文件
+  // T05.4 - 上传 md 文件
   const mdResult = uploadViaAPI(testMd);
   ab.waitMs(3000);
   const mdOk = mdResult.includes('OK:');
-  step('T3.4: md 文件上传成功', mdOk, mdResult);
+  step('T05.4: md 文件上传成功', mdOk, mdResult);
   ab.screenshot('t03-03-md-uploaded');
 
-  // T3.5 - 上传 py 代码文件
+  // T05.5 - 上传 py 代码文件
   const pyResult = uploadViaAPI(testPy);
   ab.waitMs(3000);
   const pyOk = pyResult.includes('OK:');
-  step('T3.5: py 代码文件上传成功', pyOk, pyResult);
+  step('T05.5: py 代码文件上传成功', pyOk, pyResult);
   ab.screenshot('t03-04-py-uploaded');
 
-  // T3.6 - 上传 html 文件
+  // T05.6 - 上传 html 文件
   const htmlResult = uploadViaAPI(testHtml);
   ab.waitMs(3000);
   const htmlOk = htmlResult.includes('OK:');
-  assertCondition(htmlOk, 'T3.6: html 文件上传成功', htmlResult);
+  assertCondition(htmlOk, 'T05.6: html 文件上传成功', htmlResult);
   ab.screenshot('t03-05-html-uploaded');
 
   try { fs.unlinkSync(testTxt); } catch {}

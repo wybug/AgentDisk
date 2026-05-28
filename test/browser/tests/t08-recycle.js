@@ -63,7 +63,7 @@ function invalidateQueriesAndNavigate(page) {
   ab.waitMs(2000);
 }
 
-describe('T6: 文件删除与回收站', () => {
+describe('T08: 文件删除与回收站', () => {
   ab.closeAll();
 
   const tmpFile = path.join(os.tmpdir(), 'agentdisk-test-recycle.txt');
@@ -75,25 +75,25 @@ describe('T6: 文件删除与回收站', () => {
   navigateTo('全部文件');
   ab.waitMs(2000);
 
-  // T6.0 - 上传测试文件
+  // T08.0 - 上传测试文件
   const uploadResult = uploadViaAPI(tmpFile);
   ab.waitMs(3000);
   const uploadOk = uploadResult.includes('OK:');
-  assertCondition(uploadOk, 'T6.0: 上传测试文件', uploadResult);
+  assertCondition(uploadOk, 'T08.0: 上传测试文件', uploadResult);
 
   const idMatch = uploadResult.match(/id=(\d+)/);
   const fileId = idMatch ? idMatch[1] : null;
-  assertCondition(fileId !== null, 'T6.0b: 获取文件 ID', fileId || 'not found');
+  assertCondition(fileId !== null, 'T08.0b: 获取文件 ID', fileId || 'not found');
 
   // 导航离开再回来刷新列表
   invalidateQueriesAndNavigate('全部文件');
   ab.screenshot('t06-00-uploaded');
 
-  // T6.1 & T6.2 - 通过 API 删除文件
+  // T08.1 & T08.2 - 通过 API 删除文件
   const deleteResult = deleteFileViaAPI(fileId);
   ab.waitMs(2000);
   const deleteOk = deleteResult.includes('OK');
-  assertCondition(deleteOk, 'T6.1-T6.2: 删除文件', deleteResult);
+  assertCondition(deleteOk, 'T08.1-T08.2: 删除文件', deleteResult);
 
   // 通过 API 验证文件已从列表消失（soft delete）
   const verifyDeleted = ab.evalStdin(`
@@ -109,22 +109,22 @@ describe('T6: 文件删除与回收站', () => {
     })()
   `);
   ab.waitMs(1000);
-  assertCondition(verifyDeleted.includes('OK'), 'T6.2b: 文件从列表消失', verifyDeleted);
+  assertCondition(verifyDeleted.includes('OK'), 'T08.2b: 文件从列表消失', verifyDeleted);
   ab.screenshot('t06-02-after-delete');
 
-  // T6.3 - 进入回收站
+  // T08.3 - 进入回收站
   navigateTo('回收站');
   ab.waitMs(2000);
 
   let urlRecycle = ab.getUrl();
   let inRecycle = urlRecycle.includes('/recycle');
-  assertCondition(inRecycle, 'T6.3: 进入回收站页面', urlRecycle);
+  assertCondition(inRecycle, 'T08.3: 进入回收站页面', urlRecycle);
   ab.screenshot('t06-03-recycle-bin');
 
   const recycleHasFile = ab.pageContainsText('agentdisk-test-recycle.txt');
-  assertCondition(recycleHasFile, 'T6.3b: 回收站中可见被删除的文件', recycleHasFile ? 'ok' : '文件不在回收站');
+  assertCondition(recycleHasFile, 'T08.3b: 回收站中可见被删除的文件', recycleHasFile ? 'ok' : '文件不在回收站');
 
-  // T6.4 - 恢复文件
+  // T08.4 - 恢复文件
   if (recycleHasFile) {
     const restoreResult = ab.evalStdin(`
       (function() {
@@ -143,27 +143,27 @@ describe('T6: 文件删除与回收站', () => {
     `);
     ab.waitMs(2000);
     ab.waitLoad('networkidle');
-    step('T6.4: 点击恢复按钮', restoreResult.includes('clicked'), restoreResult);
+    step('T08.4: 点击恢复按钮', restoreResult.includes('clicked'), restoreResult);
     ab.screenshot('t06-04-restored');
   } else {
-    step('T6.4: 跳过恢复（文件不在回收站）', false, '前置条件不满足');
+    step('T08.4: 跳过恢复（文件不在回收站）', false, '前置条件不满足');
   }
 
-  // T6.5 - 返回文件列表验证恢复
+  // T08.5 - 返回文件列表验证恢复
   navigateTo('全部文件');
   ab.waitMs(2000);
 
   const backInList = ab.pageContainsText('agentdisk-test-recycle.txt');
-  assertCondition(backInList, 'T6.5: 恢复的文件重新出现在列表中', backInList ? 'ok' : '文件未恢复');
+  assertCondition(backInList, 'T08.5: 恢复的文件重新出现在列表中', backInList ? 'ok' : '文件未恢复');
   ab.screenshot('t06-05-back-in-list');
 
-  // T6.6 - 再次删除文件
+  // T08.6 - 再次删除文件
   const deleteResult2 = deleteFileViaAPI(fileId);
   ab.waitMs(2000);
-  step('T6.6: 再次删除文件', deleteResult2.includes('OK'), deleteResult2);
+  step('T08.6: 再次删除文件', deleteResult2.includes('OK'), deleteResult2);
   ab.screenshot('t06-06-deleted-again');
 
-  // T6.7 - 彻底删除（通过 API 获取回收站记录）
+  // T08.7 - 彻底删除（通过 API 获取回收站记录）
   navigateTo('回收站');
   ab.waitMs(2000);
 
@@ -207,9 +207,9 @@ describe('T6: 文件删除与回收站', () => {
       })()
     `);
     ab.waitMs(2000);
-    step('T6.7: 彻底删除', permDelResult.includes('OK'), permDelResult);
+    step('T08.7: 彻底删除', permDelResult.includes('OK'), permDelResult);
   } else {
-    step('T6.7: 文件不在回收站，跳过彻底删除', false, '前置条件不满足');
+    step('T08.7: 文件不在回收站，跳过彻底删除', false, '前置条件不满足');
   }
   ab.screenshot('t06-07-permanent-deleted');
 
@@ -227,7 +227,7 @@ describe('T6: 文件删除与回收站', () => {
     })()
   `);
   ab.waitMs(1000);
-  assertCondition(verifyPermDel.includes('OK'), 'T6.7b: 文件已从回收站彻底删除', verifyPermDel);
+  assertCondition(verifyPermDel.includes('OK'), 'T08.7b: 文件已从回收站彻底删除', verifyPermDel);
   ab.screenshot('t06-08-recycle-empty');
 
   try { fs.unlinkSync(tmpFile); } catch {}

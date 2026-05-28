@@ -157,12 +157,12 @@ function downloadByTokenAPI(token) {
   `);
 }
 
-describe('T9: 分享管理', () => {
+describe('T11: 分享管理', () => {
   ab.closeAll();
   ab.login('user001', 'test123');
   ab.waitMs(2000);
 
-  // Upload a test file for share tests (in case T9 runs standalone)
+  // Upload a test file for share tests (in case T11 runs standalone)
   ab.evalStdin(`
     (function() {
       var blob = new Blob(['share test file content'], { type: 'text/plain' });
@@ -177,71 +177,71 @@ describe('T9: 分享管理', () => {
   `);
   ab.waitMs(1000);
 
-  // T9.1 - 找到测试文件
+  // T11.1 - 找到测试文件
   const fileId = findFileId();
   ab.waitMs(1000);
-  assertCondition(fileId !== 'none' && fileId !== '"none"' && !fileId.includes('ERR'), 'T9.1: 找到测试文件', 'fileId=' + fileId);
+  assertCondition(fileId !== 'none' && fileId !== '"none"' && !fileId.includes('ERR'), 'T11.1: 找到测试文件', 'fileId=' + fileId);
 
-  // T9.2 - 通过 API 创建分享
+  // T11.2 - 通过 API 创建分享
   const createResult = createShareAPI(fileId, 'abc123', 10, 72);
   ab.waitMs(2000);
   const createOk = createResult.includes('OK:');
-  assertCondition(createOk, 'T9.2: 创建分享成功', createResult);
+  assertCondition(createOk, 'T11.2: 创建分享成功', createResult);
 
   // 提取分享码和 ID
   const codeMatch = createResult.match(/code=([a-zA-Z0-9]+)/);
   const idMatch = createResult.match(/id=(\d+)/);
   const shareCode = codeMatch ? codeMatch[1] : null;
   const shareId = idMatch ? idMatch[1] : null;
-  assertCondition(shareCode !== null, 'T9.2b: 获取分享码', shareCode || 'not found');
+  assertCondition(shareCode !== null, 'T11.2b: 获取分享码', shareCode || 'not found');
   ab.screenshot('t09-02-share-created');
 
-  // T9.3 - 导航到我的分享页面
+  // T11.3 - 导航到我的分享页面
   navigateTo('我的分享');
   ab.waitMs(2000);
   const urlShares = ab.getUrl();
-  assertCondition(urlShares.includes('/shares'), 'T9.3: 导航到我的分享页面', urlShares);
+  assertCondition(urlShares.includes('/shares'), 'T11.3: 导航到我的分享页面', urlShares);
   ab.screenshot('t09-03-share-list');
 
-  // T9.4 - 验证分享列表中有记录
+  // T11.4 - 验证分享列表中有记录
   const listResult = listSharesAPI();
   ab.waitMs(1000);
   const listOk = listResult.includes('OK:') && listResult.includes('active');
-  assertCondition(listOk, 'T9.4: 分享列表显示活跃的分享记录', listResult);
+  assertCondition(listOk, 'T11.4: 分享列表显示活跃的分享记录', listResult);
 
-  // T9.5 - 公开访问分享（获取分享信息）
+  // T11.5 - 公开访问分享（获取分享信息）
   const publicResult = getPublicShareAPI(shareCode);
   ab.waitMs(1000);
   const publicOk = publicResult.includes('OK:') && publicResult.includes('active=true');
-  assertCondition(publicOk, 'T9.5: 公开访问分享链接可获取信息', publicResult);
+  assertCondition(publicOk, 'T11.5: 公开访问分享链接可获取信息', publicResult);
   ab.screenshot('t09-05-public-access');
 
-  // T9.6 - 使用提取码访问分享
+  // T11.6 - 使用提取码访问分享
   const accessResult = accessShareAPI(shareCode, 'abc123');
   ab.waitMs(1000);
   const accessOk = accessResult.includes('OK:');
-  assertCondition(accessOk, 'T9.6: 使用提取码访问分享成功', accessResult);
+  assertCondition(accessOk, 'T11.6: 使用提取码访问分享成功', accessResult);
 
-  // T9.7 - 验证错误提取码被拒绝
+  // T11.7 - 验证错误提取码被拒绝
   const wrongAccess = accessShareAPI(shareCode, 'wrongcode');
   ab.waitMs(1000);
   const wrongRejected = wrongAccess.includes('ERROR');
-  assertCondition(wrongRejected, 'T9.7: 错误提取码被拒绝', wrongAccess);
+  assertCondition(wrongRejected, 'T11.7: 错误提取码被拒绝', wrongAccess);
 
-  // T9.7b - 有提取码分享下载：使用正确提取码调用公开下载端点
+  // T11.7b - 有提取码分享下载：使用正确提取码调用公开下载端点
   var dlResult = shareDownloadAPI(shareCode, fileId, 'abc123');
   ab.waitMs(1000);
   var dlOk = dlResult.includes('OK:') && dlResult.includes('token=');
-  step('T9.7b: 有提取码分享下载成功', dlOk, dlResult);
+  step('T11.7b: 有提取码分享下载成功', dlOk, dlResult);
   ab.screenshot('t09-7b-download-with-code');
 
-  // T9.7c - 有提取码 + 错误提取码下载失败
+  // T11.7c - 有提取码 + 错误提取码下载失败
   var wrongDl = shareDownloadAPI(shareCode, fileId, 'wrongcode');
   ab.waitMs(1000);
   var wrongDlRejected = wrongDl.includes('ERROR');
-  step('T9.7c: 错误提取码下载失败', wrongDlRejected, wrongDl);
+  step('T11.7c: 错误提取码下载失败', wrongDlRejected, wrongDl);
 
-  // T9.7d - 无提取码分享下载：创建无提取码的分享并下载
+  // T11.7d - 无提取码分享下载：创建无提取码的分享并下载
   var noCodeShare = createShareAPI(fileId, '', 10, 72);
   ab.waitMs(1000);
   var noCodeMatch = noCodeShare.match(/code=([a-zA-Z0-9]+)/);
@@ -249,9 +249,9 @@ describe('T9: 分享管理', () => {
   var noCodeDlResult = shareDownloadAPI(noCodeShareCode, fileId, '');
   ab.waitMs(1000);
   var noCodeDlOk = noCodeDlResult.includes('OK:') && noCodeDlResult.includes('token=');
-  step('T9.7d: 无提取码分享下载成功', noCodeDlOk, noCodeDlResult);
+  step('T11.7d: 无提取码分享下载成功', noCodeDlOk, noCodeDlResult);
 
-  // T9.7e - 下载 token 验证：在同一 evalStdin 中完成获取 token + 调用下载
+  // T11.7e - 下载 token 验证：在同一 evalStdin 中完成获取 token + 调用下载
   var verifyResult = ab.evalStdin(`
     (function() {
       return fetch('/v1/disk/share/download', {
@@ -277,7 +277,7 @@ describe('T9: 分享管理', () => {
   `);
   ab.waitMs(1500);
   var verifyOk = verifyResult.includes('OK:') && verifyResult.includes('fileName=');
-  step('T9.7e: 下载 token 验证通过', verifyOk, verifyResult);
+  step('T11.7e: 下载 token 验证通过', verifyOk, verifyResult);
   ab.screenshot('t09-7e-download-verified');
 
   // Clean up no-code share
@@ -287,29 +287,29 @@ describe('T9: 分享管理', () => {
     ab.waitMs(300);
   }
 
-  // T9.8 - 验证访问次数增加
+  // T11.8 - 验证访问次数增加
   const afterAccess = listSharesAPI();
   ab.waitMs(1000);
-  step('T9.8: 验证分享访问', afterAccess.includes('OK'), afterAccess.substring(0, 150));
+  step('T11.8: 验证分享访问', afterAccess.includes('OK'), afterAccess.substring(0, 150));
 
-  // T9.8b - 分享不存在的文件应返回错误
+  // T11.8b - 分享不存在的文件应返回错误
   const fakeShare = createShareAPI(999999, 'abc', 10, 72);
   ab.waitMs(1000);
   const fakeRejected = fakeShare.includes('ERROR') && (fakeShare.includes('不存在') || fakeShare.includes('not found') || fakeShare.includes('not exist'));
-  assertCondition(fakeRejected, 'T9.8b: 分享不存在的文件返回错误', fakeShare);
+  assertCondition(fakeRejected, 'T11.8b: 分享不存在的文件返回错误', fakeShare);
 
-  // T9.9 - 撤销分享
+  // T11.9 - 撤销分享
   const revokeResult = revokeShareAPI(shareId);
   ab.waitMs(1000);
   const revokeOk = revokeResult.includes('OK');
-  assertCondition(revokeOk, 'T9.9: 撤销分享成功', revokeResult);
+  assertCondition(revokeOk, 'T11.9: 撤销分享成功', revokeResult);
   ab.screenshot('t09-09-share-revoked');
 
-  // T9.10 - 验证撤销后无法访问
+  // T11.10 - 验证撤销后无法访问
   const afterRevoke = getPublicShareAPI(shareCode);
   ab.waitMs(1000);
   const revoked = afterRevoke.includes('ERROR') || afterRevoke.includes('active=false');
-  assertCondition(revoked, 'T9.10: 撤销后分享不可访问', afterRevoke);
+  assertCondition(revoked, 'T11.10: 撤销后分享不可访问', afterRevoke);
 
   ab.closeBrowser();
 });
