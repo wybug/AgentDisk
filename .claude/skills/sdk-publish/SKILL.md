@@ -47,7 +47,7 @@ pip install build twine
 
 分析步骤：
 1. 读取当前版本：`grep 'version' sdk/pyproject.toml`
-2. 分析变更：`git diff <上次tag或commit> -- sdk/agentdisk/ --stat` 以及详细 diff
+2. 分析变更：`git diff <上次tag或commit> -- sdk/src/agentdisk/ --stat` 以及详细 diff
 3. 根据变更内容推荐版本号，说明理由
 4. 展示推荐版本号给用户确认后再执行
 
@@ -82,11 +82,11 @@ Repository = "https://github.com/wybug/AgentDisk"
 同步修改两个文件中的版本号：
 
 - `sdk/pyproject.toml` → `version = "<new_version>"`
-- `sdk/agentdisk/__init__.py` → `__version__ = "<new_version>"`
+- `sdk/src/agentdisk/__init__.py` → `__version__ = "<new_version>"`
 
 ### Step 3: 更新 README.md
 
-检查 `sdk/README.md` 是否覆盖了新增的公开方法。参考 `sdk/agentdisk/client.py` 和 `sdk/agentdisk/async_client.py` 中所有公开方法，确保 README 的 API Overview 表格完整。
+检查 `sdk/README.md` 是否覆盖了新增的公开方法。参考 `sdk/src/agentdisk/client.py` 和 `sdk/src/agentdisk/async_client.py` 中所有公开方法，确保 README 的 API Overview 表格完整。
 
 ### Step 4: 运行 SDK 检查
 
@@ -110,6 +110,26 @@ cd sdk && twine check dist/*
 ```
 
 **必须通过**，有警告也需处理。
+
+### Step 6.5: 验证 wheel 包含源码文件
+
+**关键检查**：确认 wheel 中包含实际的 Python 源码文件，防止发布空包。
+
+```bash
+cd sdk && python3 -c "
+import zipfile, sys, os
+whl = [f for f in os.listdir('dist') if f.endswith('.whl')][0]
+with zipfile.ZipFile(f'dist/{whl}') as z:
+    py_files = [n for n in z.namelist() if n.endswith('.py') and '.dist-info' not in n]
+    if len(py_files) < 10:
+        print(f'ERROR: wheel only has {len(py_files)} .py files, expected 30+')
+        print('Files in wheel:', z.namelist())
+        sys.exit(1)
+    print(f'OK: {len(py_files)} source files in wheel')
+"
+```
+
+**必须通过**。如果 wheel 中 .py 文件少于 10 个，说明构建有问题，禁止上传。
 
 ### Step 7: 上传到 PyPI
 

@@ -59,7 +59,7 @@ sdk-format-fix:
 	cd sdk && ruff format .
 
 sdk-typecheck:
-	cd sdk && mypy agentdisk tests
+	cd sdk && mypy src/agentdisk tests
 
 sdk-check: sdk-lint sdk-format sdk-typecheck
 	@echo "All SDK checks passed."
