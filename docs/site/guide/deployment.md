@@ -8,39 +8,41 @@
 
 ## 部署架构
 
+所有服务通过 Docker Compose 编排，一条命令启动全部：
+
 ```
-                    ┌─────────────────────────────────────────┐
-                    │           Nginx (80/443)                │
-  浏览器/Agent ───► │  ├── /           → 前端静态文件          │
-                    │  ├── /docs/      → 文档静态文件          │
-                    │  ├── /v1/        → 后端 API :9100       │
-                    │  ├── /auth/      → 后端 API :9100       │
-                    │  └── /health     → 后端 API :9100       │
-                    └────────────┬────────────────────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              │                  │                  │
-        ┌─────┴─────┐    ┌──────┴──────┐    ┌──────┴──────┐
-        │  Backend   │    │   MySQL     │    │   MinIO     │
-        │  :9100     │    │   :3306     │    │   :9000     │
-        └───────────┘    └─────────────┘    └─────────────┘
-              │
-        ┌─────┴─────┐
-        │  Redis    │  （可选）
-        │  :6379    │
-        └───────────┘
+                         ┌─────────────────────────────────────┐
+                         │     Nginx 容器 (80/443)             │
+                         │                                     │
+                         │  /           → 前端静态文件          │
+                         │  /docs/     → 文档静态文件          │
+                         │  /v1/、/auth/ → 反代至 Backend      │
+                         └──┬──────────────────┬───────────────┘
+                            │ 静态文件(内置)    │ 反向代理
+                            │                  │
+                     ┌──────┴──────┐    ┌──────┴──────────┐
+                     │ Web 前端     │    │  Backend :8080  │
+                     │ 文档站点     │    └──┬─────┬─────┬──┘
+                     │ (构建时打包) │       │     │     │
+                     └─────────────┘    ┌──┴──┐┌┴───┐┌┴────┐
+                                        │MySQL││MinIO││Redis│
+                                        │:3306││:9000││:6379│
+                                        └─────┘└─────┘└─────┘
+                                            内部网络（不暴露宿主机）
 ```
 
 ### 端口规划
 
-| 服务 | 端口 | 公网访问 | 说明 |
-|------|------|----------|------|
-| Nginx | 80 / 443 | 是 | 唯一对外入口 |
-| 后端 API | 9100 | 否 | 仅 Nginx 可访问 |
-| MySQL | 3306 | 否 | 仅后端可访问 |
-| MinIO API | 9000 | 否 | 仅后端可访问 |
-| MinIO Console | 9001 | 否 | 仅运维内网访问 |
-| Redis | 6379 | 否 | 仅后端可访问 |
+| 服务 | 容器端口 | 宿主机端口 | 公网访问 | 说明 |
+|------|----------|-----------|----------|------|
+| Nginx | 80 | 80 / 443 | 是 | 唯一对外入口 |
+| 后端 API | 8080 | 无 | 否 | 仅 Nginx 容器可访问 |
+| MySQL | 3306 | 无 | 否 | 仅后端可访问 |
+| MinIO API | 9000 | 无 | 否 | 仅后端可访问 |
+| MinIO Console | 9001 | 无 | 否 | 仅运维内网访问 |
+| Redis | 6379 | 无 | 否 | 仅后端可访问 |
+
+> 所有后端服务运行在 Docker 内部网络 `agentdisk-net` 中，仅 Nginx 容器对外暴露端口。
 
 ## 部署前准备清单
 
@@ -58,8 +60,6 @@
 |------|------|------|
 | Docker | 20.10+ | 容器运行时 |
 | Docker Compose | v2+ | 服务编排 |
-| Nginx | 1.24+ | 反向代理 |
-| certbot | 最新 | TLS 证书（可选） |
 
 ### 网络要求
 
@@ -86,7 +86,6 @@ env | grep -E 'SECRET|PASSWORD|KEY'
 - [ ] 服务器满足最低硬件要求
 - [ ] 域名 DNS 已配置 A 记录
 - [ ] Docker 及 Docker Compose 已安装
-- [ ] Nginx 已安装
 - [ ] 所有密钥已生成并安全保存
 - [ ] `.env` 文件已创建并填入生产值
 - [ ] 防火墙仅开放 22/80/443
@@ -94,19 +93,73 @@ env | grep -E 'SECRET|PASSWORD|KEY'
 
 ## Docker Compose 生产部署
 
+### 文件结构
+
+```
+docker/
+├── Dockerfile              # 后端构建
+├── Dockerfile.nginx        # 前端+文档+Nginx 多阶段构建
+├── nginx.conf              # Nginx 配置（反代+静态文件）
+├── docker-compose.yaml     # 开发环境
+└── docker-compose.prod.yaml # 生产环境
+```
+
+### Dockerfile.nginx
+
+前端和文档站点通过多阶段构建打包进 Nginx 镜像，无需手动构建或拷贝静态文件：
+
+```dockerfile
+# Stage 1: 构建前端
+FROM node:20-alpine AS frontend
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ .
+RUN npm run build
+
+# Stage 2: 构建文档
+FROM node:20-alpine AS docs
+WORKDIR /app
+COPY docs/site/package.json docs/site/package-lock.json ./
+RUN npm ci
+COPY docs/site/ .
+RUN npm run docs:build
+
+# Stage 3: Nginx
+FROM nginx:1.27-alpine
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=frontend /app/dist /usr/share/nginx/html
+COPY --from=docs /app/.vitepress/dist /usr/share/nginx/docs
+EXPOSE 80
+```
+
+### docker-compose.prod.yaml
+
 创建 `docker/docker-compose.prod.yaml`：
 
 ```yaml
 version: "3.8"
 
 services:
+  nginx:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - agentdisk
+    volumes:
+      - ./ssl:/etc/nginx/ssl:ro
+    restart: unless-stopped
+    networks:
+      - agentdisk-net
+
   agentdisk:
-    image: agentdisk:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    ports:
-      - "127.0.0.1:9100:8080"
     depends_on:
       mysql:
         condition: service_healthy
@@ -137,8 +190,6 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: agentdisk
-    ports:
-      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ../sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -162,7 +213,6 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     ports:
-      - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
     environment:
       MINIO_ROOT_USER: ${OSS_ACCESS_KEY}
@@ -186,8 +236,6 @@ services:
       --appendonly yes
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
-    ports:
-      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -206,78 +254,62 @@ networks:
 ```
 
 > 关键设计说明：
-> - 所有端口绑定 `127.0.0.1`，仅本机 Nginx 可访问，不暴露公网
-> - 后端容器内运行在 8080（Dockerfile 默认），映射到宿主机 9100
-> - Redis 在生产环境默认启用，包含密码认证和持久化
-> - 资源限制防止单服务占用过多资源
+> - Nginx 是唯一对外暴露端口（80/443）的服务
+> - 后端 API、MySQL、MinIO、Redis 均不暴露宿主机端口，仅在内部网络通信
+> - 前端和文档在构建时打包进 Nginx 镜像，无需手动管理静态文件
+> - MinIO Console 保留 `127.0.0.1:9001` 映射，方便运维通过 SSH 隧道访问
 
 ### 启动服务
 
 ```bash
-# 构建（首次）
-docker compose -f docker/docker-compose.prod.yaml build
-
-# 启动
-docker compose -f docker/docker-compose.prod.yaml up -d
+# 构建并启动（首次）
+docker compose -f docker/docker-compose.prod.yaml up -d --build
 
 # 查看状态
 docker compose -f docker/docker-compose.prod.yaml ps
 
 # 查看日志
-docker compose -f docker/docker-compose.prod.yaml logs -f agentdisk
+docker compose -f docker/docker-compose.prod.yaml logs -f
 
-# 验证健康状态
-curl http://127.0.0.1:9100/health
+# 验证
+curl http://localhost/health
 ```
 
-## 前端生产构建
+## Nginx 配置说明
+
+`docker/nginx.conf` 已内置在 Nginx 容器中，主要配置：
+
+| 路径 | 目标 | 说明 |
+|------|------|------|
+| `/v1/`、`/auth/` | `http://agentdisk:8080` | API 反向代理 |
+| `/health` | `http://agentdisk:8080` | 健康检查 |
+| `/docs/` | `/usr/share/nginx/docs/` | 文档站点静态文件 |
+| `/` | `/usr/share/nginx/html/` | 前端 SPA（兜底） |
+
+`location` 顺序很关键：`/v1/`、`/auth/`、`/health`、`/docs/` 必须在 `/` 之前，否则会被前端兜底规则拦截。
+
+如需自定义 Nginx 配置（如添加 TLS），修改 `docker/nginx.conf` 后重建容器即可。
+
+## HTTPS 与证书配置
+
+### 挂载证书方式
+
+将证书文件放入 `docker/ssl/` 目录，Nginx 容器通过 volume 自动加载：
 
 ```bash
-cd web
-npm ci
-npm run build
-# 产物输出至 web/dist/
+mkdir -p docker/ssl
+cp agentdisk.crt docker/ssl/
+cp agentdisk.key docker/ssl/
+chmod 600 docker/ssl/agentdisk.key
 ```
 
-将构建产物部署到 Nginx 静态目录：
-
-```bash
-mkdir -p /opt/agentdisk/web
-cp -r web/dist/* /opt/agentdisk/web/
-```
-
-> SPA 路由要求：Nginx 必须配置 `try_files $uri $uri/ /index.html` 以支持前端路由。
-
-## 文档站点生产构建
-
-```bash
-cd docs/site
-npm ci
-npm run docs:build
-# 产物输出至 docs/site/.vitepress/dist/
-```
-
-```bash
-mkdir -p /opt/agentdisk/docs
-cp -r docs/site/.vitepress/dist/* /opt/agentdisk/docs/
-```
-
-## Nginx 反向代理配置
-
-创建 `/etc/nginx/conf.d/agentdisk.conf`：
+修改 `docker/nginx.conf`，将 `listen 80` 改为 HTTPS 配置：
 
 ```nginx
-server {
-    listen 80;
-    server_name agentdisk.example.com;
-    return 301 https://$host$request_uri;
-}
-
 server {
     listen 443 ssl http2;
     server_name agentdisk.example.com;
 
-    # ── TLS ────────────────────────────────────────
     ssl_certificate     /etc/nginx/ssl/agentdisk.crt;
     ssl_certificate_key /etc/nginx/ssl/agentdisk.key;
     ssl_protocols       TLSv1.2 TLSv1.3;
@@ -286,119 +318,48 @@ server {
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 10m;
 
-    # ── 安全头 ─────────────────────────────────────
-    add_header X-Frame-Options       SAMEORIGIN always;
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-XSS-Protection      "1; mode=block" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
-    # ── 全局设置 ───────────────────────────────────
-    client_max_body_size 500M;
-    proxy_connect_timeout 60s;
-    proxy_read_timeout    300s;
+    # ... 其余 location 配置不变
+}
 
-    # ── Gzip ───────────────────────────────────────
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;
-    gzip_min_length 1024;
-
-    # ── 后端 API ───────────────────────────────────
-    location /v1/ {
-        proxy_pass http://127.0.0.1:9100;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # ── OAuth2 回调 ────────────────────────────────
-    location /auth/ {
-        proxy_pass http://127.0.0.1:9100;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # ── 健康检查 ───────────────────────────────────
-    location /health {
-        proxy_pass http://127.0.0.1:9100;
-        access_log off;
-    }
-
-    # ── 文档站点 ───────────────────────────────────
-    location /docs/ {
-        alias /opt/agentdisk/docs/;
-        try_files $uri $uri/ $uri/index.html =404;
-
-        location ~* \.(js|css|png|jpg|svg|ico|woff2?)$ {
-            expires 30d;
-            add_header Cache-Control "public, immutable";
-        }
-    }
-
-    # ── 前端（必须放最后，作为兜底） ───────────────
-    location / {
-        root /opt/agentdisk/web;
-        try_files $uri $uri/ /index.html;
-
-        location ~* \.(js|css|png|jpg|svg|ico|woff2?)$ {
-            expires 30d;
-            add_header Cache-Control "public, immutable";
-        }
-    }
+# HTTP 重定向至 HTTPS
+server {
+    listen 80;
+    server_name agentdisk.example.com;
+    return 301 https://$host$request_uri;
 }
 ```
 
-> `location` 顺序很关键：`/v1/`、`/auth/`、`/health`、`/docs/` 必须在 `/` 之前，否则会被前端兜底规则拦截。
+重建 Nginx 容器使配置生效：
 
 ```bash
-# 验证配置
-nginx -t
-
-# 重载配置
-nginx -s reload
+docker compose -f docker/docker-compose.prod.yaml up -d --build nginx
 ```
-
-## HTTPS 与证书配置
 
 ### Let's Encrypt（推荐）
 
 ```bash
-# 安装 certbot
-apt install -y certbot python3-certbot-nginx
+# 1. 先用 HTTP 模式启动服务
+docker compose -f docker/docker-compose.prod.yaml up -d
 
-# 自动获取并配置证书
-certbot --nginx -d agentdisk.example.com
+# 2. 在宿主机安装 certbot 获取证书
+apt install -y certbot
+certbot certonly --standalone -d agentdisk.example.com \
+  --pre-hook "docker compose -f docker/docker-compose.prod.yaml stop nginx" \
+  --post-hook "docker compose -f docker/docker-compose.prod.yaml start nginx"
 
-# 测试自动续期
-certbot renew --dry-run
-```
+# 3. 将证书链接到 docker/ssl/
+cp /etc/letsencrypt/live/agentdisk.example.com/fullchain.pem docker/ssl/agentdisk.crt
+cp /etc/letsencrypt/live/agentdisk.example.com/privkey.pem docker/ssl/agentdisk.key
 
-certbot 会自动修改 Nginx 配置并设置续期 cron。证书默认位于 `/etc/letsencrypt/live/agentdisk.example.com/`。
+# 4. 修改 nginx.conf 启用 HTTPS（如上）
 
-### 自定义证书
+# 5. 重建并启动
+docker compose -f docker/docker-compose.prod.yaml up -d --build nginx
 
-将证书文件放置到指定路径，并在 Nginx 配置中引用：
-
-```bash
-mkdir -p /etc/nginx/ssl
-cp agentdisk.crt /etc/nginx/ssl/
-cp agentdisk.key /etc/nginx/ssl/
-chmod 600 /etc/nginx/ssl/agentdisk.key
-```
-
-### 证书自动续期
-
-Let's Encrypt 证书有效期 90 天，certbot 已自动配置续期定时任务。可手动验证：
-
-```bash
-# 查看续期定时器
-systemctl list-timers | grep certbot
-
-# 手动续期
-certbot renew
-nginx -s reload
+# 6. 设置自动续期
+echo "0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/agentdisk.example.com/*.pem /path/to/agent-disk/docker/ssl/ && docker compose -f /path/to/agent-disk/docker/docker-compose.prod.yaml restart nginx'" | crontab -
 ```
 
 ## 生产配置调优
@@ -409,7 +370,7 @@ nginx -s reload
 
 ```yaml
 server:
-  port: 9100
+  port: 8080            # 容器内端口，无需修改
   mode: release            # 必须为 release
 
 database:
@@ -461,10 +422,13 @@ FLUSH PRIVILEGES;
 - **Bucket 策略**：确保 `agentdisk` Bucket 为 **私有读写**
 
 ```bash
-# 验证 Bucket 策略为 private
-mc alias set local http://127.0.0.1:9000 $OSS_ACCESS_KEY $OSS_SECRET_KEY
-mc anonymous get local/agentdisk
-# 应输出: Access permission for 'local/agentdisk' is 'none'
+# 通过 SSH 隧道访问 MinIO Console
+ssh -L 9001:127.0.0.1:9001 user@server
+# 本地浏览器打开 http://localhost:9001
+
+# 或使用 mc 命令行验证
+docker compose -f docker/docker-compose.prod.yaml exec minio mc alias set local http://localhost:9000 $OSS_ACCESS_KEY $OSS_SECRET_KEY
+docker compose -f docker/docker-compose.prod.yaml exec minio mc anonymous get local/agentdisk
 ```
 
 ### Redis 调优（如启用）
@@ -483,8 +447,8 @@ Docker Compose 中已配置核心参数：
 ```yaml
 redis:
   enabled: true
-  addr: "127.0.0.1:6379"
-  password: ""            # 通过 REDIS_PASSWORD 环境变量注入
+  addr: "redis:6379"       # 使用 Docker 服务名
+  password: ""             # 通过 REDIS_PASSWORD 环境变量注入
   db: 0
 ```
 
@@ -505,7 +469,7 @@ ufw enable
 ufw status
 ```
 
-确保 9100、3306、9000、6379 端口**不对外开放**。
+由于所有后端服务在 Docker 内部网络中运行，防火墙只需管控 22/80/443。
 
 ### 密钥轮换
 
@@ -522,7 +486,7 @@ sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$NEW_JWT_SECRET/" .env
 docker compose -f docker/docker-compose.prod.yaml restart agentdisk
 
 # 4. 验证
-curl https://agentdisk.example.com/health
+curl http://localhost/health
 ```
 
 > 注意：轮换 JWT Secret 后，所有已颁发的 Token 将失效，用户需重新登录。
@@ -557,9 +521,9 @@ systemctl restart sshd
 
 ### Docker 安全
 
-- 容器以非 root 用户运行（Dockerfile 中已通过 Alpine 默认用户实现）
 - `.env` 文件权限设为 `600`：`chmod 600 .env`
 - Docker socket 权限控制：避免将 `/var/run/docker.sock` 挂载入容器
+- Nginx 容器中的静态文件为只读，无需额外权限控制
 
 ## 备份与恢复
 
@@ -571,6 +535,8 @@ systemctl restart sshd
 | MinIO | 每日 04:00 | 7 日 + 4 周 | mc mirror |
 | 配置文件 | 每次变更 | 最新 5 份 | tar |
 
+> 前端和文档静态文件已内置于 Nginx 镜像中，可通过 `docker compose build` 重建，无需单独备份。
+
 ### MySQL 备份
 
 ```bash
@@ -579,7 +545,8 @@ systemctl restart sshd
 BACKUP_DIR="/backup/mysql"
 mkdir -p "$BACKUP_DIR"
 
-mysqldump -h 127.0.0.1 -u root -p"${DB_PASSWORD}" \
+docker compose -f docker/docker-compose.prod.yaml exec -T mysql \
+  mysqldump -u root -p"${DB_PASSWORD}" \
   --single-transaction --routines --triggers \
   agentdisk | gzip > "${BACKUP_DIR}/agentdisk_$(date +%Y%m%d_%H%M%S).sql.gz"
 
@@ -597,9 +564,9 @@ chmod +x /opt/agentdisk/scripts/backup-mysql.sh
 ### MySQL 恢复
 
 ```bash
-# 解压并恢复
 gunzip < /backup/mysql/agentdisk_20260529_030000.sql.gz \
-  | mysql -h 127.0.0.1 -u root -p agentdisk
+  | docker compose -f docker/docker-compose.prod.yaml exec -T mysql \
+    mysql -u root -p"${DB_PASSWORD}" agentdisk
 ```
 
 ### MinIO 备份
@@ -607,8 +574,10 @@ gunzip < /backup/mysql/agentdisk_20260529_030000.sql.gz \
 ```bash
 #!/bin/bash
 # /opt/agentdisk/scripts/backup-minio.sh
-mc alias set local http://127.0.0.1:9000 "${OSS_ACCESS_KEY}" "${OSS_SECRET_KEY}"
-mc mirror local/agentdisk "/backup/minio/agentdisk_$(date +%Y%m%d)"
+docker compose -f docker/docker-compose.prod.yaml exec minio mc alias set local \
+  http://localhost:9000 "${OSS_ACCESS_KEY}" "${OSS_SECRET_KEY}"
+docker compose -f docker/docker-compose.prod.yaml exec minio \
+  mc mirror local/agentdisk "/backup/minio/agentdisk_$(date +%Y%m%d)"
 
 # 清理 14 天前的备份
 find /backup/minio -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
@@ -617,30 +586,32 @@ find /backup/minio -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 ### MinIO 恢复
 
 ```bash
-mc alias set local http://127.0.0.1:9000 "${OSS_ACCESS_KEY}" "${OSS_SECRET_KEY}"
-mc mirror /backup/minio/agentdisk_20260529 local/agentdisk
+docker compose -f docker/docker-compose.prod.yaml exec minio mc alias set local \
+  http://localhost:9000 "${OSS_ACCESS_KEY}" "${OSS_SECRET_KEY}"
+docker compose -f docker/docker-compose.prod.yaml exec minio \
+  mc mirror /backup/minio/agentdisk_20260529 local/agentdisk
 ```
 
 ### 配置文件备份
 
 ```bash
 tar czf /backup/config/agentdisk-config_$(date +%Y%m%d).tar.gz \
-  /opt/agentdisk/config.yaml \
-  .env \
-  /etc/nginx/conf.d/agentdisk.conf \
-  docker/docker-compose.prod.yaml
+  config.yaml .env \
+  docker/docker-compose.prod.yaml \
+  docker/nginx.conf \
+  docker/Dockerfile.nginx
 ```
 
 ### 完整灾难恢复流程
 
-1. 准备新服务器，安装 Docker、Docker Compose、Nginx
-2. 恢复配置文件：`tar xzf agentdisk-config_YYYYMMDD.tar.gz -C /`
-3. 启动基础设施：`docker compose -f docker/docker-compose.prod.yaml up -d mysql minio redis`
-4. 等待 MySQL 和 MinIO 健康检查通过
-5. 恢复 MySQL 数据：`gunzip < backup.sql.gz | mysql ...`
-6. 恢复 MinIO 数据：`mc mirror /backup/minio/... local/agentdisk`
-7. 启动后端：`docker compose -f docker/docker-compose.prod.yaml up -d agentdisk`
-8. 恢复前端和文档静态文件
+1. 准备新服务器，安装 Docker 和 Docker Compose
+2. 恢复代码仓库：`git clone` 或恢复代码备份
+3. 恢复配置文件：`tar xzf agentdisk-config_YYYYMMDD.tar.gz`
+4. 启动基础设施：`docker compose -f docker/docker-compose.prod.yaml up -d mysql minio redis`
+5. 等待 MySQL 和 MinIO 健康检查通过
+6. 恢复 MySQL 数据：`gunzip < backup.sql.gz | docker compose exec -T mysql mysql ...`
+7. 恢复 MinIO 数据：`docker compose exec minio mc mirror /backup/... local/agentdisk`
+8. 构建并启动全部服务：`docker compose -f docker/docker-compose.prod.yaml up -d --build`
 9. 验证：`curl https://agentdisk.example.com/health`
 10. 切换 DNS 指向新服务器
 
@@ -655,32 +626,33 @@ tar czf /backup/config/agentdisk-config_$(date +%Y%m%d).tar.gz \
 # 2. 拉取新版本代码
 git pull origin main
 
-# 3. 重新构建后端镜像
-docker compose -f docker/docker-compose.prod.yaml build agentdisk
+# 3. 重新构建并启动全部服务
+docker compose -f docker/docker-compose.prod.yaml up -d --build
 
-# 4. 停止旧后端（MySQL/MinIO/Redis 保持运行）
-docker compose -f docker/docker-compose.prod.yaml stop agentdisk
-
-# 5. 启动新版本
-docker compose -f docker/docker-compose.prod.yaml up -d agentdisk
-
-# 6. 验证
-curl http://127.0.0.1:9100/health
+# 4. 验证
+curl http://localhost/health
 ```
 
-### 前端和文档升级
+前端、文档和后端的变更会在 `--build` 时自动重建，无需手动操作。
+
+### 仅升级后端
 
 ```bash
-# 构建前端
-cd web && npm ci && npm run build
-cp -r web/dist/* /opt/agentdisk/web/
+# 停止旧后端（MySQL/MinIO/Redis/Nginx 保持运行）
+docker compose -f docker/docker-compose.prod.yaml stop agentdisk
 
-# 构建文档
-cd ../docs/site && npm ci && npm run docs:build
-cp -r docs/site/.vitepress/dist/* /opt/agentdisk/docs/
+# 重建并启动后端
+docker compose -f docker/docker-compose.prod.yaml up -d --build agentdisk
 
-# 重载 Nginx
-nginx -s reload
+# 验证
+curl http://localhost/health
+```
+
+### 仅升级前端或文档
+
+```bash
+# 重建 Nginx 容器（包含前端+文档）
+docker compose -f docker/docker-compose.prod.yaml up -d --build nginx
 ```
 
 ### 数据库迁移
@@ -690,22 +662,19 @@ nginx -s reload
 ### 回滚流程
 
 ```bash
-# 1. 停止新版本后端
-docker compose -f docker/docker-compose.prod.yaml stop agentdisk
+# 1. 切回旧版本代码
+git checkout v1.2.3
 
 # 2. 如数据库已迁移，恢复备份
 gunzip < /backup/mysql/agentdisk_PRE_UPGRADE.sql.gz \
-  | mysql -h 127.0.0.1 -u root -p agentdisk
+  | docker compose -f docker/docker-compose.prod.yaml exec -T mysql \
+    mysql -u root -p"${DB_PASSWORD}" agentdisk
 
-# 3. 使用旧版本镜像
-docker compose -f docker/docker-compose.prod.yaml up -d agentdisk
+# 3. 重新构建并启动
+docker compose -f docker/docker-compose.prod.yaml up -d --build
 
-# 4. 恢复旧前端文件
-cp -r /backup/web/* /opt/agentdisk/web/
-nginx -s reload
-
-# 5. 验证
-curl http://127.0.0.1:9100/health
+# 4. 验证
+curl http://localhost/health
 ```
 
 ### 版本固定建议
@@ -714,15 +683,15 @@ curl http://127.0.0.1:9100/health
 
 ```yaml
 services:
-  agentdisk:
-    image: agentdisk:v1.2.3    # 使用具体版本号
   mysql:
-    image: mysql:8.0.36        # 固定 MySQL 小版本
+    image: mysql:8.0.36
   minio:
     image: minio/minio:RELEASE.2024-01-01T00-00-00Z
   redis:
     image: redis:7.2-alpine
 ```
+
+后端和 Nginx 镜像通过代码版本控制，`git checkout` 切换版本后 `--build` 重建。
 
 ## 监控与告警
 
@@ -731,11 +700,11 @@ services:
 后端提供健康检查端点：
 
 ```bash
-curl http://127.0.0.1:9100/health
+curl http://localhost/health
 # 返回 {"code":0,"message":"success","data":{"status":"ok"}}
 ```
 
-Docker Compose 中可添加健康检查：
+Docker Compose 中可添加后端健康检查：
 
 ```yaml
 agentdisk:
@@ -750,13 +719,15 @@ agentdisk:
 
 ### 日志管理
 
-**后端日志**：在 `config.yaml` 中配置文件输出：
+**查看服务日志**：
 
-```yaml
-log:
-  level: warn
-  output: file
-  file_path: /app/logs/agentdisk.log
+```bash
+# 查看所有服务日志
+docker compose -f docker/docker-compose.prod.yaml logs -f
+
+# 查看特定服务
+docker compose -f docker/docker-compose.prod.yaml logs -f agentdisk
+docker compose -f docker/docker-compose.prod.yaml logs -f nginx
 ```
 
 **Docker 日志轮转**：创建 `/etc/docker/daemon.json`：
@@ -771,21 +742,16 @@ log:
 }
 ```
 
-**文件日志轮转**：创建 `/etc/logrotate.d/agentdisk`：
+**后端文件日志**：在 `config.yaml` 中配置：
 
-```
-/opt/agentdisk/logs/*.log {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    missingok
-    notifempty
-    copytruncate
-}
+```yaml
+log:
+  level: warn
+  output: file
+  file_path: /app/logs/agentdisk.log
 ```
 
-**Nginx 日志**：默认位于 `/var/log/nginx/access.log` 和 `/var/log/nginx/error.log`，通过系统 logrotate 自动管理。
+日志文件存储在 `app_logs` volume 中，可通过 `docker volume inspect` 查看路径。
 
 ### 关键监控指标
 
@@ -809,13 +775,10 @@ log:
 ## 常见运维操作
 
 ```bash
-# 查看后端日志
-docker compose -f docker/docker-compose.prod.yaml logs -f agentdisk
+# 查看所有服务状态
+docker compose -f docker/docker-compose.prod.yaml ps
 
 # 重启单个服务
-docker compose -f docker/docker-compose.prod.yaml restart agentdisk
-
-# 修改配置后重启
 docker compose -f docker/docker-compose.prod.yaml restart agentdisk
 
 # 查看资源使用
@@ -825,8 +788,14 @@ docker stats
 docker compose -f docker/docker-compose.prod.yaml exec mysql \
   mysql -u root -p -e "OPTIMIZE TABLE agentdisk.disk_file"
 
-# 清理 Docker 资源（谨慎）
-docker system prune -f
+# 进入 Nginx 容器排查
+docker compose -f docker/docker-compose.prod.yaml exec nginx sh
+
+# 查看 Nginx 配置是否正确
+docker compose -f docker/docker-compose.prod.yaml exec nginx nginx -t
+
+# 重建并重启（代码更新后）
+docker compose -f docker/docker-compose.prod.yaml up -d --build
 ```
 
 ## 故障排查
@@ -835,21 +804,22 @@ docker system prune -f
 
 ```
 检查项：
-1. config.yaml 语法是否正确：cat config.yaml
+1. 查看后端日志：docker compose logs agentdisk
 2. MySQL 是否就绪：docker compose exec mysql mysqladmin ping -h localhost
-3. MinIO 是否就绪：curl http://127.0.0.1:9000/minio/health/live
-4. JWT_SECRET 是否设置：docker compose exec agentdisk env | grep JWT_SECRET
-5. 查看后端日志：docker compose logs agentdisk
+3. MinIO 是否就绪：docker compose exec minio curl -f http://localhost:9000/minio/health/live
+4. 密钥是否设置：docker compose exec agentdisk env | grep JWT_SECRET
+5. config.yaml 语法：docker compose exec agentdisk cat config.yaml
 ```
 
 ### 前端白屏
 
 ```
 检查项：
-1. Nginx 静态文件路径是否正确：ls /opt/agentdisk/web/index.html
-2. Nginx try_files 配置是否包含 /index.html 回退
-3. 浏览器控制台是否有 API 请求错误（CORS/404）
-4. Nginx 配置语法：nginx -t
+1. Nginx 容器是否运行：docker compose ps nginx
+2. 静态文件是否正确：docker compose exec nginx ls /usr/share/nginx/html/index.html
+3. Nginx 配置语法：docker compose exec nginx nginx -t
+4. 浏览器控制台是否有 API 请求错误（CORS/404）
+5. 查看 Nginx 日志：docker compose logs nginx
 ```
 
 ### 数据库连接失败
@@ -859,25 +829,25 @@ docker system prune -f
 1. MySQL 容器状态：docker compose ps mysql
 2. 网络连通性：docker compose exec agentdisk ping mysql
 3. 密码是否一致：对比 .env 中 DB_PASSWORD 与 MySQL MYSQL_ROOT_PASSWORD
-4. 手动连接测试：mysql -h 127.0.0.1 -u root -p
+4. 手动连接测试：docker compose exec mysql mysql -u root -p
 ```
 
 ### 文件上传失败
 
 ```
 检查项：
-1. Nginx client_max_body_size 是否足够大
-2. MinIO 磁盘空间：mc admin info local
+1. Nginx client_max_body_size（默认 500M）
+2. MinIO 磁盘空间：docker compose exec minio mc admin info local
 3. OSS 凭据是否正确：检查 OSS_ACCESS_KEY/OSS_SECRET_KEY
-4. 后端日志中的错误信息
+4. 后端日志中的错误信息：docker compose logs agentdisk
 ```
 
 ### SSL 证书问题
 
 ```
 检查项：
-1. 证书过期时间：openssl x509 -in /etc/nginx/ssl/agentdisk.crt -noout -dates
-2. 证书链完整性：curl -v https://agentdisk.example.com 2>&1 | grep "verify"
-3. certbot 续期状态：certbot certificates
-4. Nginx SSL 配置语法：nginx -t
+1. 证书文件是否存在：ls docker/ssl/
+2. 证书过期时间：openssl x509 -in docker/ssl/agentdisk.crt -noout -dates
+3. 证书链完整性：curl -v https://agentdisk.example.com 2>&1 | grep "verify"
+4. Nginx 配置语法：docker compose exec nginx nginx -t
 ```
