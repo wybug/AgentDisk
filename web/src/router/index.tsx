@@ -34,6 +34,8 @@ const ApiKeyManager = lazy(() => import('@/components/admin/ApiKeyManager'));
 const AdminUserManager = lazy(() => import('@/components/admin/AdminUserManager'));
 // eslint-disable-next-line react-refresh/only-export-components
 const OAuth2ConfigManager = lazy(() => import('@/components/admin/OAuth2ConfigManager'));
+// eslint-disable-next-line react-refresh/only-export-components
+const MFASettingsManager = lazy(() => import('@/components/admin/MFASettingsManager'));
 
 // eslint-disable-next-line react-refresh/only-export-components
 const Loading = () => (
@@ -105,6 +107,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <OAuth2ConfigManager />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'mfa',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <MFASettingsManager />
           </Suspense>
         ),
       },

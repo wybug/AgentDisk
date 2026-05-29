@@ -54,3 +54,19 @@ func (r *AdminRepo) UpdatePassword(username, passwordHash string) error {
 		Where("username = ?", username).
 		Update("password_hash", passwordHash).Error
 }
+
+// UpdateMFAEnabled updates the MFA enabled flag for an admin user.
+func (r *AdminRepo) UpdateMFAEnabled(username string, enabled bool) error {
+	return r.db.Model(&model.DiskAdminUser{}).
+		Where("username = ?", username).
+		Update("mfa_enabled", enabled).Error
+}
+
+// GetMFAEnabled returns the MFA enabled flag for an admin user.
+func (r *AdminRepo) GetMFAEnabled(username string) (bool, error) {
+	var admin model.DiskAdminUser
+	if err := r.db.Select("mfa_enabled").Where("username = ?", username).First(&admin).Error; err != nil {
+		return false, err
+	}
+	return admin.MfaEnabled, nil
+}

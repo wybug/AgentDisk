@@ -7,6 +7,7 @@ import {
   TeamOutlined,
   SettingOutlined,
   LogoutOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 
 const { Sider, Content, Header } = Layout;
@@ -16,6 +17,7 @@ const menuItems = [
   { key: '/admin/api-keys', icon: <KeyOutlined />, label: 'API Key' },
   { key: '/admin/users', icon: <TeamOutlined />, label: '管理员' },
   { key: '/admin/oauth2', icon: <SettingOutlined />, label: 'OAuth2 配置' },
+  { key: '/admin/mfa', icon: <SafetyOutlined />, label: 'MFA 设置' },
 ];
 
 export default function AdminPage() {

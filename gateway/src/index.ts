@@ -128,14 +128,55 @@ app.all('/process', (req, res) => {
           if (!data) continue;
           try {
             const parsed = JSON.parse(data);
-            if (parsed.object === 'response' && parsed.status === 'completed') {
-              console.log(`${requestId} response.completed RAW: ${JSON.stringify(parsed).substring(0, 500)}`);
+            // detect artifact: top-level action=return_file or any nested occurrence
+            if (parsed.action === 'return_file') {
+              console.log(`${requestId} artifact: ${JSON.stringify(parsed)}`);
+            } else if (parsed.object === 'response' && parsed.status === 'completed') {
+              const usage = parsed.usage;
+              if (usage) {
+                console.log(`${requestId} metrics: input_tokens=${usage.input_tokens}, output_tokens=${usage.output_tokens}, total_tokens=${usage.total_tokens}, time_to_first_token=${usage.time_to_first_token ?? 'N/A'}, duration=${usage.duration ?? 'N/A'}`);
+              }
+              // extract file artifacts from output messages
+              const artifacts: Array<Record<string, unknown>> = [];
+              for (const msg of parsed.output ?? []) {
+                const meta = msg.metadata;
+                if (meta?.file_artifact) {
+                  artifacts.push(meta.file_artifact);
+                }
+                if (meta?.action === 'return_file') {
+                  artifacts.push(meta);
+                }
+                for (const c of msg.content ?? []) {
+                  if (c.type === 'file' || c.action === 'return_file') {
+                    artifacts.push(c);
+                  }
+                }
+              }
+              if (artifacts.length > 0) {
+                console.log(`${requestId} artifacts: ${JSON.stringify(artifacts)}`);
+              }
+              // debug: dump output structure when no artifacts found
+              if (artifacts.length === 0) {
+                const outputSummary = (parsed.output ?? []).map((msg: any) => ({
+                  type: msg.type, role: msg.role,
+                  contentTypes: (msg.content ?? []).map((c: any) => c.type),
+                  metadataKeys: msg.metadata ? Object.keys(msg.metadata) : [],
+                  code: msg.code,
+                }));
+                console.log(`${requestId} DEBUG output structure: ${JSON.stringify(outputSummary)}`);
+              }
+            } else if (parsed.object === 'message' && parsed.status === 'completed') {
+              // check message.metadata for return_file action
+              if (parsed.metadata?.action === 'return_file') {
+                console.log(`${requestId} artifact (message.metadata): ${JSON.stringify(parsed.metadata)}`);
+              }
             } else if (parsed.object === 'content' && parsed.delta && parsed.text) {
               // streaming text delta — skip verbose logging
             } else if (parsed.error) {
               console.error(`${requestId} error: ${parsed.error}`);
             } else if (parsed.object) {
-              console.log(`${requestId} SSE event: object=${parsed.object}, status=${parsed.status}, keys=${Object.keys(parsed).join(',')}`);
+              // debug: log full data for any unhandled event to find artifact format
+              console.log(`${requestId} SSE event: object=${parsed.object}, status=${parsed.status}, keys=${Object.keys(parsed).join(',')}, raw=${JSON.stringify(parsed).substring(0, 300)}`);
             }
           } catch { /* incomplete JSON in SSE — skip */ }
         }

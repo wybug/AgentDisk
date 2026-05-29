@@ -106,3 +106,45 @@ func ParseAdminToken(secret, tokenStr string) (*AdminClaims, error) {
 	}
 	return claims, nil
 }
+
+// MFASessionClaims represents a short-lived MFA session token.
+type MFASessionClaims struct {
+	Username   string `json:"username"`
+	MFAPending bool   `json:"mfaPending"`
+	jwt.RegisteredClaims
+}
+
+// GenerateMFASessionToken generates a short-lived (5 min) MFA session token.
+func GenerateMFASessionToken(secret, username string) (string, error) {
+	claims := MFASessionClaims{
+		Username:   username,
+		MFAPending: true,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
+}
+
+// ParseMFASessionToken parses and validates an MFA session token.
+func ParseMFASessionToken(secret, tokenStr string) (*MFASessionClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &MFASessionClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := token.Claims.(*MFASessionClaims)
+	if !ok || !token.Valid {
+		return nil, errors.New("invalid mfa session token")
+	}
+	if !claims.MFAPending || claims.Username == "" {
+		return nil, errors.New("not an mfa session token")
+	}
+	return claims, nil
+}

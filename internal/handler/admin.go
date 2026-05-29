@@ -10,6 +10,7 @@ import (
 // AdminHandler handles admin authentication and user management.
 type AdminHandler struct {
 	adminSvc  *service.AdminService
+	mfaSvc    *service.AdminMFAService
 	jwtSecret string
 	expireHrs int
 }
@@ -17,6 +18,11 @@ type AdminHandler struct {
 // NewAdminHandler creates a new AdminHandler.
 func NewAdminHandler(adminSvc *service.AdminService, jwtSecret string, expireHours int) *AdminHandler {
 	return &AdminHandler{adminSvc: adminSvc, jwtSecret: jwtSecret, expireHrs: expireHours}
+}
+
+// SetMFAService sets the MFA service (called when WebAuthn is enabled).
+func (h *AdminHandler) SetMFAService(mfaSvc *service.AdminMFAService) {
+	h.mfaSvc = mfaSvc
 }
 
 type adminLoginRequest struct {
@@ -35,6 +41,21 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	admin, err := h.adminSvc.Login(req.Username, req.Password)
 	if err != nil {
 		response.Unauthorized(c, err.Error())
+		return
+	}
+
+	// If MFA is enabled for this admin and WebAuthn is configured, return MFA challenge
+	if h.mfaSvc != nil && admin.MfaEnabled {
+		sessionToken, tokenErr := jwt.GenerateMFASessionToken(h.jwtSecret, admin.Username)
+		if tokenErr != nil {
+			response.InternalError(c, "failed to generate session token")
+			return
+		}
+		response.OK(c, gin.H{
+			"mfaRequired":  true,
+			"sessionToken": sessionToken,
+			"username":     admin.Username,
+		})
 		return
 	}
 

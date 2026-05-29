@@ -31,6 +31,25 @@ adminClient.interceptors.response.use(
   }
 );
 
+// Public MFA client — no 401 redirect (MFA endpoints are public, 401 means verification failed)
+const mfaPublicClient = axios.create({
+  timeout: 30000,
+});
+
+mfaPublicClient.interceptors.response.use(
+  (response) => {
+    const data = response.data;
+    if (data.code !== undefined && data.code !== 0) {
+      return Promise.reject(new Error(data.message || '请求失败'));
+    }
+    return data;
+  },
+  (error) => {
+    const msg = error.response?.data?.message || error.message;
+    return Promise.reject(new Error(msg));
+  }
+);
+
 export const adminApi = {
   login: (username: string, password: string) =>
     adminClient.post('/v1/disk/admin/login', { username, password }),
@@ -81,4 +100,24 @@ export const adminApi = {
     adminClient.put('/v1/disk/admin/oauth2', data),
   testOAuth2Config: () =>
     adminClient.post('/v1/disk/admin/oauth2/test'),
+
+  // MFA / WebAuthn
+  getMFAStatus: () =>
+    adminClient.get('/v1/disk/admin/mfa/status'),
+  setMFAEnabled: (enabled: boolean) =>
+    adminClient.put('/v1/disk/admin/mfa/enabled', { enabled }),
+  beginRegistration: () =>
+    adminClient.post('/v1/disk/admin/mfa/registration/begin'),
+  finishRegistration: (sessionKey: string, credential: string, name?: string) =>
+    adminClient.post('/v1/disk/admin/mfa/registration/finish', { sessionKey, credential, name }),
+  listPasskeys: () =>
+    adminClient.get('/v1/disk/admin/mfa/credentials'),
+  deletePasskey: (id: number) =>
+    adminClient.delete(`/v1/disk/admin/mfa/credentials/${id}`),
+  renamePasskey: (id: number, name: string) =>
+    adminClient.put(`/v1/disk/admin/mfa/credentials/${id}`, { name }),
+  beginMFALogin: (sessionToken: string) =>
+    mfaPublicClient.post('/v1/disk/admin/mfa/login/begin', { sessionToken }),
+  finishMFALogin: (sessionKey: string, credential: string) =>
+    mfaPublicClient.post('/v1/disk/admin/mfa/login/finish', { sessionKey, credential }),
 };

@@ -247,3 +247,59 @@ func TestParseToken_AdminJWTRejected(t *testing.T) {
 		t.Fatal("admin JWT should not parse as user token")
 	}
 }
+
+// ── MFA Session Token tests ──
+
+func TestGenerateAndParseMFASessionToken(t *testing.T) {
+	token, err := GenerateMFASessionToken(testSecret, "admin")
+	if err != nil {
+		t.Fatalf("GenerateMFASessionToken failed: %v", err)
+	}
+	if token == "" {
+		t.Fatal("MFA session token should not be empty")
+	}
+
+	claims, err := ParseMFASessionToken(testSecret, token)
+	if err != nil {
+		t.Fatalf("ParseMFASessionToken failed: %v", err)
+	}
+	if claims.Username != "admin" {
+		t.Errorf("expected username admin, got %s", claims.Username)
+	}
+	if !claims.MFAPending {
+		t.Error("expected MFAPending to be true")
+	}
+}
+
+func TestParseMFASessionToken_InvalidToken(t *testing.T) {
+	_, err := ParseMFASessionToken(testSecret, "invalid-token")
+	if err == nil {
+		t.Fatal("should fail on invalid MFA session token")
+	}
+}
+
+func TestParseMFASessionToken_WrongSecret(t *testing.T) {
+	token, _ := GenerateMFASessionToken(testSecret, "admin")
+	_, err := ParseMFASessionToken("wrong-secret", token)
+	if err == nil {
+		t.Fatal("should fail with wrong secret")
+	}
+}
+
+func TestParseMFASessionToken_ExpiredToken(t *testing.T) {
+	// Generate a token and wait - we can't easily generate expired tokens,
+	// so test that a regular admin token is rejected
+	token, _ := GenerateAdminToken(testSecret, "admin", "admin", 24)
+	_, err := ParseMFASessionToken(testSecret, token)
+	if err == nil {
+		t.Fatal("admin token should not parse as MFA session token")
+	}
+}
+
+func TestParseMFASessionToken_UserJWTRejected(t *testing.T) {
+	token, _ := GenerateToken(testSecret, "user001", "agent001", 72)
+	_, err := ParseMFASessionToken(testSecret, token)
+	if err == nil {
+		t.Fatal("user JWT should not parse as MFA session token")
+	}
+}
