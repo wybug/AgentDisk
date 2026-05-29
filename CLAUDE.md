@@ -31,6 +31,13 @@
 - MySQL 8.0
 - MinIO 或兼容 OSS 服务
 
+### 3.4 管理员工具
+
+以下工具必须在项目根目录执行（与 `.env`、`config.yaml` 同级），禁止直接调用 `mysql` 命令行客户端操作数据库。
+
+- **清理管理员数据**: `go run ./scripts/clean_admin` — 清空所有业务表（含管理员、密钥、文件等）
+- **添加管理员**: `go run ./scripts/add_admin -username <name> -password <pass>` — 创建新管理员账户
+
 ### 3.3 浏览器自动化测试
 
 - 运行全部测试：`cd test/browser && node runner.js`
@@ -101,6 +108,7 @@
 - **严禁在日志、响应、调试信息中泄露密钥、Token、密码**等敏感字段。
 - **严禁读取系统敏感文件**，包括但不限于 `/etc/shadow`、`~/.ssh/`、`~/.aws/`、各类 credentials 文件。
 - **严禁执行 `env`、`printenv`、`export` 等命令**输出环境变量。
+- **严禁直接调用 `mysql` 命令行客户端操作数据库**，数据库操作应通过应用程序接口或项目提供的工具脚本（如 `scripts/clean_admin`、`scripts/add_admin`）完成。
 - 所有凭证仅通过环境变量注入，代码中禁止硬编码，日志中禁止明文打印。
 
 ## 5 各智能体 DoD 完工标准（硬性卡点）

@@ -11,6 +11,7 @@ type DiskAdminUser struct {
 	DisplayName  string    `gorm:"size:128;not null;default:''" json:"displayName"`
 	IsActive     bool      `gorm:"default:true" json:"isActive"`
 	CreatedBy    string    `gorm:"size:64;not null;default:''" json:"createdBy"`
+	MfaEnabled   bool      `gorm:"default:false" json:"mfaEnabled"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }

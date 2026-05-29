@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentdisk/agent-disk/config"
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/service"
 	"gorm.io/driver/mysql"
@@ -13,7 +14,7 @@ import (
 )
 
 func main() {
-	dsn := flag.String("dsn", "root:@tcp(127.0.0.1:3306)/agentdisk?charset=utf8mb4&parseTime=True&loc=Local", "MySQL DSN")
+	cfgPath := flag.String("config", "config.yaml", "config.yaml path")
 	username := flag.String("username", "", "Admin username (required)")
 	password := flag.String("password", "", "Admin password (required)")
 	role := flag.String("role", "admin", "Admin role (admin or super_admin)")
@@ -21,20 +22,26 @@ func main() {
 	flag.Parse()
 
 	if *username == "" || *password == "" {
-		fmt.Fprintln(os.Stderr, "Usage: add_admin -dsn <mysql-dsn> -username <name> -password <pass> [-role <role>] [-displayName <name>]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Example:")
-		fmt.Fprintln(os.Stderr, "  add_admin -dsn 'root:@tcp(172.20.6.37:3306)/agentdisk?parseTime=true' -username admin -password admin123")
+		fmt.Fprintln(os.Stderr, "Usage: go run ./scripts/add_admin -username <name> -password <pass> [-role <role>] [-displayName <name>]")
 		os.Exit(1)
 	}
 
-	db, err := gorm.Open(mysql.Open(*dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		cfg.Database.User, cfg.Database.Password,
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.Name)
+
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Auto-migrate admin table
 	if err = db.AutoMigrate(&model.DiskAdminUser{}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error migrating: %v\n", err)
 		os.Exit(1)

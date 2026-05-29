@@ -19,6 +19,7 @@ type Config struct {
 	Log           LogConfig           `mapstructure:"log"`
 	OAuth2        OAuth2Config        `mapstructure:"oauth2"`
 	DownloadToken DownloadTokenConfig `mapstructure:"download_token"`
+	WebAuthn      WebAuthnConfig      `mapstructure:"webauthn"`
 }
 
 // ServerConfig represents a serverconfiguration.
@@ -87,6 +88,15 @@ type OAuth2Config struct {
 type DownloadTokenConfig struct {
 	Secret        string `mapstructure:"secret"`
 	ExpireSeconds int    `mapstructure:"expire_seconds"`
+}
+
+// WebAuthnConfig represents WebAuthn/FIDO2 passkey configuration.
+type WebAuthnConfig struct {
+	Enabled       bool   `mapstructure:"enabled"`
+	RPDisplayName string `mapstructure:"rp_display_name"`
+	RPID          string `mapstructure:"rp_id"`
+	RPOrigins     string `mapstructure:"rp_origins"`
+	Timeout       int    `mapstructure:"timeout"`
 }
 
 // Load handles HTTP requests.

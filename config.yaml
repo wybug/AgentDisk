@@ -51,3 +51,10 @@ oauth2:
 download_token:
   secret: "dev-dl-token-secret-for-testing"
   expire_seconds: 300         # 下载令牌有效期（秒）
+
+webauthn:
+  enabled: true
+  rp_display_name: "AgentDisk Admin"
+  rp_id: "localhost"
+  rp_origins: "http://localhost:9101"
+  timeout: 60000

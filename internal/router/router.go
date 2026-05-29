@@ -6,6 +6,7 @@ import (
 	"github.com/agentdisk/agent-disk/internal/middleware"
 	"github.com/agentdisk/agent-disk/internal/repository"
 	"github.com/agentdisk/agent-disk/internal/service"
+	"github.com/agentdisk/agent-disk/internal/store"
 	"github.com/agentdisk/agent-disk/pkg/oauth2client"
 	"github.com/agentdisk/agent-disk/pkg/oss"
 	"github.com/agentdisk/agent-disk/pkg/response"
@@ -72,6 +73,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	apiKeyRepo := repository.NewAPIKeyRepo(db)
 	publicDirRepo := repository.NewPublicDirectoryRepo(db)
 	oauth2ConfigRepo := repository.NewOAuth2ConfigRepo(db)
+	passkeyRepo := repository.NewAdminPasskeyRepo(db)
 
 	// Services
 	spaceSvc := service.NewSpaceService(spaceRepo)
@@ -103,6 +105,18 @@ func Setup(cfg *config.Config) *gin.Engine {
 	publicDirH := handler.NewPublicDirectoryHandler(publicDirSvc)
 	oauth2ConfigH := handler.NewOAuth2ConfigHandler(oauth2ConfigSvc)
 
+	// WebAuthn MFA (optional, enabled via config)
+	var mfaH *handler.AdminMFAHandler
+	if cfg.WebAuthn.Enabled {
+		sessionStore := store.NewWebAuthnSessionStore()
+		mfaSvc, err := service.NewAdminMFAService(cfg.WebAuthn, passkeyRepo, adminRepo, sessionStore, cfg.JWT.Secret, cfg.JWT.ExpireHours)
+		if err != nil {
+			panic("failed to create MFA service: " + err.Error())
+		}
+		mfaH = handler.NewAdminMFAHandler(mfaSvc, cfg.JWT.Secret)
+		adminH.SetMFAService(mfaSvc)
+	}
+
 	// OAuth2 auth routes (public)
 	if authH != nil {
 		r.GET("/auth/login", authH.Login)
@@ -115,6 +129,12 @@ func Setup(cfg *config.Config) *gin.Engine {
 	r.POST("/v1/disk/admin/bootstrap", adminH.Bootstrap)
 	r.GET("/v1/disk/admin/init-status", adminH.InitStatus)
 
+	// MFA login routes (public, session token based)
+	if mfaH != nil {
+		r.POST("/v1/disk/admin/mfa/login/begin", mfaH.BeginMFALogin)
+		r.POST("/v1/disk/admin/mfa/login/finish", mfaH.FinishMFALogin)
+	}
+
 	// Admin management routes (AdminAuth + AdminOnly)
 	adminAPI := r.Group("/v1/disk/admin")
 	adminAPI.Use(middleware.AdminAuth(cfg.JWT.Secret))
@@ -125,6 +145,18 @@ func Setup(cfg *config.Config) *gin.Engine {
 		adminAPI.POST("/users", adminH.CreateUser)
 		adminAPI.PUT("/users/:username/password", adminH.ChangePassword)
 		adminAPI.DELETE("/users/:username", adminH.DeleteUser)
+
+		// MFA/WebAuthn routes (only when enabled)
+		if mfaH != nil {
+			mfa := adminAPI.Group("/mfa")
+			mfa.POST("/registration/begin", mfaH.BeginRegistration)
+			mfa.POST("/registration/finish", mfaH.FinishRegistration)
+			mfa.GET("/credentials", mfaH.ListPasskeys)
+			mfa.DELETE("/credentials/:id", mfaH.DeletePasskey)
+			mfa.PUT("/credentials/:id", mfaH.RenamePasskey)
+			mfa.GET("/status", mfaH.GetMFAStatus)
+			mfa.PUT("/enabled", mfaH.SetMFAEnabled)
+		}
 
 		keys := adminAPI.Group("/api-keys")
 		keys.POST("", apiKeyH.Create)
