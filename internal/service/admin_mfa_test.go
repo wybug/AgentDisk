@@ -126,12 +126,14 @@ func (m *mockPasskeyRepo) UpdateName(id uint64, name string) error {
 
 type mockMFAAdminRepo struct {
 	mfaEnabled map[string]bool
+	roles      map[string]string
 	err        error
 }
 
 func newMockMFAAdminRepo() *mockMFAAdminRepo {
 	return &mockMFAAdminRepo{
 		mfaEnabled: make(map[string]bool),
+		roles:      make(map[string]string),
 	}
 }
 
@@ -148,6 +150,20 @@ func (m *mockMFAAdminRepo) GetMFAEnabled(username string) (bool, error) {
 		return false, m.err
 	}
 	return m.mfaEnabled[username], nil
+}
+
+func (m *mockMFAAdminRepo) GetByUsername(username string) (*model.DiskAdminUser, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	role := m.roles[username]
+	if role == "" {
+		role = "admin"
+	}
+	return &model.DiskAdminUser{
+		Username: username,
+		Role:     role,
+	}, nil
 }
 
 // ── SetMFAEnabled tests ──
@@ -249,6 +265,31 @@ func TestAdminMFAService_GetMFAStatus_WithPasskeys(t *testing.T) {
 	}
 	if !enabled {
 		t.Error("expected MFA enabled")
+	}
+}
+
+func TestAdminMFAService_GetAdminRole(t *testing.T) {
+	adminRepo := newMockMFAAdminRepo()
+	adminRepo.roles["admin"] = "super_admin"
+	svc := &AdminMFAService{adminRepo: adminRepo}
+
+	role, err := svc.getAdminRole("admin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if role != "super_admin" {
+		t.Fatalf("expected super_admin, got %s", role)
+	}
+}
+
+func TestAdminMFAService_GetAdminRole_Error(t *testing.T) {
+	adminRepo := newMockMFAAdminRepo()
+	adminRepo.err = errors.New("db error")
+	svc := &AdminMFAService{adminRepo: adminRepo}
+
+	_, err := svc.getAdminRole("admin")
+	if err == nil {
+		t.Fatal("expected error when admin lookup fails")
 	}
 }
 

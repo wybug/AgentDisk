@@ -32,6 +32,7 @@ type adminPasskeyRepo interface {
 
 // adminMFARepo defines the interface for admin MFA flag updates.
 type adminMFARepo interface {
+	GetByUsername(username string) (*model.DiskAdminUser, error)
 	UpdateMFAEnabled(username string, enabled bool) error
 	GetMFAEnabled(username string) (bool, error)
 }
@@ -263,7 +264,12 @@ func (s *AdminMFAService) FinishLogin(sessionKey string, response *http.Request)
 	_ = s.passkeyRepo.UpdateSignCount(pk.ID, credential.Authenticator.SignCount)
 	_ = s.passkeyRepo.UpdateLastUsed(pk.ID)
 
-	token, err = jwt.GenerateAdminToken(s.jwtSecret, username, "admin", s.jwtExpireHrs)
+	role, err := s.getAdminRole(username)
+	if err != nil {
+		return "", "", err
+	}
+
+	token, err = jwt.GenerateAdminToken(s.jwtSecret, username, role, s.jwtExpireHrs)
 	if err != nil {
 		return "", "", err
 	}
@@ -335,6 +341,14 @@ func (s *AdminMFAService) HasPasskeys(username string) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (s *AdminMFAService) getAdminRole(username string) (string, error) {
+	admin, err := s.adminRepo.GetByUsername(username)
+	if err != nil {
+		return "", err
+	}
+	return admin.Role, nil
 }
 
 // RenamePasskey updates the display name of a passkey.
