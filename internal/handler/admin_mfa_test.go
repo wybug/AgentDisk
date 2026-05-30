@@ -34,7 +34,7 @@ func (m *mockAdminService) Login(_, _ string) (*model.DiskAdminUser, error) {
 
 func (m *mockAdminService) Count() (int64, error) { return 0, nil }
 
-func (m *mockAdminService) CreateAdmin(username, password, role, displayName, createdBy string) (*model.DiskAdminUser, error) {
+func (m *mockAdminService) CreateAdmin(username, _, role, displayName, createdBy string) (*model.DiskAdminUser, error) {
 	return &model.DiskAdminUser{
 		Username:    username,
 		Role:        role,

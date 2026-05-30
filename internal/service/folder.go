@@ -5,18 +5,16 @@ import (
 
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/repository"
-	"github.com/agentdisk/agent-disk/pkg/oss"
 )
 
 // FolderService represents a domain type.
 type FolderService struct {
 	folderRepo *repository.FolderRepo
-	ossClient  *oss.Client
 }
 
 // NewFolderService creates a new FolderService.
-func NewFolderService(folderRepo *repository.FolderRepo, ossClient *oss.Client) *FolderService {
-	return &FolderService{folderRepo: folderRepo, ossClient: ossClient}
+func NewFolderService(folderRepo *repository.FolderRepo) *FolderService {
+	return &FolderService{folderRepo: folderRepo}
 }
 
 // CreateFolder handles the request.

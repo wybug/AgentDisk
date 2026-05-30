@@ -6,8 +6,7 @@ import (
 	"os"
 
 	"github.com/agentdisk/agent-disk/config"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
+	"github.com/agentdisk/agent-disk/internal/repository"
 	"gorm.io/gorm/logger"
 )
 
@@ -39,22 +38,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.Database.User, cfg.Database.Password,
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.Name)
-
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := repository.InitDB(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
 		os.Exit(1)
 	}
+	db.Logger = logger.Default.LogMode(logger.Silent)
 
 	fmt.Println("=== 清空管理控制台数据 ===")
-	db.Exec("SET FOREIGN_KEY_CHECKS = 0")
 
 	var truncated, skipped int
 	for _, table := range tables {
-		result := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s", table))
+		result := db.Exec(fmt.Sprintf("DELETE FROM %s", table))
 		if result.Error != nil {
 			fmt.Printf("  SKIP %-30s (%v)\n", table, result.Error)
 			skipped++
@@ -64,6 +59,5 @@ func main() {
 		}
 	}
 
-	db.Exec("SET FOREIGN_KEY_CHECKS = 1")
 	fmt.Printf("\n完成: %d 张表已清空, %d 张表跳过\n", truncated, skipped)
 }
