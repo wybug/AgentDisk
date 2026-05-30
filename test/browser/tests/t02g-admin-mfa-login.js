@@ -141,6 +141,13 @@ describe('T02g: Admin MFA 登录验证', () => {
   );
   ab.screenshot('t02g-02-mfa-enabled');
 
+  // ── TC-84b: API 显式验证 MFA 已启用 ──
+  assertCondition(
+    mfaEnabled === true,
+    'TC-84b: API 验证 MFA 状态 enabled=true',
+    'data=' + JSON.stringify(mfaStatus.data || {})
+  );
+
   // ── TC-85: 退出登录 ──
   var logoutClicked = ab.evalStdin(`
     (function() {
@@ -238,6 +245,124 @@ describe('T02g: Admin MFA 登录验证', () => {
   );
   ab.screenshot('t02g-06-mfa-verify-page');
 
+  // ── TC-87b: mock navigator.credentials.get 模拟取消 WebAuthn 验证 ──
+  ab.evalStdin(`
+    (function() {
+      window._origGet = navigator.credentials.get.bind(navigator.credentials);
+      navigator.credentials.get = function() {
+        window.__mockGetCalled = true;
+        return Promise.reject(new Error('已取消验证'));
+      };
+      return 'mocked';
+    })()
+  `);
+
+  var verifyBtnClicked1 = ab.evalStdin(`
+    (function() {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.includes('验证通行密钥')) { btns[i].click(); return 'clicked'; }
+      }
+      return 'not found';
+    })()
+  `);
+  step('TC-87b: 点击「验证通行密钥」（mock 取消）', String(verifyBtnClicked1).includes('clicked'), 'result=' + verifyBtnClicked1);
+
+  // 轮询检测错误提示（Toast 可能快速消失）
+  var hasVerifyError = false;
+  for (var w2a = 0; w2a < 15; w2a++) {
+    ab.waitMs(1000);
+    if (ab.pageContainsText('已取消验证') || ab.pageContainsText('身份验证失败') || ab.pageContainsText('已取消')) { hasVerifyError = true; break; }
+  }
+
+  // 检查 mock 是否被调用
+  var mockCalled = ab.evalStdin('(function(){return window.__mockGetCalled===true?"yes":"no";})()');
+  if (!hasVerifyError) {
+    step('TC-87b-debug: mock 是否被调用', mockCalled === 'yes', 'mockCalled=' + mockCalled);
+    step('TC-87b-debug: 页面当前内容', true, ab.snapshotFull().substring(0, 500));
+  }
+
+  assertCondition(hasVerifyError, 'TC-87b: mock 取消 WebAuthn 后页面显示错误提示', 'hasVerifyError=' + hasVerifyError);
+  ab.screenshot('t02g-07-mfa-cancel');
+
+  // 恢复原始 credentials.get
+  ab.evalStdin(`
+    (function() {
+      if (window._origGet) {
+        navigator.credentials.get = window._origGet;
+        delete window._origGet;
+      }
+      return 'restored';
+    })()
+  `);
+
+  // ── TC-87c: 点击「返回登录」→ 回到登录表单 ──
+  var backToLogin = ab.evalStdin(`
+    (function() {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.includes('返回登录')) { btns[i].click(); return 'clicked'; }
+      }
+      return 'not found';
+    })()
+  `);
+  ab.waitMs(1000);
+
+  var backToForm = !ab.pageContainsText('验证身份') && ab.pageContainsText('用户名');
+  assertCondition(
+    String(backToLogin).includes('clicked') && backToForm,
+    'TC-87c: 点击「返回登录」回到登录表单',
+    'clicked=' + backToLogin + ' hasForm=' + backToForm
+  );
+  ab.screenshot('t02g-08-back-to-login');
+
+  // ── TC-87d: 重新输入正确凭据 → 再次进入 MFA 验证页 ──
+  ab.evalStdin(`
+    (function() {
+      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      var inputs = document.querySelectorAll('.ant-form input');
+      var filled = 0;
+      inputs.forEach(function(input) {
+        if (input.placeholder === '用户名' || input.id === 'username') {
+          setter.call(input, 'admin');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          filled++;
+        }
+        if (input.placeholder === '密码' || input.type === 'password') {
+          setter.call(input, 'admin123');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          filled++;
+        }
+      });
+      return 'filled_' + filled;
+    })()
+  `);
+  ab.waitMs(500);
+
+  ab.evalStdin(`
+    (function() {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.includes('登录') || btns[i].getAttribute('type') === 'submit') {
+          btns[i].click();
+          return 'clicked';
+        }
+      }
+      return 'not found';
+    })()
+  `);
+  ab.waitMs(3000);
+
+  var hasMFAVerify2 = ab.pageContainsText('验证身份') || ab.pageContainsText('验证通行密钥');
+  assertCondition(
+    hasMFAVerify2,
+    'TC-87d: 重新输入凭据后再次进入 MFA 验证页',
+    'hasMFAVerify=' + hasMFAVerify2
+  );
+  ab.screenshot('t02g-09-mfa-verify-again');
+
   // ── TC-88: [人工] 完成 WebAuthn 验证登录 ──
   var verifyBtnClicked = ab.evalStdin(`
     (function() {
@@ -260,7 +385,29 @@ describe('T02g: Admin MFA 登录验证', () => {
 
   var hasAdminHeader = ab.pageContainsText('管理后台');
   step('TC-88: 管理后台 Header 显示', hasAdminHeader, 'hasAdminHeader=' + hasAdminHeader);
-  ab.screenshot('t02g-07-mfa-login-success');
+  ab.screenshot('t02g-10-mfa-login-success');
+
+  // ── TC-88b: 验证侧边栏导航 ──
+  var navItems = [
+    { text: '公共目录', url: '/admin/public-dirs' },
+    { text: 'API Key', url: '/admin/api-keys' },
+    { text: '管理员', url: '/admin/users' }
+  ];
+  navItems.forEach(function(item) {
+    ab.evalStdin(`
+      (function() {
+        var links = document.querySelectorAll('a, .ant-menu-item');
+        for (var i = 0; i < links.length; i++) {
+          if (links[i].textContent.includes('${item.text}')) { links[i].click(); return 'clicked'; }
+        }
+        return 'not found';
+      })()
+    `);
+    ab.waitMs(1500);
+    var navUrl = ab.getUrl();
+    step('TC-88b: 点击「' + item.text + '」', navUrl.includes('${item.url}'), 'url=' + navUrl);
+  });
+  ab.screenshot('t02g-11-sidebar-nav');
 
   // ── Cleanup: 关闭 MFA + 删除通行密钥 ──
   ab.evalStdin(`localStorage.setItem('admin_token', '${adminToken}')`);
@@ -373,7 +520,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-89: 无 MFA 时仅密码登录成功',
     'url=' + noMfaUrl
   );
-  ab.screenshot('t02g-08-login-no-mfa');
+  ab.screenshot('t02g-12-login-no-mfa');
 
   ab.closeBrowser();
 });

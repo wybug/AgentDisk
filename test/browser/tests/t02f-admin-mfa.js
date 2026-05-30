@@ -89,7 +89,17 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
   );
   ab.screenshot('t02f-02-switch-disabled');
 
-  // ── TC-72: 点击「注册通行密钥」→ [人工] 完成 WebAuthn 注册 ──
+  // ── TC-72: mock navigator.credentials.create 模拟取消 WebAuthn ──
+  ab.evalStdin(`
+    (function() {
+      window._origCreate = navigator.credentials.create.bind(navigator.credentials);
+      navigator.credentials.create = function() {
+        return Promise.reject(new DOMException('The operation was cancelled.', 'NotAllowedError'));
+      };
+      return 'mocked';
+    })()
+  `);
+
   var regBtnClicked = ab.evalStdin(`
     (function() {
       var btns = document.querySelectorAll('button');
@@ -99,7 +109,41 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
       return 'not found';
     })()
   `);
-  step('TC-72: 点击「注册通行密钥」', String(regBtnClicked).includes('clicked'), 'result=' + regBtnClicked);
+  step('TC-72: 点击「注册通行密钥」（mock 取消）', String(regBtnClicked).includes('clicked'), 'result=' + regBtnClicked);
+
+  // 轮询检测取消提示（Toast 3秒后消失，需尽早捕获）
+  var hasCancelMsg = false;
+  for (var w0 = 0; w0 < 10; w0++) {
+    ab.waitMs(1000);
+    if (ab.pageContainsText('已取消注册')) { hasCancelMsg = true; break; }
+  }
+
+  // ── TC-72b: 验证取消注册提示 ──
+  assertCondition(hasCancelMsg, 'TC-72b: mock 取消 WebAuthn 后页面显示「已取消注册」', 'hasCancelMsg=' + hasCancelMsg);
+  ab.screenshot('t02f-03-cancel-registration');
+
+  // 恢复原始 credentials.create
+  ab.evalStdin(`
+    (function() {
+      if (window._origCreate) {
+        navigator.credentials.create = window._origCreate;
+        delete window._origCreate;
+      }
+      return 'restored';
+    })()
+  `);
+
+  // ── TC-72c: 再次点击「注册通行密钥」→ [人工] 完成 WebAuthn 注册 ──
+  var regBtnClicked2 = ab.evalStdin(`
+    (function() {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.includes('注册通行密钥')) { btns[i].click(); return 'clicked'; }
+      }
+      return 'not found';
+    })()
+  `);
+  step('TC-72c: 再次点击「注册通行密钥」', String(regBtnClicked2).includes('clicked'), 'result=' + regBtnClicked2);
 
   console.log('\n\x1b[43m\x1b[30m  [人工操作] 请在浏览器中完成 WebAuthn 注册（指纹/面容/安全密钥），等待30秒\x1b[0m\n');
   alertManual('请完成通行密钥注册');
@@ -133,7 +177,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
   } else {
     assertCondition(false, 'TC-73: 修改名称为「测试密钥」并确认', '命名弹窗未出现，可能 WebAuthn 注册未完成');
   }
-  ab.screenshot('t02f-03-passkey-registered');
+  ab.screenshot('t02f-04-passkey-registered');
 
   // ── TC-74: 验证通行密钥出现在列表 ──
   var hasTestKey = ab.pageContainsText('测试密钥');
@@ -148,7 +192,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
     })()
   `);
   assertCondition(String(switchEnabled).includes('enabled'), 'TC-75: MFA 开关变为可用', 'switch=' + switchEnabled);
-  ab.screenshot('t02f-04-switch-enabled');
+  ab.screenshot('t02f-05-switch-enabled');
 
   // ── TC-76: 重命名通行密钥 ──
   var renameClicked = ab.evalStdin(`
@@ -185,7 +229,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
 
     var hasRenamedKey = ab.pageContainsText('重命名密钥');
     assertCondition(hasRenamedKey, 'TC-76: 重命名成功，列表更新', 'hasRenamedKey=' + hasRenamedKey);
-    ab.screenshot('t02f-05-renamed');
+    ab.screenshot('t02f-06-renamed');
   }
 
   // ── TC-77: API 验证通行密钥列表 ──
@@ -227,7 +271,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
   );
 
   // ── TC-79: 注册第二个通行密钥 ──
-  var regBtnClicked2 = ab.evalStdin(`
+  var regBtnClicked3 = ab.evalStdin(`
     (function() {
       var btns = document.querySelectorAll('button');
       for (var i = 0; i < btns.length; i++) {
@@ -236,7 +280,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
       return 'not found';
     })()
   `);
-  assertCondition(String(regBtnClicked2).includes('clicked'), 'TC-79: 点击「注册通行密钥」注册第二个', 'result=' + regBtnClicked2);
+  assertCondition(String(regBtnClicked3).includes('clicked'), 'TC-79: 点击「注册通行密钥」注册第二个', 'result=' + regBtnClicked3);
 
   console.log('\n\x1b[43m\x1b[30m  [人工操作] 请在浏览器中完成第二个 WebAuthn 注册（指纹/面容/安全密钥），等待30秒\x1b[0m\n');
   alertManual('请完成第二个通行密钥注册');
@@ -266,7 +310,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
 
   var hasTwoKeys = ab.pageContainsText('第二个密钥');
   assertCondition(hasTwoKeys, 'TC-79: 第二个通行密钥注册成功（人工未配合则失败）', 'hasTwoKeys=' + hasTwoKeys);
-  ab.screenshot('t02f-06-two-passkeys');
+  ab.screenshot('t02f-07-two-passkeys');
 
   // ── TC-80: 删除第一个通行密钥 ──
   var deleteFirstResult = ab.evalStdin(`
@@ -308,7 +352,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
     })()
   `);
   step('TC-80: 删除第一个通行密钥', true, 'delete=' + deleteFirstResult + ' confirm=' + confirmDelete + ' remaining=' + afterFirstDelete);
-  ab.screenshot('t02f-07-after-first-delete');
+  ab.screenshot('t02f-08-after-first-delete');
 
   // ── TC-81: 删除最后一个通行密钥 ──
   var allCreds = apiCall(`
@@ -358,7 +402,7 @@ describe('T02f: Admin MFA 通行密钥管理', () => {
     'TC-81: 清理完毕，列表清空，MFA 开关禁用',
     'empty=' + emptyAfterCleanup + ' switch=' + switchDisabledAfter
   );
-  ab.screenshot('t02f-08-cleanup-done');
+  ab.screenshot('t02f-09-cleanup-done');
 
   ab.closeBrowser();
 });

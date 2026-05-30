@@ -6,6 +6,10 @@ const BASE_URL = 'http://localhost:9101';
 const GATEWAY_URL = 'http://localhost:3100';
 const SCREENSHOT_DIR = path.join(__dirname, '..', 'screenshots');
 
+if (!process.env.AGENT_BROWSER_ARGS) {
+  process.env.AGENT_BROWSER_ARGS = '--password-manager-enabled=false';
+}
+
 function ab(...args) {
   try {
     return execFileSync('agent-browser', ['--session', SESSION, ...args], {
