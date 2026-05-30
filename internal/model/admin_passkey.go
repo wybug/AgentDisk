@@ -7,12 +7,12 @@ type DiskAdminPasskey struct {
 	ID              uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	AdminUsername   string     `gorm:"size:64;not null;index:idx_admin_username" json:"adminUsername"`
 	CredentialID    string     `gorm:"size:256;not null;uniqueIndex" json:"credentialId"`
-	PublicKey       []byte     `gorm:"type:longblob;not null" json:"-"`
+	PublicKey       []byte     `gorm:"type:bytes;not null" json:"-"`
 	AttestationType string     `gorm:"size:32;not null;default:''" json:"attestationType"`
 	Transport       string     `gorm:"size:128;not null;default:''" json:"transport"`
 	SignCount       uint64     `gorm:"not null;default:0" json:"signCount"`
 	Name            string     `gorm:"size:128;not null;default:''" json:"name"`
-	AAGUID          []byte     `gorm:"type:blob" json:"-"`
+	AAGUID          []byte     `gorm:"type:bytes" json:"-"`
 	BackupEligible  bool       `gorm:"default:false" json:"backupEligible"`
 	BackupState     bool       `gorm:"default:false" json:"backupState"`
 	IsActive        bool       `gorm:"default:true" json:"isActive"`
