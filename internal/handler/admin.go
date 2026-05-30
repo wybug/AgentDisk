@@ -1,27 +1,40 @@
 package handler
 
 import (
-	"github.com/agentdisk/agent-disk/internal/service"
+	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/pkg/jwt"
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
+type adminService interface {
+	Login(username, password string) (*model.DiskAdminUser, error)
+	Count() (int64, error)
+	CreateAdmin(username, password, role, displayName, createdBy string) (*model.DiskAdminUser, error)
+	ListAdmins() ([]model.DiskAdminUser, error)
+	ChangePassword(username, newPassword string) error
+	DeleteAdmin(username string) error
+}
+
+type adminMFAService interface {
+	HasPasskeys(username string) (bool, error)
+}
+
 // AdminHandler handles admin authentication and user management.
 type AdminHandler struct {
-	adminSvc  *service.AdminService
-	mfaSvc    *service.AdminMFAService
+	adminSvc  adminService
+	mfaSvc    adminMFAService
 	jwtSecret string
 	expireHrs int
 }
 
 // NewAdminHandler creates a new AdminHandler.
-func NewAdminHandler(adminSvc *service.AdminService, jwtSecret string, expireHours int) *AdminHandler {
+func NewAdminHandler(adminSvc adminService, jwtSecret string, expireHours int) *AdminHandler {
 	return &AdminHandler{adminSvc: adminSvc, jwtSecret: jwtSecret, expireHrs: expireHours}
 }
 
 // SetMFAService sets the MFA service (called when WebAuthn is enabled).
-func (h *AdminHandler) SetMFAService(mfaSvc *service.AdminMFAService) {
+func (h *AdminHandler) SetMFAService(mfaSvc adminMFAService) {
 	h.mfaSvc = mfaSvc
 }
 
@@ -44,7 +57,18 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// If MFA is enabled for this admin and WebAuthn is configured, return MFA challenge
+	// Only require MFA when it is enabled and the admin still has active passkeys.
+	if h.mfaSvc != nil && admin.MfaEnabled {
+		hasPasskeys, passkeyErr := h.mfaSvc.HasPasskeys(admin.Username)
+		if passkeyErr != nil {
+			response.InternalError(c, "failed to check mfa status")
+			return
+		}
+		if !hasPasskeys {
+			admin.MfaEnabled = false
+		}
+	}
+
 	if h.mfaSvc != nil && admin.MfaEnabled {
 		sessionToken, tokenErr := jwt.GenerateMFASessionToken(h.jwtSecret, admin.Username)
 		if tokenErr != nil {
