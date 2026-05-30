@@ -47,10 +47,21 @@ const testFiles = fs.readdirSync(testDir)
   .filter(f => f.startsWith('t') && f.endsWith('.js') && !f.includes('record'))
   .sort();
 
-const filter = process.argv[2];
-const filteredTests = filter
+const args = process.argv.slice(2);
+const skipManual = args.includes('--skip-manual');
+const filter = args.find(a => !a.startsWith('--'));
+
+let filteredTests = filter
   ? testFiles.filter(f => f.includes(filter))
   : testFiles;
+
+if (skipManual) {
+  filteredTests = filteredTests.filter(f => {
+    const content = fs.readFileSync(path.join(testDir, f), 'utf-8');
+    return !content.includes('MANUAL_TEST: true');
+  });
+  console.log(`\x1b[33m  跳过需要人工配合的测试 (--skip-manual)\x1b[0m`);
+}
 
 if (filteredTests.length === 0) {
   console.log('\n\x1b[33m没有匹配的测试文件\x1b[0m\n');
