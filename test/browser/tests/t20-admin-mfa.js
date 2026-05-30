@@ -236,9 +236,8 @@ describe('T20: Admin MFA 通行密钥管理', () => {
   // ── TC-77: API 验证通行密钥列表 ──
   var credentialsList = apiCall(`
     (function() {
-      var token = localStorage.getItem('admin_token');
       return fetch('${API_BASE}/v1/disk/admin/mfa/credentials', {
-        headers: { 'Authorization': 'Bearer ' + token },
+        headers: { 'Authorization': 'Bearer ${adminToken}' },
       })
       .then(function(r) { return r.json(); })
       .then(function(d) { return JSON.stringify(d); })
@@ -253,9 +252,8 @@ describe('T20: Admin MFA 通行密钥管理', () => {
   // ── TC-78: API 验证 MFA 状态 ──
   var mfaStatus = apiCall(`
     (function() {
-      var token = localStorage.getItem('admin_token');
       return fetch('${API_BASE}/v1/disk/admin/mfa/status', {
-        headers: { 'Authorization': 'Bearer ' + token },
+        headers: { 'Authorization': 'Bearer ${adminToken}' },
       })
       .then(function(r) { return r.json(); })
       .then(function(d) { return JSON.stringify(d); })
@@ -318,9 +316,8 @@ describe('T20: Admin MFA 通行密钥管理', () => {
   // ── TC-81: 删除最后一个通行密钥 ──
   var allCreds = apiCall(`
     (function() {
-      var token = localStorage.getItem('admin_token');
       return fetch('${API_BASE}/v1/disk/admin/mfa/credentials', {
-        headers: { 'Authorization': 'Bearer ' + token },
+        headers: { 'Authorization': 'Bearer ${adminToken}' },
       })
       .then(function(r) { return r.json(); })
       .then(function(d) { return JSON.stringify(d); })
@@ -332,10 +329,9 @@ describe('T20: Admin MFA 通行密钥管理', () => {
   remainingCreds.forEach(function(cred) {
     apiCall(`
       (function() {
-        var token = localStorage.getItem('admin_token');
         return fetch('${API_BASE}/v1/disk/admin/mfa/credentials/${cred.id}', {
           method: 'DELETE',
-          headers: { 'Authorization': 'Bearer ' + token },
+          headers: { 'Authorization': 'Bearer ${adminToken}' },
         })
         .then(function(r) { return r.json(); })
         .then(function(d) { return JSON.stringify(d); })
