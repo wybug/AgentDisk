@@ -328,6 +328,15 @@ func (s *AdminMFAService) SetMFAEnabled(username string, enabled bool) error {
 	return s.adminRepo.UpdateMFAEnabled(username, enabled)
 }
 
+// HasPasskeys reports whether the admin has at least one active passkey.
+func (s *AdminMFAService) HasPasskeys(username string) (bool, error) {
+	count, err := s.passkeyRepo.CountByAdmin(username)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // RenamePasskey updates the display name of a passkey.
 func (s *AdminMFAService) RenamePasskey(username string, id uint64, name string) error {
 	pk, err := s.passkeyRepo.GetByID(id)
