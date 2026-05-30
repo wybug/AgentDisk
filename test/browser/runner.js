@@ -48,19 +48,19 @@ const testFiles = fs.readdirSync(testDir)
   .sort();
 
 const args = process.argv.slice(2);
-const skipManual = args.includes('--skip-manual');
+const includeManual = args.includes('--include-manual');
 const filter = args.find(a => !a.startsWith('--'));
 
 let filteredTests = filter
   ? testFiles.filter(f => f.includes(filter))
   : testFiles;
 
-if (skipManual) {
+if (!includeManual) {
   filteredTests = filteredTests.filter(f => {
     const content = fs.readFileSync(path.join(testDir, f), 'utf-8');
     return !content.includes('MANUAL_TEST: true');
   });
-  console.log(`\x1b[33m  跳过需要人工配合的测试 (--skip-manual)\x1b[0m`);
+  console.log(`\x1b[33m  跳过需要人工配合的测试（使用 --include-manual 包含）\x1b[0m`);
 }
 
 if (filteredTests.length === 0) {

@@ -11,6 +11,7 @@ function alertManual(msg) {
 }
 
 describe('T02g: Admin MFA 登录验证', () => {
+  ab.closeAll();
   ab.open(WEB_BASE + '/admin/login');
   ab.waitMs(1000);
 
@@ -405,7 +406,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     `);
     ab.waitMs(1500);
     var navUrl = ab.getUrl();
-    step('TC-88b: 点击「' + item.text + '」', navUrl.includes('${item.url}'), 'url=' + navUrl);
+    step('TC-88b: 点击「' + item.text + '」', navUrl.includes(item.url), 'url=' + navUrl);
   });
   ab.screenshot('t02g-11-sidebar-nav');
 

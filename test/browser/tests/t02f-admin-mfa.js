@@ -11,6 +11,7 @@ function alertManual(msg) {
 }
 
 describe('T02f: Admin MFA 通行密钥管理', () => {
+  ab.closeAll();
   ab.open(WEB_BASE + '/admin/login');
   ab.waitMs(1000);
 
