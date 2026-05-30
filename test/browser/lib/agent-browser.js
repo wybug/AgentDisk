@@ -176,14 +176,12 @@ function closeBrowser() {
   try {
     execFileSync('agent-browser', ['--session', SESSION, 'close'], { encoding: 'utf-8', timeout: 10000 });
   } catch { /* ignore */ }
-  resetProfile();
 }
 
 function closeAll() {
   try {
     execSync('agent-browser close --all', { encoding: 'utf-8', timeout: 5000, killSignal: 'SIGKILL' });
   } catch { /* ignore */ }
-  resetProfile();
 }
 
 function resetProfile() {

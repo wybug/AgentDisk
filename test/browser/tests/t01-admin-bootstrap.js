@@ -21,6 +21,7 @@ function apiCall(code) {
 
 describe('T01: Admin Bootstrap', () => {
   ab.closeBrowser();
+  ab.resetProfile();
 
   // Open admin login page to establish browser context
   ab.open(WEB_BASE + '/admin/login');
