@@ -240,7 +240,7 @@ func (s *AdminMFAService) FinishLogin(sessionKey string, response *http.Request)
 	}
 	defer s.sessionStore.Delete(sessionKey)
 
-	username = string(session.UserID)
+	username = strings.TrimRight(string(session.UserID), "\x00")
 	if username == "" {
 		return "", "", errors.New("invalid session")
 	}

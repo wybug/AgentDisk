@@ -6,11 +6,7 @@ const SESSION = 'agentdisk-test';
 const BASE_URL = 'http://localhost:9101';
 const GATEWAY_URL = 'http://localhost:3100';
 const SCREENSHOT_DIR = path.join(__dirname, '..', 'screenshots');
-const CHROME_PROFILE_DIR = path.join(__dirname, '..', 'chrome-profile');
 
-if (!process.env.AGENT_BROWSER_PROFILE) {
-  process.env.AGENT_BROWSER_PROFILE = CHROME_PROFILE_DIR;
-}
 if (!process.env.AGENT_BROWSER_ARGS) {
   process.env.AGENT_BROWSER_ARGS = '--password-store=basic,--use-mock-keychain,--disable-features=PasswordManagerCredentialManagerInterop';
 }
@@ -176,6 +172,7 @@ function closeBrowser() {
   try {
     execFileSync('agent-browser', ['--session', SESSION, 'close'], { encoding: 'utf-8', timeout: 10000 });
   } catch { /* ignore */ }
+  resetProfile();
 }
 
 function closeAll() {
@@ -192,7 +189,11 @@ function resetProfile() {
     credentials_enable_service: false,
     credentials_enable_autosignin: false,
     signin: { allowed: false },
-    profile: { password_manager_enabled: false },
+    profile: {
+      password_manager_enabled: false,
+      exit_type: 'Normal',
+      exited_cleanly: true,
+    },
   };
   try {
     let existing = {};
@@ -212,6 +213,13 @@ function resetProfile() {
     if (fs.existsSync(cookiesJournal)) fs.unlinkSync(cookiesJournal);
     const localStorageDir = path.join(profileDir, 'Default', 'Local Storage', 'leveldb');
     if (fs.existsSync(localStorageDir)) fs.rmSync(localStorageDir, { recursive: true, force: true });
+  } catch { /* ignore */ }
+  // Remove SingletonLock/Socket/Cookie to avoid "Chrome didn't shut down correctly" on next launch
+  try {
+    for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+      const p = path.join(profileDir, f);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
   } catch { /* ignore */ }
 }
 

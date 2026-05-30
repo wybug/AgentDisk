@@ -1,13 +1,9 @@
 # AgentDisk Browser Test Report
 
-**Date**: 2026-05-30T08:29:22.523Z
-**Result**: HAS FAILURES
-**Total**: 1 steps, 0 passed, 1 failed
+**Date**: 2026-05-30T23:25:39.668Z
+**Result**: ALL PASSED
+**Total**: 17 steps, 17 passed, 0 failed
 
 | Test | Status | Steps |
 |------|--------|-------|
-| T04: 文件夹管理 | FAIL | 0/1 |
-
-## Failed Steps
-
-- **T04: 文件夹管理 → Setup**: Login form not found. userId=null, pwd=null, btn=null
+| T04: 文件夹管理 | PASS | 17/17 |

@@ -2,16 +2,23 @@
 const { describe, step, assertCondition, printReport } = require('../lib/test-runner');
 const ab = require('../lib/agent-browser');
 const { execSync } = require('child_process');
+const path = require('path');
 
 const API_BASE = 'http://localhost:9100';
 const WEB_BASE = ab.BASE_URL;
+const CHROME_PROFILE_DIR = path.join(__dirname, '..', 'chrome-profile');
+
+if (!process.env.AGENT_BROWSER_PROFILE) {
+  process.env.AGENT_BROWSER_PROFILE = CHROME_PROFILE_DIR;
+}
 
 function alertManual(msg) {
   try { execSync('say "' + msg + '"', { timeout: 10000 }); } catch (e) { /* ignore */ }
 }
 
-describe('T02g: Admin MFA 登录验证', () => {
+describe('T21: Admin MFA 登录验证', () => {
   ab.closeAll();
+  ab.resetProfile();
   ab.open(WEB_BASE + '/admin/login');
   ab.waitMs(1000);
 
@@ -108,7 +115,7 @@ describe('T02g: Admin MFA 登录验证', () => {
 
   var hasRegisteredKey = ab.pageContainsText('MFA测试密钥');
   assertCondition(hasRegisteredKey, 'TC-83: 通行密钥注册成功', 'hasRegisteredKey=' + hasRegisteredKey);
-  ab.screenshot('t02g-01-passkey-registered');
+  ab.screenshot('t21-01-passkey-registered');
 
   // ── TC-84: 开启 MFA ──
   var switchClicked = ab.evalStdin(`
@@ -140,7 +147,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-84: 开启 MFA 成功',
     'switch=' + switchClicked + ' enabled=' + mfaEnabled
   );
-  ab.screenshot('t02g-02-mfa-enabled');
+  ab.screenshot('t21-02-mfa-enabled');
 
   // ── TC-84b: API 显式验证 MFA 已启用 ──
   assertCondition(
@@ -167,13 +174,13 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-85: 退出登录，跳转到登录页',
     'clicked=' + logoutClicked + ' url=' + logoutUrl
   );
-  ab.screenshot('t02g-03-logout');
+  ab.screenshot('t21-03-logout');
 
   // ── TC-86: 错误密码被 API 拒绝 ──
   ab.open(WEB_BASE + '/admin/login');
   ab.waitMs(1500);
   ab.waitLoad('networkidle');
-  ab.screenshot('t02g-04-login-page');
+  ab.screenshot('t21-04-login-page');
 
   var wrongPwdResult = apiCall(`
     (function() {
@@ -193,7 +200,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-86: 错误密码被 API 拒绝',
     'result=' + JSON.stringify(wrongPwdResult).substring(0, 200)
   );
-  ab.screenshot('t02g-05-wrong-password');
+  ab.screenshot('t21-05-wrong-password');
 
   // ── TC-87: 输入正确密码，进入 MFA 验证页 ──
   ab.open(WEB_BASE + '/admin/login');
@@ -244,7 +251,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-87: MFA 验证页显示（验证身份 + 验证通行密钥）',
     'hasMFAVerify=' + hasMFAVerify
   );
-  ab.screenshot('t02g-06-mfa-verify-page');
+  ab.screenshot('t21-06-mfa-verify-page');
 
   // ── TC-87b: mock navigator.credentials.get 模拟取消 WebAuthn 验证 ──
   ab.evalStdin(`
@@ -284,7 +291,7 @@ describe('T02g: Admin MFA 登录验证', () => {
   }
 
   assertCondition(hasVerifyError, 'TC-87b: mock 取消 WebAuthn 后页面显示错误提示', 'hasVerifyError=' + hasVerifyError);
-  ab.screenshot('t02g-07-mfa-cancel');
+  ab.screenshot('t21-07-mfa-cancel');
 
   // 恢复原始 credentials.get
   ab.evalStdin(`
@@ -315,7 +322,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-87c: 点击「返回登录」回到登录表单',
     'clicked=' + backToLogin + ' hasForm=' + backToForm
   );
-  ab.screenshot('t02g-08-back-to-login');
+  ab.screenshot('t21-08-back-to-login');
 
   // ── TC-87d: 重新输入正确凭据 → 再次进入 MFA 验证页 ──
   ab.evalStdin(`
@@ -362,7 +369,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-87d: 重新输入凭据后再次进入 MFA 验证页',
     'hasMFAVerify=' + hasMFAVerify2
   );
-  ab.screenshot('t02g-09-mfa-verify-again');
+  ab.screenshot('t21-09-mfa-verify-again');
 
   // ── TC-88: [人工] 完成 WebAuthn 验证登录 ──
   var verifyBtnClicked = ab.evalStdin(`
@@ -381,12 +388,12 @@ describe('T02g: Admin MFA 登录验证', () => {
   for (var w2 = 0; w2 < 10; w2++) { ab.waitMs(3000); }
 
   var reloginUrl = ab.getUrl();
-  var reloginOk = reloginUrl.includes('/admin');
+  var reloginOk = reloginUrl.includes('/admin') && !reloginUrl.includes('/admin/login');
   assertCondition(reloginOk, 'TC-88: MFA 验证登录成功，进入管理后台', 'url=' + reloginUrl);
 
   var hasAdminHeader = ab.pageContainsText('管理后台');
   step('TC-88: 管理后台 Header 显示', hasAdminHeader, 'hasAdminHeader=' + hasAdminHeader);
-  ab.screenshot('t02g-10-mfa-login-success');
+  ab.screenshot('t21-10-mfa-login-success');
 
   // ── TC-88b: 验证侧边栏导航 ──
   var navItems = [
@@ -408,7 +415,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     var navUrl = ab.getUrl();
     step('TC-88b: 点击「' + item.text + '」', navUrl.includes(item.url), 'url=' + navUrl);
   });
-  ab.screenshot('t02g-11-sidebar-nav');
+  ab.screenshot('t21-11-sidebar-nav');
 
   // ── Cleanup: 关闭 MFA + 删除通行密钥 ──
   ab.evalStdin(`localStorage.setItem('admin_token', '${adminToken}')`);
@@ -521,7 +528,7 @@ describe('T02g: Admin MFA 登录验证', () => {
     'TC-89: 无 MFA 时仅密码登录成功',
     'url=' + noMfaUrl
   );
-  ab.screenshot('t02g-12-login-no-mfa');
+  ab.screenshot('t21-12-login-no-mfa');
 
   ab.closeBrowser();
 });
