@@ -7,7 +7,7 @@ import (
 
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/repository"
-	"github.com/agentdisk/agent-disk/pkg/oss"
+	"github.com/agentdisk/agent-disk/pkg/storage"
 )
 
 // RecycleService represents a domain type.
@@ -16,12 +16,12 @@ type RecycleService struct {
 	fileRepo    *repository.FileRepo
 	folderRepo  *repository.FolderRepo
 	spaceRepo   *repository.SpaceRepo
-	ossClient   *oss.Client
+	storage     storage.Storage
 }
 
 // NewRecycleService creates a new RecycleService.
-func NewRecycleService(recycleRepo *repository.RecycleRepo, fileRepo *repository.FileRepo, folderRepo *repository.FolderRepo, spaceRepo *repository.SpaceRepo, ossClient *oss.Client) *RecycleService {
-	return &RecycleService{recycleRepo: recycleRepo, fileRepo: fileRepo, folderRepo: folderRepo, spaceRepo: spaceRepo, ossClient: ossClient}
+func NewRecycleService(recycleRepo *repository.RecycleRepo, fileRepo *repository.FileRepo, folderRepo *repository.FolderRepo, spaceRepo *repository.SpaceRepo, fileStorage storage.Storage) *RecycleService {
+	return &RecycleService{recycleRepo: recycleRepo, fileRepo: fileRepo, folderRepo: folderRepo, spaceRepo: spaceRepo, storage: fileStorage}
 }
 
 // MoveToRecycle handles the request.
@@ -92,7 +92,7 @@ func (s *RecycleService) PermanentlyDelete(ctx context.Context, userID string, r
 		f, err := s.fileRepo.GetByID(item.ResourceID)
 		if err == nil {
 			_ = s.spaceRepo.UpdateUsedQuota(userID, -f.FileSize)
-			_ = s.ossClient.Delete(ctx, f.OSSKey) // best-effort physical delete
+			_ = s.storage.Delete(ctx, f.OSSKey) // best-effort physical delete
 		}
 	}
 	return s.recycleRepo.Delete(recycleID)

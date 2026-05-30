@@ -11,6 +11,7 @@ import (
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/repository"
 	"github.com/agentdisk/agent-disk/pkg/oss"
+	"github.com/agentdisk/agent-disk/pkg/storage"
 )
 
 // FileService represents a domain type.
@@ -19,7 +20,7 @@ type FileService struct {
 	folderRepo  *repository.FolderRepo
 	versionRepo *repository.VersionRepo
 	spaceRepo   *repository.SpaceRepo
-	ossClient   *oss.Client
+	storage     storage.Storage
 }
 
 // NewFileService creates a new FileService.
@@ -28,14 +29,14 @@ func NewFileService(
 	folderRepo *repository.FolderRepo,
 	versionRepo *repository.VersionRepo,
 	spaceRepo *repository.SpaceRepo,
-	ossClient *oss.Client,
+	fileStorage storage.Storage,
 ) *FileService {
 	return &FileService{
 		fileRepo:    fileRepo,
 		folderRepo:  folderRepo,
 		versionRepo: versionRepo,
 		spaceRepo:   spaceRepo,
-		ossClient:   ossClient,
+		storage:     fileStorage,
 	}
 }
 
@@ -75,7 +76,7 @@ func (s *FileService) UploadFileWithGroup(ctx context.Context, userID string, fo
 	}
 
 	ossKey := oss.BuildKey(userID, fullPath, file.ID, fileName)
-	if err := s.ossClient.Upload(ctx, ossKey, reader, size, contentType); err != nil {
+	if err := s.storage.Upload(ctx, ossKey, reader, size, contentType); err != nil {
 		return nil, fmt.Errorf("upload to oss: %w", err)
 	}
 	file.OSSKey = ossKey
@@ -122,7 +123,7 @@ func (s *FileService) GetFile(ctx context.Context, userID string, fileID uint64)
 	if file.UserID != userID {
 		return nil, "", fmt.Errorf("permission denied")
 	}
-	url, err := s.ossClient.PresignedGetURL(ctx, file.OSSKey, time.Hour)
+	url, err := s.storage.PresignedGetURL(ctx, file.OSSKey, time.Hour)
 	if err != nil {
 		return nil, "", fmt.Errorf("generate presigned url: %w", err)
 	}
@@ -141,7 +142,7 @@ func (s *FileService) UpdateFile(ctx context.Context, userID string, fileID uint
 
 	// Copy current OSS content to version-specific key before overwriting
 	snapshotOSSKey := fmt.Sprintf("%s_v%d", file.OSSKey, file.Version)
-	if err := s.ossClient.Copy(ctx, file.OSSKey, snapshotOSSKey); err != nil {
+	if err := s.storage.Copy(ctx, file.OSSKey, snapshotOSSKey); err != nil {
 		return nil, fmt.Errorf("copy version snapshot: %w", err)
 	}
 
@@ -160,7 +161,7 @@ func (s *FileService) UpdateFile(ctx context.Context, userID string, fileID uint
 
 	newVersion := file.Version + 1
 	ossKey := file.OSSKey
-	if err := s.ossClient.Upload(ctx, ossKey, reader, size, contentType); err != nil {
+	if err := s.storage.Upload(ctx, ossKey, reader, size, contentType); err != nil {
 		return nil, fmt.Errorf("upload to oss: %w", err)
 	}
 

@@ -7,18 +7,18 @@ import (
 	"strings"
 
 	"github.com/agentdisk/agent-disk/internal/model"
-	"github.com/agentdisk/agent-disk/pkg/oss"
+	"github.com/agentdisk/agent-disk/pkg/storage"
 )
 
 // PreviewService represents a domain type.
 type PreviewService struct {
-	fileSvc   *FileService
-	ossClient *oss.Client
+	fileSvc *FileService
+	storage storage.Storage
 }
 
 // NewPreviewService creates a new PreviewService.
-func NewPreviewService(fileSvc *FileService, ossClient *oss.Client) *PreviewService {
-	return &PreviewService{fileSvc: fileSvc, ossClient: ossClient}
+func NewPreviewService(fileSvc *FileService, fileStorage storage.Storage) *PreviewService {
+	return &PreviewService{fileSvc: fileSvc, storage: fileStorage}
 }
 
 // PreviewResult represents a domain type.
@@ -48,7 +48,7 @@ func (s *PreviewService) PreviewHTML(ctx context.Context, userID string, fileID 
 		return "", err
 	}
 
-	obj, err := s.ossClient.Download(ctx, file.OSSKey)
+	obj, err := s.storage.Download(ctx, file.OSSKey)
 	if err != nil {
 		return "", fmt.Errorf("download from oss: %w", err)
 	}

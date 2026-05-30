@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -30,6 +31,8 @@ type ServerConfig struct {
 
 // DatabaseConfig represents a databaseconfiguration.
 type DatabaseConfig struct {
+	Driver       string `mapstructure:"driver"`
+	Path         string `mapstructure:"path"`
 	Host         string `mapstructure:"host"`
 	Port         int    `mapstructure:"port"`
 	Name         string `mapstructure:"name"`
@@ -42,6 +45,8 @@ type DatabaseConfig struct {
 
 // OSSConfig represents a ossconfiguration.
 type OSSConfig struct {
+	Driver    string `mapstructure:"driver"`
+	Path      string `mapstructure:"path"`
 	Endpoint  string `mapstructure:"endpoint"`
 	AccessKey string `mapstructure:"access_key"`
 	SecretKey string `mapstructure:"secret_key"`
@@ -118,6 +123,9 @@ func Load(path string) (*Config, error) {
 	// Sensitive fields: environment variables override config file
 	overrideFromEnv(&cfg)
 
+	// Expand ~ in paths to home directory
+	expandPaths(&cfg)
+
 	return &cfg, nil
 }
 
@@ -152,8 +160,20 @@ func loadDotEnv() {
 
 // overrideFromEnv replaces sensitive fields with environment variables when set.
 func overrideFromEnv(cfg *Config) {
+	if v := os.Getenv("DB_DRIVER"); v != "" {
+		cfg.Database.Driver = v
+	}
+	if v := os.Getenv("DB_PATH"); v != "" {
+		cfg.Database.Path = v
+	}
 	if v := os.Getenv("DB_PASSWORD"); v != "" {
 		cfg.Database.Password = v
+	}
+	if v := os.Getenv("STORAGE_DRIVER"); v != "" {
+		cfg.OSS.Driver = v
+	}
+	if v := os.Getenv("STORAGE_PATH"); v != "" {
+		cfg.OSS.Path = v
 	}
 	if v := os.Getenv("OSS_ACCESS_KEY"); v != "" {
 		cfg.OSS.AccessKey = v
@@ -176,4 +196,24 @@ func overrideFromEnv(cfg *Config) {
 	if v := os.Getenv("DL_TOKEN_SECRET"); v != "" {
 		cfg.DownloadToken.Secret = v
 	}
+}
+
+// expandPaths expands ~ to the user's home directory in path fields.
+func expandPaths(cfg *Config) {
+	cfg.Database.Path = expandHome(cfg.Database.Path)
+	cfg.OSS.Path = expandHome(cfg.OSS.Path)
+}
+
+func expandHome(path string) string {
+	if path == "" {
+		return path
+	}
+	if path[0] == '~' {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(homeDir, path[1:])
+	}
+	return path
 }

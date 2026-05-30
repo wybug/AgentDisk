@@ -1,6 +1,10 @@
 package router
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+
 	"github.com/agentdisk/agent-disk/config"
 	"github.com/agentdisk/agent-disk/internal/handler"
 	"github.com/agentdisk/agent-disk/internal/middleware"
@@ -10,6 +14,7 @@ import (
 	"github.com/agentdisk/agent-disk/pkg/oauth2client"
 	"github.com/agentdisk/agent-disk/pkg/oss"
 	"github.com/agentdisk/agent-disk/pkg/response"
+	"github.com/agentdisk/agent-disk/pkg/storage"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,16 +38,45 @@ func Setup(cfg *config.Config) *gin.Engine {
 	if migrateErr := repository.AutoMigrate(db); migrateErr != nil {
 		panic("failed to auto-migrate database: " + migrateErr.Error())
 	}
-	ossClient, err := oss.NewClient(
-		cfg.OSS.Endpoint,
-		cfg.OSS.AccessKey,
-		cfg.OSS.SecretKey,
-		cfg.OSS.Bucket,
-		cfg.OSS.Region,
-		cfg.OSS.UseSSL,
-	)
-	if err != nil {
-		panic("failed to create OSS client: " + err.Error())
+
+	// Init storage backend
+	storageDriver := cfg.OSS.Driver
+	if storageDriver == "" {
+		storageDriver = "minio"
+	}
+
+	var fileStorage storage.Storage
+
+	switch storageDriver {
+	case "local":
+		rootDir := cfg.OSS.Path
+		if rootDir == "" {
+			homeDir, _ := os.UserHomeDir()
+			rootDir = filepath.Join(homeDir, ".agentdisk", "disk")
+		}
+		localStorage := storage.NewLocalStorage(rootDir, cfg.JWT.Secret)
+		if err := localStorage.EnsureBucket(context.Background()); err != nil {
+			panic("failed to init local storage: " + err.Error())
+		}
+		fileStorage = localStorage
+		localH := storage.NewLocalStorageHandler(localStorage)
+		r.GET("/v1/disk/local-storage/*key", localH.ServeFile)
+	default:
+		ossClient, err := oss.NewClient(
+			cfg.OSS.Endpoint,
+			cfg.OSS.AccessKey,
+			cfg.OSS.SecretKey,
+			cfg.OSS.Bucket,
+			cfg.OSS.Region,
+			cfg.OSS.UseSSL,
+		)
+		if err != nil {
+			panic("failed to create OSS client: " + err.Error())
+		}
+		fileStorage = storage.NewMinioStorage(ossClient)
+		if err := fileStorage.EnsureBucket(context.Background()); err != nil {
+			panic("failed to ensure bucket: " + err.Error())
+		}
 	}
 
 	// OAuth2 client (optional)
@@ -77,14 +111,14 @@ func Setup(cfg *config.Config) *gin.Engine {
 
 	// Services
 	spaceSvc := service.NewSpaceService(spaceRepo)
-	folderSvc := service.NewFolderService(folderRepo, ossClient)
-	fileSvc := service.NewFileService(fileRepo, folderRepo, versionRepo, spaceRepo, ossClient)
+	folderSvc := service.NewFolderService(folderRepo)
+	fileSvc := service.NewFileService(fileRepo, folderRepo, versionRepo, spaceRepo, fileStorage)
 	permSvc := service.NewPermissionService(permRepo)
-	versionSvc := service.NewVersionService(versionRepo, fileRepo, ossClient)
-	recycleSvc := service.NewRecycleService(recycleRepo, fileRepo, folderRepo, spaceRepo, ossClient)
+	versionSvc := service.NewVersionService(versionRepo, fileRepo, fileStorage)
+	recycleSvc := service.NewRecycleService(recycleRepo, fileRepo, folderRepo, spaceRepo, fileStorage)
 	tagSvc := service.NewTagService(tagRepo)
 	shareSvc := service.NewShareService(shareRepo, fileRepo, folderRepo)
-	previewSvc := service.NewPreviewService(fileSvc, ossClient)
+	previewSvc := service.NewPreviewService(fileSvc, fileStorage)
 	adminSvc := service.NewAdminService(adminRepo)
 	apiKeySvc := service.NewAPIKeyService(apiKeyRepo)
 	publicDirSvc := service.NewPublicDirectoryService(publicDirRepo, folderRepo)

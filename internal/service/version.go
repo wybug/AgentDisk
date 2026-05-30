@@ -6,19 +6,19 @@ import (
 
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/repository"
-	"github.com/agentdisk/agent-disk/pkg/oss"
+	"github.com/agentdisk/agent-disk/pkg/storage"
 )
 
 // VersionService represents a domain type.
 type VersionService struct {
 	versionRepo *repository.VersionRepo
 	fileRepo    *repository.FileRepo
-	ossClient   *oss.Client
+	storage     storage.Storage
 }
 
 // NewVersionService creates a new VersionService.
-func NewVersionService(versionRepo *repository.VersionRepo, fileRepo *repository.FileRepo, ossClient *oss.Client) *VersionService {
-	return &VersionService{versionRepo: versionRepo, fileRepo: fileRepo, ossClient: ossClient}
+func NewVersionService(versionRepo *repository.VersionRepo, fileRepo *repository.FileRepo, fileStorage storage.Storage) *VersionService {
+	return &VersionService{versionRepo: versionRepo, fileRepo: fileRepo, storage: fileStorage}
 }
 
 // ListVersions handles the request.
@@ -49,7 +49,7 @@ func (s *VersionService) Rollback(ctx context.Context, userID string, fileID uin
 	}
 
 	// Copy old version to current key
-	if err := s.ossClient.Copy(ctx, snapshot.OSSKey, file.OSSKey); err != nil {
+	if err := s.storage.Copy(ctx, snapshot.OSSKey, file.OSSKey); err != nil {
 		return fmt.Errorf("rollback oss: %w", err)
 	}
 

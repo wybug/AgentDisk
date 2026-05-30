@@ -5,7 +5,7 @@ GOLANGCI_LINT_VERSION := v1.64.8
 APP_NAME := agentdisk
 
 build:
-	go build -o bin/$(APP_NAME) .
+	CGO_ENABLED=1 go build -o bin/$(APP_NAME) .
 
 run:
 	go run main.go --config config.yaml

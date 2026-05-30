@@ -3,6 +3,8 @@ server:
   mode: release  # debug / release / test
 
 database:
+  driver: sqlite              # mysql (默认) 或 sqlite
+  path: ~/.agentdisk/disk.db  # SQLite 文件路径 (仅 driver=sqlite 时生效)
   host: 172.20.6.37
   port: 3306
   name: agentdisk
@@ -13,6 +15,8 @@ database:
   log_level: warn  # silent / error / warn / info
 
 oss:
+  driver: local               # minio (默认) 或 local
+  path: ~/.agentdisk/disk/    # 本地存储根路径 (仅 driver=local 时生效)
   endpoint: "172.20.6.37:9000"
   # access_key: 通过环境变量 OSS_ACCESS_KEY 注入
   # secret_key: 通过环境变量 OSS_SECRET_KEY 注入
