@@ -186,7 +186,8 @@ function closeAll() {
 
 function resetProfile() {
   if (!process.env.AGENT_BROWSER_PROFILE) return;
-  const prefsPath = path.join(process.env.AGENT_BROWSER_PROFILE, 'Default', 'Preferences');
+  const profileDir = process.env.AGENT_BROWSER_PROFILE;
+  const prefsPath = path.join(profileDir, 'Default', 'Preferences');
   const overrides = {
     credentials_enable_service: false,
     credentials_enable_autosignin: false,
@@ -202,6 +203,15 @@ function resetProfile() {
     });
     fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
     fs.writeFileSync(prefsPath, JSON.stringify(merged));
+  } catch { /* ignore */ }
+  // Clear cookies and local storage to prevent session leakage between tests
+  try {
+    const cookiesPath = path.join(profileDir, 'Default', 'Cookies');
+    if (fs.existsSync(cookiesPath)) fs.unlinkSync(cookiesPath);
+    const cookiesJournal = path.join(profileDir, 'Default', 'Cookies-journal');
+    if (fs.existsSync(cookiesJournal)) fs.unlinkSync(cookiesJournal);
+    const localStorageDir = path.join(profileDir, 'Default', 'Local Storage', 'leveldb');
+    if (fs.existsSync(localStorageDir)) fs.rmSync(localStorageDir, { recursive: true, force: true });
   } catch { /* ignore */ }
 }
 
