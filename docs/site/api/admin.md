@@ -1,9 +1,9 @@
 # 管理接口
 
-管理接口提供管理员认证、用户管理、API Key 管理、公共目录管理和 OAuth2 配置管理功能。所有管理接口需要管理员权限（`AdminAuth` + `AdminOnly` 中间件），登录和初始化引导接口除外。
+管理接口提供管理员认证、用户管理、API Key 管理、公共目录管理、OAuth2 配置管理和 MFA 多因素认证管理功能。所有管理接口需要管理员权限（`AdminAuth` + `AdminOnly` 中间件），登录和初始化引导接口除外。
 
 ::: warning 权限要求
-除 `POST /v1/disk/admin/login`、`POST /v1/disk/admin/bootstrap` 和 `GET /v1/disk/admin/init-status` 外，所有管理接口均需要在请求头中携带管理员 JWT Token：
+除 `POST /v1/disk/admin/login`、`POST /v1/disk/admin/bootstrap`、`GET /v1/disk/admin/init-status` 以及 MFA 登录接口外，所有管理接口均需要在请求头中携带管理员 JWT Token：
 ```
 Authorization: Bearer <admin-jwt-token>
 ```
@@ -933,3 +933,457 @@ POST /v1/disk/admin/oauth2/test
 curl -X POST http://localhost:9100/v1/disk/admin/oauth2/test \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
+
+---
+
+## MFA 多因素认证管理
+
+管理员可通过 WebAuthn 协议注册通行密钥（Passkey），启用 MFA 后登录需同时验证密码和通行密钥。
+
+::: info 前提条件
+MFA 功能需要在 `config.yaml` 中启用 WebAuthn 配置：
+
+```yaml
+webauthn:
+  enabled: true
+  rp_display_name: "AgentDisk Admin"
+  rp_id: "localhost"
+  rp_origins: "http://localhost:9101"
+  timeout: 60000
+```
+
+`webauthn.enabled: false` 时 MFA 相关接口不可用，路由不会注册。
+:::
+
+### 开始注册通行密钥
+
+发起 WebAuthn 注册流程，返回注册选项供浏览器调用 `navigator.credentials.create()`。
+
+```
+POST /v1/disk/admin/mfa/registration/begin
+```
+
+#### 认证方式
+
+需要管理员 JWT Token。
+
+#### 请求体
+
+无。
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "options": {
+      "challenge": "base64-encoded-challenge",
+      "rp": { "name": "AgentDisk Admin", "id": "localhost" },
+      "user": { "id": "base64-user-id", "name": "admin", "displayName": "admin" },
+      "pubKeyCredParams": [{ "type": "public-key", "alg": -7 }],
+      "timeout": 60000,
+      "excludeCredentials": []
+    },
+    "sessionKey": "session-key-for-finish"
+  }
+}
+```
+
+#### curl 示例
+
+```bash
+curl -X POST http://localhost:9100/v1/disk/admin/mfa/registration/begin \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+---
+
+### 完成注册通行密钥
+
+验证 WebAuthn 注册响应，保存通行密钥凭证。
+
+```
+POST /v1/disk/admin/mfa/registration/finish
+```
+
+#### 认证方式
+
+需要管理员 JWT Token。
+
+#### 请求体
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `sessionKey` | `string` | 是 | `begin` 接口返回的会话密钥 |
+| `credential` | `string` | 是 | 浏览器 `navigator.credentials.create()` 返回的 JSON 序列化结果 |
+| `name` | `string` | 否 | 通行密钥名称，如未提供则自动生成 |
+
+```json
+{
+  "sessionKey": "session-key-from-begin",
+  "credential": "{\"id\":\"...\",\"response\":{...},\"type\":\"public-key\"}",
+  "name": "我的安全密钥"
+}
+```
+
+#### 响应示例
+
+**HTTP 201 Created**
+
+```json
+{
+  "code": 0,
+  "message": "created",
+  "data": {
+    "id": 1,
+    "name": "我的安全密钥",
+    "createdAt": "2026-05-31T10:00:00Z"
+  }
+}
+```
+
+#### 错误场景
+
+| HTTP 状态码 | 场景说明 |
+|------------|---------|
+| 400 | 缺少 sessionKey 或 credential |
+| 400 | 会话无效或已过期（5 分钟有效期） |
+| 400 | 注册验证失败（challenge 不匹配等） |
+
+---
+
+### 列出通行密钥
+
+获取当前管理员已注册的所有通行密钥列表。
+
+```
+GET /v1/disk/admin/mfa/credentials
+```
+
+#### 认证方式
+
+需要管理员 JWT Token。
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "id": 1,
+      "name": "我的安全密钥",
+      "createdAt": "2026-05-31T10:00:00Z",
+      "lastUsedAt": "2026-05-31T14:30:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Touch ID",
+      "createdAt": "2026-05-31T11:00:00Z",
+      "lastUsedAt": null
+    }
+  ]
+}
+```
+
+#### curl 示例
+
+```bash
+curl http://localhost:9100/v1/disk/admin/mfa/credentials \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+---
+
+### 重命名通行密钥
+
+修改通行密钥的显示名称。
+
+```
+PUT /v1/disk/admin/mfa/credentials/:id
+```
+
+#### 认证方式
+
+需要管理员 JWT Token。
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `uint64` | 通行密钥记录 ID |
+
+#### 请求体
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | `string` | 是 | 新的通行密钥名称 |
+
+```json
+{
+  "name": "办公电脑 Touch ID"
+}
+```
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "message": "passkey renamed"
+  }
+}
+```
+
+#### 错误场景
+
+| HTTP 状态码 | 场景说明 |
+|------------|---------|
+| 400 | 通行密钥 ID 无效 |
+| 400 | 缺少 name 字段 |
+| 400 | 通行密钥不存在或不属于当前管理员 |
+
+---
+
+### 删除通行密钥
+
+删除指定的通行密钥。当最后一个通行密钥被删除时，MFA 自动关闭。
+
+```
+DELETE /v1/disk/admin/mfa/credentials/:id
+```
+
+#### 认证方式
+
+需要管理员 JWT Token。
+
+#### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `uint64` | 通行密钥记录 ID |
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "message": "passkey deleted"
+  }
+}
+```
+
+#### curl 示例
+
+```bash
+curl -X DELETE http://localhost:9100/v1/disk/admin/mfa/credentials/1 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+::: warning
+删除最后一个通行密钥后，MFA 将自动关闭，管理员仅使用密码登录。
+:::
+
+---
+
+### 获取 MFA 状态
+
+查询当前管理员的 MFA 启用状态和通行密钥数量。
+
+```
+GET /v1/disk/admin/mfa/status
+```
+
+#### 认证方式
+
+需要管理员 JWT Token。
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "passkeyCount": 2,
+    "mfaEnabled": true
+  }
+}
+```
+
+#### curl 示例
+
+```bash
+curl http://localhost:9100/v1/disk/admin/mfa/status \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+---
+
+### 开启/关闭 MFA
+
+启用或关闭多因素认证。开启前必须至少注册一个通行密钥。
+
+```
+PUT /v1/disk/admin/mfa/enabled
+```
+
+#### 认证方式
+
+需要管理员 JWT Token。
+
+#### 请求体
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `enabled` | `bool` | 是 | `true` 开启，`false` 关闭 |
+
+```json
+{
+  "enabled": true
+}
+```
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "message": "mfa updated"
+  }
+}
+```
+
+#### 错误场景
+
+| HTTP 状态码 | 场景说明 |
+|------------|---------|
+| 400 | 缺少 enabled 字段 |
+| 400 | 无通行密钥时尝试开启 MFA |
+| 400 | 更新失败 |
+
+#### curl 示例
+
+```bash
+# 开启 MFA
+curl -X PUT http://localhost:9100/v1/disk/admin/mfa/enabled \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+# 关闭 MFA
+curl -X PUT http://localhost:9100/v1/disk/admin/mfa/enabled \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+```
+
+---
+
+### 开始 MFA 登录验证
+
+MFA 开启后，管理员密码登录会返回 `mfaRequired: true` 和 `sessionToken`，使用此接口发起 WebAuthn 身份验证。
+
+```
+POST /v1/disk/admin/mfa/login/begin
+```
+
+#### 认证方式
+
+公开接口，无需 JWT Token。需提供密码登录返回的 `sessionToken`。
+
+#### 请求体
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `sessionToken` | `string` | 是 | 密码登录返回的临时会话令牌 |
+
+```json
+{
+  "sessionToken": "mfa-session-token-from-login"
+}
+```
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "options": {
+      "challenge": "base64-encoded-challenge",
+      "timeout": 60000,
+      "rpId": "localhost",
+      "userVerification": "required",
+      "allowCredentials": [{ "type": "public-key", "id": "..." }]
+    },
+    "sessionKey": "session-key-for-finish"
+  }
+}
+```
+
+#### 错误场景
+
+| HTTP 状态码 | 场景说明 |
+|------------|---------|
+| 400 | 缺少 sessionToken |
+| 401 | sessionToken 无效或已过期 |
+
+---
+
+### 完成 MFA 登录验证
+
+验证 WebAuthn 身份验证响应，返回管理员 JWT Token。
+
+```
+POST /v1/disk/admin/mfa/login/finish
+```
+
+#### 认证方式
+
+公开接口，无需 JWT Token。
+
+#### 请求体
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `sessionKey` | `string` | 是 | `begin` 接口返回的会话密钥 |
+| `credential` | `string` | 是 | 浏览器 `navigator.credentials.get()` 返回的 JSON 序列化结果 |
+
+```json
+{
+  "sessionKey": "session-key-from-begin",
+  "credential": "{\"id\":\"...\",\"response\":{...},\"type\":\"public-key\"}"
+}
+```
+
+#### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "username": "admin"
+  }
+}
+```
+
+#### 错误场景
+
+| HTTP 状态码 | 场景说明 |
+|------------|---------|
+| 400 | 缺少 sessionKey 或 credential |
+| 401 | 会话无效或已过期 |
+| 401 | 身份验证失败（通行密钥不匹配） |

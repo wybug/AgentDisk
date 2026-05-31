@@ -46,6 +46,7 @@
 - 测试按 T01→T19 顺序执行，存在数据依赖，不可乱序
 - T03 负责全局清理，各用例需自行清理创建的数据，T17 验证无数据污染
 - 测试截图保存在 `test/browser/screenshots/`
+- **默认执行无需人工干预的测试**：所有测试应设计为可自动完成，WebAuthn 等需原生弹窗的场景使用 JS mock 模拟（mock `navigator.credentials.create/get`），仅实际注册/验证步骤需人工配合时标记 `MANUAL_TEST: true`，通过 viz 仪表盘运行
 
 ## 4 通用强制开发规范（所有智能体）
 

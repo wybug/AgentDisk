@@ -65,3 +65,4 @@ gateway/src/data/
 # Docs site build
 docs/site/.vitepress/dist/
 docs/site/.vitepress/cache/
+test/browser/chrome-profile/

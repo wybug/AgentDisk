@@ -371,6 +371,76 @@ PUT /v1/disk/admin/public-directories/:id
 DELETE /v1/disk/admin/public-directories/:id
 ```
 
+## MFA 多因素认证
+
+管理员可启用 WebAuthn 通行密钥作为第二因素，提升管理后台的登录安全性。
+
+::: info 前提条件
+需在 `config.yaml` 中启用 WebAuthn：
+
+```yaml
+webauthn:
+  enabled: true
+  rp_display_name: "AgentDisk Admin"
+  rp_id: "localhost"
+  rp_origins: "http://localhost:9101"
+  timeout: 60000
+```
+
+`rp_id` 和 `rp_origins` 需与实际部署域名一致，否则浏览器会拒绝 WebAuthn 操作。
+:::
+
+### 启用 MFA
+
+1. 以管理员身份登录管理后台
+2. 导航到「MFA 设置」页面（`/admin/mfa`）
+3. 点击「注册通行密钥」，在浏览器弹窗中完成指纹/面容/安全密钥验证
+4. 为通行密钥命名并确认
+5. 注册成功后，MFA 开关变为可用，点击开关启用 MFA
+
+### MFA 登录流程
+
+启用 MFA 后，管理员登录流程变为两步：
+
+1. 输入用户名和密码
+2. 系统返回 `mfaRequired: true`，前端跳转到通行密钥验证页
+3. 浏览器弹出 WebAuthn 验证弹窗（指纹/面容/安全密钥）
+4. 验证通过后获得管理员 JWT Token
+
+### 管理通行密钥
+
+```bash
+# 查看已注册的通行密钥
+curl http://localhost:9100/v1/disk/admin/mfa/credentials \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 重命名通行密钥
+curl -X PUT http://localhost:9100/v1/disk/admin/mfa/credentials/1 \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "办公电脑"}'
+
+# 删除通行密钥
+curl -X DELETE http://localhost:9100/v1/disk/admin/mfa/credentials/1 \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 查看 MFA 状态
+curl http://localhost:9100/v1/disk/admin/mfa/status \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 开启/关闭 MFA
+curl -X PUT http://localhost:9100/v1/disk/admin/mfa/enabled \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
+
+::: warning
+- 删除最后一个通行密钥后，MFA 将自动关闭
+- 无通行密钥时无法开启 MFA
+- 详细的 API 参数说明请参考 [管理接口 - MFA](/api/admin#mfa-多因素认证管理)
+:::
+
 ## 管理后台接口总览
 
 | 接口 | 方法 | 说明 |
@@ -393,3 +463,12 @@ DELETE /v1/disk/admin/public-directories/:id
 | `/v1/disk/admin/oauth2` | GET | 获取 OAuth2 配置 |
 | `/v1/disk/admin/oauth2` | PUT | 更新 OAuth2 配置 |
 | `/v1/disk/admin/oauth2/test` | POST | 测试 OAuth2 连接 |
+| `/v1/disk/admin/mfa/registration/begin` | POST | 开始注册通行密钥 |
+| `/v1/disk/admin/mfa/registration/finish` | POST | 完成注册通行密钥 |
+| `/v1/disk/admin/mfa/credentials` | GET | 列出通行密钥 |
+| `/v1/disk/admin/mfa/credentials/:id` | PUT | 重命名通行密钥 |
+| `/v1/disk/admin/mfa/credentials/:id` | DELETE | 删除通行密钥 |
+| `/v1/disk/admin/mfa/status` | GET | 获取 MFA 状态 |
+| `/v1/disk/admin/mfa/enabled` | PUT | 开启/关闭 MFA |
+| `/v1/disk/admin/mfa/login/begin` | POST | 开始 MFA 登录验证 |
+| `/v1/disk/admin/mfa/login/finish` | POST | 完成 MFA 登录验证 |

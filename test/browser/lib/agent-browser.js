@@ -1,10 +1,15 @@
 const { execFileSync, execSync } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 const SESSION = 'agentdisk-test';
 const BASE_URL = 'http://localhost:9101';
 const GATEWAY_URL = 'http://localhost:3100';
 const SCREENSHOT_DIR = path.join(__dirname, '..', 'screenshots');
+
+if (!process.env.AGENT_BROWSER_ARGS) {
+  process.env.AGENT_BROWSER_ARGS = '--password-store=basic,--use-mock-keychain,--disable-features=PasswordManagerCredentialManagerInterop';
+}
 
 function ab(...args) {
   try {
@@ -167,11 +172,54 @@ function closeBrowser() {
   try {
     execFileSync('agent-browser', ['--session', SESSION, 'close'], { encoding: 'utf-8', timeout: 10000 });
   } catch { /* ignore */ }
+  resetProfile();
 }
 
 function closeAll() {
   try {
     execSync('agent-browser close --all', { encoding: 'utf-8', timeout: 5000, killSignal: 'SIGKILL' });
+  } catch { /* ignore */ }
+}
+
+function resetProfile() {
+  if (!process.env.AGENT_BROWSER_PROFILE) return;
+  const profileDir = process.env.AGENT_BROWSER_PROFILE;
+  const prefsPath = path.join(profileDir, 'Default', 'Preferences');
+  const overrides = {
+    credentials_enable_service: false,
+    credentials_enable_autosignin: false,
+    signin: { allowed: false },
+    profile: {
+      password_manager_enabled: false,
+      exit_type: 'Normal',
+      exited_cleanly: true,
+    },
+  };
+  try {
+    let existing = {};
+    try { existing = JSON.parse(fs.readFileSync(prefsPath, 'utf-8')); } catch { /* no file yet */ }
+    const merged = Object.assign({}, existing, overrides, {
+      signin: Object.assign({}, existing.signin || {}, overrides.signin),
+      profile: Object.assign({}, existing.profile || {}, overrides.profile),
+    });
+    fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
+    fs.writeFileSync(prefsPath, JSON.stringify(merged));
+  } catch { /* ignore */ }
+  // Clear cookies and local storage to prevent session leakage between tests
+  try {
+    const cookiesPath = path.join(profileDir, 'Default', 'Cookies');
+    if (fs.existsSync(cookiesPath)) fs.unlinkSync(cookiesPath);
+    const cookiesJournal = path.join(profileDir, 'Default', 'Cookies-journal');
+    if (fs.existsSync(cookiesJournal)) fs.unlinkSync(cookiesJournal);
+    const localStorageDir = path.join(profileDir, 'Default', 'Local Storage', 'leveldb');
+    if (fs.existsSync(localStorageDir)) fs.rmSync(localStorageDir, { recursive: true, force: true });
+  } catch { /* ignore */ }
+  // Remove SingletonLock/Socket/Cookie to avoid "Chrome didn't shut down correctly" on next launch
+  try {
+    for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+      const p = path.join(profileDir, f);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
   } catch { /* ignore */ }
 }
 
@@ -350,7 +398,7 @@ module.exports = {
   scrollDown, scrollUp, setViewport,
   evalStdin,
   tabNew, tab, tabList, tabClose,
-  closeBrowser, closeAll,
+  closeBrowser, closeAll, resetProfile,
   login, logout,
   findRefByPlaceholder, findRefByRole, findRefByText, findRefBySelector,
   findRowButtonRef,
