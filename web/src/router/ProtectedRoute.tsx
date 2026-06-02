@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { Spin } from 'antd';
+import axios from 'axios';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
@@ -20,7 +21,15 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }
 
   if (!isAuthenticated) {
-    window.location.replace('/auth/login');
+    axios.get('/auth/status').then((res) => {
+      if (res.data?.data?.oauth2 === false) {
+        window.location.replace('/auth/unavailable');
+      } else {
+        window.location.replace('/auth/login');
+      }
+    }).catch(() => {
+      window.location.replace('/auth/unavailable');
+    });
     return null;
   }
 

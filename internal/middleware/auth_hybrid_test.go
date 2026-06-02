@@ -24,6 +24,27 @@ func (m *mockAPIKeyValidator) ValidateKey(_ string) (*model.DiskAPIKey, error) {
 	return m.key, m.err
 }
 
+// staticOAuth2Builder wraps a pre-built OAuth2 client for tests.
+type staticOAuth2Builder struct {
+	client *oauth2client.OAuthClient
+}
+
+func (b *staticOAuth2Builder) BuildOAuth2Client() (*oauth2client.OAuthClient, error) {
+	return b.client, nil
+}
+
+func newTestAuthHandler() *handler.AuthHandler {
+	client := oauth2client.New(oauth2client.Config{
+		ClientID:     "agentdisk",
+		ClientSecret: "secret",
+		AuthURL:      "https://example.com/authorize",
+		TokenURL:     "https://example.com/token",
+		UserInfoURL:  "https://example.com/userinfo",
+		RedirectURL:  "https://disk.example.com/auth/callback",
+	})
+	return handler.NewAuthHandler(&staticOAuth2Builder{client: client}, "")
+}
+
 func setupHybridRouter(jwtSecret string, authHandler *handler.AuthHandler, dlSecret string) *gin.Engine {
 	return setupHybridRouterWithAPIKey(jwtSecret, authHandler, dlSecret, nil)
 }
@@ -173,15 +194,7 @@ func TestHybridAuth_OAuth2Session_NilHandler(t *testing.T) {
 }
 
 func TestHybridAuth_OAuth2Session_InvalidSessionID(t *testing.T) {
-	oauthClient := oauth2client.New(oauth2client.Config{
-		ClientID:     "agentdisk",
-		ClientSecret: "secret",
-		AuthURL:      "https://example.com/authorize",
-		TokenURL:     "https://example.com/token",
-		UserInfoURL:  "https://example.com/userinfo",
-		RedirectURL:  "https://disk.example.com/auth/callback",
-	})
-	authH := handler.NewAuthHandler(oauthClient, "")
+	authH := newTestAuthHandler()
 
 	r := setupHybridRouter("secret", authH, "")
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -196,15 +209,7 @@ func TestHybridAuth_OAuth2Session_InvalidSessionID(t *testing.T) {
 }
 
 func TestHybridAuth_OAuth2Session_NoCookie(t *testing.T) {
-	oauthClient := oauth2client.New(oauth2client.Config{
-		ClientID:     "agentdisk",
-		ClientSecret: "secret",
-		AuthURL:      "https://example.com/authorize",
-		TokenURL:     "https://example.com/token",
-		UserInfoURL:  "https://example.com/userinfo",
-		RedirectURL:  "https://disk.example.com/auth/callback",
-	})
-	authH := handler.NewAuthHandler(oauthClient, "")
+	authH := newTestAuthHandler()
 
 	r := setupHybridRouter("secret", authH, "")
 	req := httptest.NewRequest("GET", "/test", nil)

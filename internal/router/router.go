@@ -11,7 +11,6 @@ import (
 	"github.com/agentdisk/agent-disk/internal/repository"
 	"github.com/agentdisk/agent-disk/internal/service"
 	"github.com/agentdisk/agent-disk/internal/store"
-	"github.com/agentdisk/agent-disk/pkg/oauth2client"
 	"github.com/agentdisk/agent-disk/pkg/oss"
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/agentdisk/agent-disk/pkg/storage"
@@ -79,21 +78,6 @@ func Setup(cfg *config.Config) *gin.Engine {
 		}
 	}
 
-	// OAuth2 client (optional)
-	var authH *handler.AuthHandler
-	if cfg.OAuth2.Enabled {
-		oauthClient := oauth2client.New(oauth2client.Config{
-			ClientID:     cfg.OAuth2.ClientID,
-			ClientSecret: cfg.OAuth2.ClientSecret,
-			AuthURL:      cfg.OAuth2.AuthURL,
-			TokenURL:     cfg.OAuth2.TokenURL,
-			UserInfoURL:  cfg.OAuth2.UserInfoURL,
-			RedirectURL:  cfg.OAuth2.RedirectURL,
-			Scopes:       cfg.OAuth2.Scopes,
-		})
-		authH = handler.NewAuthHandler(oauthClient, cfg.OAuth2.FrontendURL)
-	}
-
 	// Repos
 	spaceRepo := repository.NewSpaceRepo(db)
 	folderRepo := repository.NewFolderRepo(db)
@@ -124,6 +108,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	publicDirSvc := service.NewPublicDirectoryService(publicDirRepo, folderRepo)
 	oauth2ConfigSvc := service.NewOAuth2ConfigService(oauth2ConfigRepo)
 
+	// OAuth2 auth handler (reads DB config per-request for hot-reload)
+	authH := handler.NewAuthHandler(oauth2ConfigSvc, cfg.Server.FrontendURL)
+
 	// Handlers
 	spaceH := handler.NewSpaceHandler(spaceSvc)
 	folderH := handler.NewFolderHandler(folderSvc, recycleSvc)
@@ -151,12 +138,13 @@ func Setup(cfg *config.Config) *gin.Engine {
 		adminH.SetMFAService(mfaSvc)
 	}
 
-	// OAuth2 auth routes (public)
-	if authH != nil {
-		r.GET("/auth/login", authH.Login)
-		r.GET("/auth/callback", authH.Callback)
-		r.POST("/auth/logout", authH.Logout)
-	}
+	// OAuth2 status endpoint (public, always available)
+	r.GET("/auth/status", authH.Status)
+
+	// OAuth2 auth routes (public, always registered)
+	r.GET("/auth/login", authH.Login)
+	r.GET("/auth/callback", authH.Callback)
+	r.POST("/auth/logout", authH.Logout)
 
 	// Admin login (public, no auth required)
 	r.POST("/v1/disk/admin/login", adminH.Login)

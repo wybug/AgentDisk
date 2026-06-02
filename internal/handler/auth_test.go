@@ -12,6 +12,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// staticBuilder implements OAuth2ClientBuilder for tests.
+type staticBuilder struct {
+	client *oauth2client.OAuthClient
+	err    error
+}
+
+func (b *staticBuilder) BuildOAuth2Client() (*oauth2client.OAuthClient, error) {
+	return b.client, b.err
+}
+
 func setupAuthRouter(authH *AuthHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -30,7 +40,7 @@ func newTestAuthHandler(tokenURL, userinfoURL string) *AuthHandler {
 		UserInfoURL:  userinfoURL,
 		RedirectURL:  "https://disk.example.com/auth/callback",
 	})
-	return NewAuthHandler(client, "")
+	return NewAuthHandler(&staticBuilder{client: client}, "")
 }
 
 // ── NewAuthHandler ──
@@ -54,15 +64,15 @@ func TestNewAuthHandler(t *testing.T) {
 // ── Login ──
 
 func TestAuth_Login_OAuth2NotConfigured(t *testing.T) {
-	h := NewAuthHandler(nil, "")
+	h := NewAuthHandler(&staticBuilder{}, "")
 	r := setupAuthRouter(h)
 
 	req := httptest.NewRequest("GET", "/auth/login", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
 }
 
@@ -147,15 +157,15 @@ func TestAuth_Login_StandardFlow(t *testing.T) {
 // ── Callback ──
 
 func TestAuth_Callback_OAuth2NotConfigured(t *testing.T) {
-	h := NewAuthHandler(nil, "")
+	h := NewAuthHandler(&staticBuilder{}, "")
 	r := setupAuthRouter(h)
 
 	req := httptest.NewRequest("GET", "/auth/callback?code=abc&state=xyz", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
 }
 
@@ -485,5 +495,58 @@ func TestGenerateSessionID(t *testing.T) {
 	_, err := base64.RawURLEncoding.DecodeString(id1)
 	if err != nil {
 		t.Errorf("session ID is not valid base64: %v", err)
+	}
+}
+
+// ── Status ──
+
+func TestAuth_Status_NotConfigured(t *testing.T) {
+	h := NewAuthHandler(&staticBuilder{}, "")
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/auth/status", h.Status)
+
+	req := httptest.NewRequest("GET", "/auth/status", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]interface{})
+	if data["oauth2"] != false {
+		t.Errorf("oauth2 = %v, want false", data["oauth2"])
+	}
+}
+
+func TestAuth_Status_Configured(t *testing.T) {
+	client := oauth2client.New(oauth2client.Config{
+		ClientID:     "test",
+		ClientSecret: "secret",
+		AuthURL:      "https://example.com/authorize",
+		TokenURL:     "https://example.com/token",
+		UserInfoURL:  "https://example.com/userinfo",
+	})
+	h := NewAuthHandler(&staticBuilder{client: client}, "")
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/auth/status", h.Status)
+
+	req := httptest.NewRequest("GET", "/auth/status", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]interface{})
+	if data["oauth2"] != true {
+		t.Errorf("oauth2 = %v, want true", data["oauth2"])
 	}
 }

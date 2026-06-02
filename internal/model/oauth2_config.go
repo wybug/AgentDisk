@@ -9,11 +9,8 @@ type DiskOAuth2Config struct {
 	Enabled      bool      `gorm:"default:true" json:"enabled"`
 	ClientID     string    `gorm:"column:client_id;size:255;not null;default:''" json:"clientId"`
 	ClientSecret string    `gorm:"column:client_secret;size:512;not null;default:''" json:"-"`
-	AuthURL      string    `gorm:"size:512;not null;default:''" json:"authUrl"`
-	TokenURL     string    `gorm:"size:512;not null;default:''" json:"tokenUrl"`
-	UserInfoURL  string    `gorm:"size:512;not null;default:''" json:"userInfoUrl"`
+	IssuerURL    string    `gorm:"column:issuer_url;size:512;not null;default:''" json:"issuerUrl"`
 	RedirectURL  string    `gorm:"size:512;not null;default:''" json:"redirectUrl"`
-	FrontendURL  string    `gorm:"size:512;not null;default:''" json:"frontendUrl"`
 	Scopes       string    `gorm:"size:512;not null;default:''" json:"scopes"`
 	UpdatedBy    string    `gorm:"size:64;not null;default:''" json:"updatedBy"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"createdAt"`

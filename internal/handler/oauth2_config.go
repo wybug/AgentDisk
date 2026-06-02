@@ -31,11 +31,8 @@ func (h *OAuth2ConfigHandler) Get(c *gin.Context) {
 		"name":        cfg.Name,
 		"enabled":     cfg.Enabled,
 		"clientId":    cfg.ClientID,
-		"authUrl":     cfg.AuthURL,
-		"tokenUrl":    cfg.TokenURL,
-		"userInfoUrl": cfg.UserInfoURL,
+		"issuerUrl":   cfg.IssuerURL,
 		"redirectUrl": cfg.RedirectURL,
-		"frontendUrl": cfg.FrontendURL,
 		"scopes":      cfg.Scopes,
 		"updatedBy":   cfg.UpdatedBy,
 		"createdAt":   cfg.CreatedAt,
@@ -46,11 +43,8 @@ func (h *OAuth2ConfigHandler) Get(c *gin.Context) {
 type updateOAuth2Request struct {
 	ClientID     string `json:"clientId"`
 	ClientSecret string `json:"clientSecret"`
-	AuthURL      string `json:"authUrl"`
-	TokenURL     string `json:"tokenUrl"`
-	UserInfoURL  string `json:"userInfoUrl"`
+	IssuerURL    string `json:"issuerUrl"`
 	RedirectURL  string `json:"redirectUrl"`
-	FrontendURL  string `json:"frontendUrl"`
 	Scopes       string `json:"scopes"`
 	Enabled      bool   `json:"enabled"`
 }
@@ -67,11 +61,8 @@ func (h *OAuth2ConfigHandler) Update(c *gin.Context) {
 	cfg := &model.DiskOAuth2Config{
 		ClientID:     req.ClientID,
 		ClientSecret: req.ClientSecret,
-		AuthURL:      req.AuthURL,
-		TokenURL:     req.TokenURL,
-		UserInfoURL:  req.UserInfoURL,
+		IssuerURL:    req.IssuerURL,
 		RedirectURL:  req.RedirectURL,
-		FrontendURL:  req.FrontendURL,
 		Scopes:       req.Scopes,
 		Enabled:      req.Enabled,
 	}
@@ -85,9 +76,13 @@ func (h *OAuth2ConfigHandler) Update(c *gin.Context) {
 
 // Test handles POST /v1/disk/admin/oauth2/test.
 func (h *OAuth2ConfigHandler) Test(c *gin.Context) {
-	_, err := h.oauth2Svc.BuildOAuth2Client()
-	if err != nil {
-		response.OK(c, gin.H{"status": "error", "message": err.Error()})
+	client, err := h.oauth2Svc.BuildOAuth2Client()
+	if err != nil || client == nil {
+		msg := "no active OAuth2 config"
+		if err != nil {
+			msg = err.Error()
+		}
+		response.OK(c, gin.H{"status": "error", "message": msg})
 		return
 	}
 	response.OK(c, gin.H{"status": "ok", "message": "OAuth2 client can be built from config"})

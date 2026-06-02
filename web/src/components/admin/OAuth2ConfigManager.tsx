@@ -51,23 +51,14 @@ export default function OAuth2ConfigManager() {
         <Form.Item name="clientSecret" label="Client Secret">
           <Input.Password />
         </Form.Item>
-        <Form.Item name="authUrl" label="Auth URL">
-          <Input />
-        </Form.Item>
-        <Form.Item name="tokenUrl" label="Token URL">
-          <Input />
-        </Form.Item>
-        <Form.Item name="userInfoUrl" label="UserInfo URL">
-          <Input />
+        <Form.Item name="issuerUrl" label="Issuer URL" extra="OAuth2 提供方基础地址，如 http://localhost:3100">
+          <Input placeholder="http://localhost:3100" />
         </Form.Item>
         <Form.Item name="redirectUrl" label="Redirect URL">
-          <Input />
-        </Form.Item>
-        <Form.Item name="frontendUrl" label="Frontend URL">
-          <Input />
+          <Input placeholder="http://localhost:9100/auth/callback" />
         </Form.Item>
         <Form.Item name="scopes" label="Scopes（逗号分隔）">
-          <Input />
+          <Input placeholder="openid,profile" />
         </Form.Item>
         <Space>
           <Button type="primary" htmlType="submit" loading={loading}>保存</Button>

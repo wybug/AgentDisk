@@ -27,6 +27,8 @@ const AdminSetupPage = lazy(() => import('@/pages/AdminSetupPage'));
 // eslint-disable-next-line react-refresh/only-export-components
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 // eslint-disable-next-line react-refresh/only-export-components
+const OAuth2NotConfiguredPage = lazy(() => import('@/pages/OAuth2NotConfiguredPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const PublicDirManager = lazy(() => import('@/components/admin/PublicDirManager'));
 // eslint-disable-next-line react-refresh/only-export-components
 const ApiKeyManager = lazy(() => import('@/components/admin/ApiKeyManager'));
@@ -50,6 +52,14 @@ const router = createBrowserRouter([
     element: (
       <Suspense fallback={<Loading />}>
         <ShareAccessPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: '/auth/unavailable',
+    element: (
+      <Suspense fallback={<Loading />}>
+        <OAuth2NotConfiguredPage />
       </Suspense>
     ),
   },
