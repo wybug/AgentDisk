@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -80,6 +81,13 @@ func (l *LocalStorage) PresignedGetURL(_ context.Context, key string, expires ti
 	exp := time.Now().Add(expires).Unix()
 	sig := l.sign(key, exp)
 	return fmt.Sprintf("/v1/disk/local-storage/%s?exp=%d&sig=%s", key, exp, sig), nil
+}
+
+// PresignedDownloadURL returns a signed URL with Content-Disposition for browser download.
+func (l *LocalStorage) PresignedDownloadURL(_ context.Context, key string, expires time.Duration, filename string) (string, error) {
+	exp := time.Now().Add(expires).Unix()
+	sig := l.sign(key, exp)
+	return fmt.Sprintf("/v1/disk/local-storage/%s?exp=%d&sig=%s&filename=%s", key, exp, sig, url.QueryEscape(filename)), nil
 }
 
 // EnsureBucket creates the root directory for local storage.

@@ -43,7 +43,7 @@ export default function ShareAccessPage() {
   const handleDownload = async () => {
     if (!shareInfo || !code) return;
     try {
-      const tokenResult = await shareApi.downloadPublic(code, shareInfo.resourceId, shareInfo.extractCode || undefined);
+      const tokenResult = await shareApi.downloadPublic(code, shareInfo.resourceId, shareInfo.extractCode ? extractCode : undefined);
       window.open(getDownloadUrl(tokenResult.downloadToken), '_blank');
     } catch (err: unknown) {
       setError('下载失败: ' + (err instanceof Error ? err.message : String(err)));

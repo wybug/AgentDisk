@@ -80,6 +80,17 @@ func (c *Client) PresignedGetURL(ctx context.Context, key string, expires time.D
 	return u.String(), nil
 }
 
+// PresignedDownloadURL returns a presigned URL with Content-Disposition: attachment.
+func (c *Client) PresignedDownloadURL(ctx context.Context, key string, expires time.Duration, filename string) (string, error) {
+	reqParams := make(url.Values)
+	reqParams.Set("response-content-disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	u, err := c.mc.PresignedGetObject(ctx, c.bucket, key, expires, reqParams)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
 // BuildKey constructs OSS key following the path convention:
 // disk/user_{userId}/{fullPath}/{fileId}_{fileName}
 func BuildKey(userID, fullPath string, fileID uint64, fileName string) string {

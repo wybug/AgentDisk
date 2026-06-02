@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -51,6 +52,10 @@ func (h *LocalStorageHandler) ServeFile(c *gin.Context) {
 	if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(h.storage.rootDir)+string(filepath.Separator)) {
 		c.String(http.StatusForbidden, "access denied")
 		return
+	}
+
+	if filename := c.Query("filename"); filename != "" {
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	}
 
 	c.File(fullPath)

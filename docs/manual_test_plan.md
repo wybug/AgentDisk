@@ -324,8 +324,8 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 |------|------|----------|----------|------|
 | T07.1 | 通过 API 列出已上传的测试文件 | 找到 agentdisk-test-upload 文件及 ID | | |
 | T07.2 | 调用下载令牌 API (`POST /files/{id}/download-token`) | 返回 downloadToken 和 expiresIn | | |
-| T07.3 | 使用令牌访问下载 URL (`GET /files/download?token=xxx`) | HTTP 200，文件可下载 | | |
-| T07.4 | 通过 UI 点击「操作」→「下载」触发下载 | 下载操作触发成功 | | |
+| T07.3 | 使用令牌访问下载 URL (`GET /files/download?t=xxx`) | HTTP 302 重定向到 OSS 预签名 URL，浏览器触发文件下载（Content-Disposition: attachment），文件名正确 | | |
+| T07.4 | 通过 UI 点击「操作」→「下载」触发下载 | 浏览器弹出文件保存对话框或自动下载文件（非显示 JSON） | | |
 
 ### T08: 文件删除与回收站
 
@@ -386,6 +386,11 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 | T11.5 | 公开访问 `GET /shares/{shareCode}`（无鉴权） | 返回分享信息 | | |
 | T11.6 | 使用提取码访问 `POST /shares/{shareCode}/access`（extractCode=abc123） | 验证成功，返回文件信息 | | |
 | T11.7 | 使用错误提取码访问（extractCode=wrong） | 被拒绝（code 非 0） | | |
+| T11.7a | 使用正确提取码调用 `POST /share/download`（extractCode=abc123） | 下载令牌生成成功，返回 downloadToken | | |
+| T11.7b | 使用错误提取码调用 `POST /share/download`（extractCode=wrong） | 返回 403 错误（invalid extract code） | | |
+| T11.7c | 创建无提取码分享（extractCode 为空），调用 `POST /share/download` 不传 extractCode | 下载令牌生成成功 | | |
+| T11.7d | 有提取码分享不提供 extractCode 调用 `POST /share/download` | 返回 403 错误（invalid extract code） | | |
+| T11.7e | 完整下载链路：获取分享下载 token → 访问 `GET /files/download?t=xxx` | HTTP 302 重定向，浏览器触发文件下载（Content-Disposition: attachment），文件名正确 | | |
 | T11.8 | 通过 API 验证分享访问次数已增加 | 访问记录存在 | | |
 | T11.9 | 调用 `DELETE /shares/{shareCode}` 撤销分享 | 撤销成功 | | |
 | T11.10 | 再次公开访问已撤销的分享链接 | 分享不可访问 | | |

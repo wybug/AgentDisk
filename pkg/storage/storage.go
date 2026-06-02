@@ -23,6 +23,10 @@ type Storage interface {
 	// PresignedGetURL returns a URL that grants temporary read access.
 	PresignedGetURL(ctx context.Context, key string, expires time.Duration) (string, error)
 
+	// PresignedDownloadURL returns a presigned URL with Content-Disposition set
+	// to trigger browser download with the given filename.
+	PresignedDownloadURL(ctx context.Context, key string, expires time.Duration, filename string) (string, error)
+
 	// EnsureBucket initializes the storage backend (creates bucket or directory).
 	EnsureBucket(ctx context.Context) error
 }

@@ -130,6 +130,22 @@ func (s *FileService) GetFile(ctx context.Context, userID string, fileID uint64)
 	return file, url, nil
 }
 
+// GetFileDownloadURL returns a presigned URL with Content-Disposition for browser download.
+func (s *FileService) GetFileDownloadURL(ctx context.Context, userID string, fileID uint64) (string, error) {
+	file, err := s.fileRepo.GetByID(fileID)
+	if err != nil {
+		return "", fmt.Errorf("file not found: %w", err)
+	}
+	if file.UserID != userID {
+		return "", fmt.Errorf("permission denied")
+	}
+	dlURL, err := s.storage.PresignedDownloadURL(ctx, file.OSSKey, time.Hour, file.FileName)
+	if err != nil {
+		return "", fmt.Errorf("generate download url: %w", err)
+	}
+	return dlURL, nil
+}
+
 // UpdateFile handles the request.
 func (s *FileService) UpdateFile(ctx context.Context, userID string, fileID uint64, reader io.Reader, size int64, contentType string) (*model.DiskFile, error) {
 	file, err := s.fileRepo.GetByID(fileID)
