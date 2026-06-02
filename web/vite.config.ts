@@ -16,7 +16,19 @@ export default defineConfig({
         target: 'http://localhost:9100',
         changeOrigin: true,
       },
-      '/auth': {
+      '/auth/login': {
+        target: 'http://localhost:9100',
+        changeOrigin: true,
+      },
+      '/auth/callback': {
+        target: 'http://localhost:9100',
+        changeOrigin: true,
+      },
+      '/auth/status': {
+        target: 'http://localhost:9100',
+        changeOrigin: true,
+      },
+      '/auth/logout': {
         target: 'http://localhost:9100',
         changeOrigin: true,
       },

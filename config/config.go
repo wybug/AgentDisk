@@ -18,15 +18,15 @@ type Config struct {
 	Redis         RedisConfig         `mapstructure:"redis"`
 	JWT           JWTConfig           `mapstructure:"jwt"`
 	Log           LogConfig           `mapstructure:"log"`
-	OAuth2        OAuth2Config        `mapstructure:"oauth2"`
 	DownloadToken DownloadTokenConfig `mapstructure:"download_token"`
 	WebAuthn      WebAuthnConfig      `mapstructure:"webauthn"`
 }
 
 // ServerConfig represents a serverconfiguration.
 type ServerConfig struct {
-	Port string `mapstructure:"port"`
-	Mode string `mapstructure:"mode"`
+	Port        string `mapstructure:"port"`
+	Mode        string `mapstructure:"mode"`
+	FrontendURL string `mapstructure:"frontend_url"`
 }
 
 // DatabaseConfig represents a databaseconfiguration.
@@ -74,19 +74,6 @@ type LogConfig struct {
 	Level    string `mapstructure:"level"`
 	Output   string `mapstructure:"output"`
 	FilePath string `mapstructure:"file_path"`
-}
-
-// OAuth2Config represents a oauth2configuration.
-type OAuth2Config struct {
-	Enabled      bool     `mapstructure:"enabled"`
-	ClientID     string   `mapstructure:"client_id"`
-	ClientSecret string   `mapstructure:"client_secret"`
-	AuthURL      string   `mapstructure:"auth_url"`
-	TokenURL     string   `mapstructure:"token_url"`
-	UserInfoURL  string   `mapstructure:"userinfo_url"`
-	RedirectURL  string   `mapstructure:"redirect_url"`
-	FrontendURL  string   `mapstructure:"frontend_url"`
-	Scopes       []string `mapstructure:"scopes"`
 }
 
 // DownloadTokenConfig represents a downloadtokenconfiguration.
@@ -187,11 +174,8 @@ func overrideFromEnv(cfg *Config) {
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}
-	if v := os.Getenv("OAUTH2_CLIENT_ID"); v != "" {
-		cfg.OAuth2.ClientID = v
-	}
-	if v := os.Getenv("OAUTH2_CLIENT_SECRET"); v != "" {
-		cfg.OAuth2.ClientSecret = v
+	if v := os.Getenv("FRONTEND_URL"); v != "" {
+		cfg.Server.FrontendURL = v
 	}
 	if v := os.Getenv("DL_TOKEN_SECRET"); v != "" {
 		cfg.DownloadToken.Secret = v

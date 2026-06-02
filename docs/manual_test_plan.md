@@ -10,15 +10,13 @@
 | MinIO | 9000 | 已部署 |
 | Redis（可选） | 6379 | `redis-server` |
 | 后端 API | 9100 | `make run` |
-| 测试网关 | 3000 | `cd gateway && npm run dev` |
-| Web 前端 | 5173 | `cd web && npm run dev` |
+| 测试网关 | 3100 | `cd gateway && npm run dev` |
+| Web 前端 | 9101 | `cd web && npm run dev` |
 
 ### 配置确认
 
-1. `config.yaml` 中 `oauth2.enabled` 设为 `true`
-2. `oauth2.auth_url` 指向 `http://localhost:3000/oauth2/authorize`
-3. `oauth2.redirect_url` 指向 `http://localhost:5173/auth/callback`
-4. 环境变量 `DB_PASSWORD`、`OSS_ACCESS_KEY`、`OSS_SECRET_KEY` 已设置
+1. 通过 Admin 管理面板（`/admin/oauth2`）或 API（`PUT /v1/disk/admin/oauth2`）配置 OAuth2，设置 `issuerUrl` 为 `http://localhost:3100`、`clientId`、`clientSecret`、`redirectUrl`
+2. 环境变量 `DB_PASSWORD`、`OSS_ACCESS_KEY`、`OSS_SECRET_KEY` 已设置
 
 ### 调试测试工具
 
@@ -39,11 +37,13 @@ T01 (Admin Bootstrap，独立)
 ├── T02a (Admin 登录 + 侧边栏导航，依赖 T01)
 ├── T02b (Admin 公共目录管理，依赖 T01)
 ├── T02c (Admin API Key 管理，依赖 T01)
-├── T02d (用户端公共目录浏览，依赖 T02b)
-├── T02e (Admin 清理 + 退出登录，依赖 T02b/T02c)
+├── T02d (Admin OAuth2 配置管理，依赖 T01，配置后立即生效)
+├── T02e (用户端公共目录浏览，依赖 T02b + T02d)
+├── T02f (Admin 清理 + 退出登录，依赖 T02b/T02c)
+├── T02g (OAuth2 连接验证，依赖 T02d，只读不破坏配置)
 ├── T20 (Admin MFA 通行密钥管理，依赖 T01，需人工配合 WebAuthn 原生弹窗)
 └── T21 (Admin MFA 登录验证，依赖 T01，需人工配合 WebAuthn 原生弹窗)
-T03 (登录 + 全局清理)
+T03 (OAuth2 登录流程，依赖 T02d)
 ├── T04 (文件夹，自包含)
 ├── T05 (文件上传，创建 3 个测试文件)
 │   ├── T06 (文件预览，依赖 T05 的文件)
@@ -83,7 +83,7 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 |------|------|----------|----------|------|
 | T01.1 | 调用 `POST /v1/disk/admin/bootstrap`（username=admin, password=admin123） | 首次调用返回 code=0（创建成功），再次调用返回 code=403（已存在） | | |
 | T01.2 | 调用 `POST /v1/disk/admin/login`（admin / admin123） | 返回 code=0，包含 token | | |
-| T01.3 | 访问 `http://localhost:5173/admin/login` | Admin 登录页显示，标题包含「管理后台」 | | |
+| T01.3 | 访问 `http://localhost:9101/admin/login` | Admin 登录页显示，标题包含「管理后台」 | | |
 | T01.4 | 输入正确凭据（admin / admin123），点击「登录」 | 登录成功，页面跳转到 `/admin` 管理后台 | | |
 | T01.5 | 验证管理后台 Header 显示正常 | 页面显示「管理后台」标题和「退出」按钮 | | |
 
@@ -95,13 +95,13 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 
 | 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
 |------|------|----------|----------|------|
-| T02a.1 | 访问 `http://localhost:5173/admin/login` | Admin 登录页显示，标题包含「管理后台」 | | |
+| T02a.1 | 访问 `http://localhost:9101/admin/login` | Admin 登录页显示，标题包含「管理后台」 | | |
 | T02a.2 | 输入错误密码（admin / wrongpassword），点击「登录」 | 页面显示错误提示（「失败」或「错误」），页面不崩溃 | | |
 | T02a.3 | 输入正确凭据（admin / admin123），点击「登录」 | 登录成功，页面跳转到 `/admin` 管理后台 | | |
 | T02a.4 | 点击侧边栏「公共目录」 | URL 变为 `/admin/public-dirs`，显示公共目录列表 | | |
 | T02a.5 | 点击侧边栏「API Key」 | URL 变为 `/admin/api-keys`，显示 API Key 列表 | | |
 | T02a.6 | 点击侧边栏「管理员」 | URL 变为 `/admin/users`，显示管理员用户表格，包含 admin 用户和「创建管理员」按钮 | | |
-| T02a.7 | 点击侧边栏「OAuth2 配置」 | URL 变为 `/admin/oauth2`，显示 OAuth2 配置表单，包含「保存」和「测试连接」按钮 | | |
+| T02a.7 | 点击侧边栏「OAuth2 配置」 | URL 变为 `/admin/oauth2`，显示 OAuth2 配置表单，包含 Issuer URL（单个输入框）、Client ID、Client Secret、Redirect URL、Scopes 字段，以及「保存」和「测试连接」按钮 | | |
 
 ### T02b: Admin 公共目录管理
 
@@ -134,36 +134,65 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 | T02c.7 | 点击 `ui-test-key` 行的编辑图标 | 弹出「修改 API Key 名称」Modal | | |
 | T02c.8 | 修改名称为 `ui-test-key-renamed`，点击确定 | 修改成功，列表显示新名称 | | |
 
-### T02d: 用户端公共目录浏览
+### T02d: Admin OAuth2 配置管理
+
+**目标**：验证 OAuth2 配置通过 Admin 管理面板写入数据库，包含 Issuer URL 简化字段
+
+**前置条件**：已通过 T01 Bootstrap 创建 admin 账户
+
+| 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
+|------|------|----------|----------|------|
+| T02d.1 | 登录 Admin，点击侧边栏「OAuth2 配置」 | URL 变为 `/admin/oauth2`，显示配置表单 | | |
+| T02d.2 | 验证表单字段 | 包含：启用开关、Client ID、Client Secret、Issuer URL、Redirect URL、Scopes | | |
+| T02d.3 | 填写 Issuer URL 为 `http://localhost:3100`，Client ID 为 `agentdisk`，Client Secret 为 `agentdisk-secret`，Redirect URL 为 `http://localhost:9101/auth/callback`，Scopes 为 `openid,profile` | 表单填写成功 | | |
+| T02d.4 | 开启启用开关，点击「保存」 | 保存成功，配置立即生效（热加载，无需重启） | | |
+| T02d.5 | 点击「测试连接」 | 显示"连接成功" | | |
+| T02d.6 | 刷新页面，验证配置已持久化 | 表单显示已保存的值 | | |
+
+### T02e: 用户端公共目录浏览
 
 **目标**：验证用户端公共文件菜单、公共目录列表、目录详情页、API Key 认证访问
 
-**前置条件**：已运行 T02b（公共目录已创建）
+**前置条件**：已运行 T02b（公共目录已创建）且已运行 T02d（OAuth2 配置已生效）
 
 | 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
 |------|------|----------|----------|------|
-| T02d.1 | 通过网关登录 user001 | 登录成功，跳转到 AgentDisk 主界面 | | |
-| T02d.2 | 查看侧边栏 | 显示「公共文件」菜单项 | | |
-| T02d.3 | 点击「公共文件」菜单项 | URL 变为 `/public`，显示公共文件页面 | | |
-| T02d.4 | 验证公共目录列表内容 | 列表包含 T02b 创建的全局公共目录 `test-global-reports` | | |
-| T02d.5 | 点击 `test-global-reports` 目录项 | URL 变为 `/public/{id}`，进入目录详情页 | | |
-| T02d.6 | 点击侧边栏「全部文件」返回 | URL 变为 `/explorer`，回到文件列表页 | | |
-| T02d.7 | 通过 API 查询用户可见公共目录 | 返回至少 1 条记录 | | |
-| T02d.8 | 使用 API Key 认证访问公共目录 | 返回公共目录列表 | | |
+| T02e.1 | 通过网关登录 user001 | 登录成功，跳转到 AgentDisk 主界面 | | |
+| T02e.2 | 查看侧边栏 | 显示「公共文件」菜单项 | | |
+| T02e.3 | 点击「公共文件」菜单项 | URL 变为 `/public`，显示公共文件页面 | | |
+| T02e.4 | 验证公共目录列表内容 | 列表包含 T02b 创建的全局公共目录 `test-global-reports` | | |
+| T02e.5 | 点击 `test-global-reports` 目录项 | URL 变为 `/public/{id}`，进入目录详情页 | | |
+| T02e.6 | 点击侧边栏「全部文件」返回 | URL 变为 `/explorer`，回到文件列表页 | | |
+| T02e.7 | 通过 API 查询用户可见公共目录 | 返回至少 1 条记录 | | |
+| T02e.8 | 使用 API Key 认证访问公共目录 | 返回公共目录列表 | | |
 
-### T02e: Admin 清理 + 退出登录
+### T02f: Admin 清理 + 退出登录
 
 **目标**：清理所有测试数据（API Key + 公共目录）、Admin 退出登录
 
-**前置条件**：已运行 T02b/T02c（测试数据已创建）
+**前置条件**：已运行 T02b/T02c/T02e（测试数据已使用完毕）
 
 | 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
 |------|------|----------|----------|------|
-| T02e.1 | 收集所有 `test-` 和 `ui-test-` 前缀的 API Key | 成功获取待清理 Key 列表 | | |
-| T02e.2 | 批量删除所有测试 API Key | 全部删除成功 | | |
-| T02e.3 | 收集所有 `test-` 和 `ui-test-` 前缀的公共目录 | 成功获取待清理目录列表 | | |
-| T02e.4 | 批量删除所有测试公共目录 | 全部删除成功 | | |
-| T02e.5 | 点击管理后台 Header 的「退出」按钮 | 页面跳转到 `/admin/login`，admin_token 被清除 | | |
+| T02f.1 | 收集所有 `test-` 和 `ui-test-` 前缀的 API Key | 成功获取待清理 Key 列表 | | |
+| T02f.2 | 批量删除所有测试 API Key | 全部删除成功 | | |
+| T02f.3 | 收集所有 `test-` 和 `ui-test-` 前缀的公共目录 | 成功获取待清理目录列表 | | |
+| T02f.4 | 批量删除所有测试公共目录 | 全部删除成功 | | |
+| T02f.5 | 点击管理后台 Header 的「退出」按钮 | 页面跳转到 `/admin/login`，admin_token 被清除 | | |
+
+### T02g: OAuth2 连接验证
+
+**目标**：验证 OAuth2 配置已生效，前端登录重定向正常，连接测试通过
+
+**前置条件**：已运行 T02d（OAuth2 配置已写入 DB 并启用）
+
+| 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
+|------|------|----------|----------|------|
+| T02g.1 | 调用 `GET /auth/status` | 返回 `{"code":0,"data":{"oauth2":true}}` | | |
+| T02g.2 | 访问 `http://localhost:9101` | 页面重定向到网关登录页（`http://localhost:3100/login`），无死循环 | | |
+| T02g.3 | 调用 `POST /v1/disk/admin/oauth2/test` | 返回 `{"status":"ok"}` | | |
+
+> **手工降级验证**（可选，不在自动化测试中执行）：通过 Admin API 设置 `enabled: false`，验证 `/auth/status` 返回 `oauth2: false` 及前端显示降级提示页；验证后恢复 `enabled: true`。
 
 ### T20: Admin MFA 通行密钥注册与管理
 
@@ -219,11 +248,13 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 
 **目标**：验证用户通过测试网关 OAuth2 登录后能正常访问 AgentDisk，并验证所有侧边栏页面导航
 
+**前置条件**：已通过 T02d 完成 OAuth2 配置（DB 中存在有效配置）
+
 | 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
 |------|------|----------|----------|------|
-| T03.1 | 打开浏览器，访问 http://localhost:5173 | 浏览器被重定向到 `http://localhost:3000/login` 网关登录页 | | |
+| T03.1 | 打开浏览器，访问 http://localhost:9101 | 浏览器被重定向到 `http://localhost:3100/login` 网关登录页 | | |
 | T03.2 | 输入用户 ID `user001`，密码 `test123`，点击「登录」 | 登录成功，页面跳转到网关授权确认页 | | |
-| T03.3 | 在授权确认页点击「允许」 | 浏览器重定向回 `http://localhost:5173/explorer`，显示 AgentDisk 主界面 | | |
+| T03.3 | 在授权确认页点击「允许」 | 浏览器重定向回 `http://localhost:9101/explorer`，显示 AgentDisk 主界面 | | |
 | T03.4 | 观察页面顶部栏 | 显示应用标题「AgentDisk」，右侧显示用户 ID `user001` 和存储空间用量条 | | |
 | T03.5a | 确认页面内容 | 页面显示 AgentDisk 标题 | | |
 | T03.5b | 确认用户信息 | 页面显示用户名 `user001` | | |
@@ -234,7 +265,7 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 | T03.9 | 点击侧边栏「标签搜索」 | URL 变为 `/tags`，页面标题显示「标签」相关内容 | | |
 | T03.10 | 点击侧边栏「权限管理」 | URL 变为 `/permissions`，页面标题显示「权限」相关内容 | | |
 | T03.11 | 点击侧边栏「全部文件」返回首页 | URL 变为 `/explorer`，显示文件列表 | | |
-| T03.12 | 点击右侧用户下拉菜单中的「退出登录」 | 页面跳转到登录页，再次访问 5173 需重新登录 | | |
+| T03.12 | 点击右侧用户下拉菜单中的「退出登录」 | 页面跳转到登录页，再次访问 9101 需重新登录 | | |
 
 ### T04: 文件夹管理
 
@@ -395,7 +426,7 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 
 | 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
 |------|------|----------|----------|------|
-| T14.1 | 访问 http://localhost:3000/dashboard | 网关仪表盘加载，显示 AgentDisk/网关/OAuth2 相关内容 | | |
+| T14.1 | 访问 http://localhost:3100/dashboard | 网关仪表盘加载，显示 AgentDisk/网关/OAuth2 相关内容 | | |
 | T14.2 | 查看 OAuth2 配置区域 | 显示 Client、Authorize URL、Token URL 等配置 | | |
 | T14.3 | 通过表单填写用户 ID/名称/密码，点击「添加」 | 用户添加成功，列表更新显示新用户 | | |
 | T14.4 | 通过 API `DELETE /api/users/{id}` 删除测试用户 | 用户从列表中消失 | | |
@@ -439,7 +470,7 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 
 **目标**：验证网关的 Agent 注册、更新、删除、Chat 页面和用户管理功能
 
-**前置条件**：测试网关（port 3000）已启动
+**前置条件**：测试网关（port 3100）已启动
 
 | 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
 |------|------|----------|----------|------|
@@ -458,7 +489,7 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 **目标**：验证 Chat 流式响应、ReturnFile 文件卡片显示、Markdown 渲染切换和 Metrics 指标展示
 
 **前置条件**：
-- 测试网关（port 3000）已启动
+- 测试网关（port 3100）已启动
 - Mock Agent 服务器（port 9876）已启动：`cd test/browser && node runner.js t19-record`
 - 已注册带 endpoints 的 Agent（Chat URL 指向 `http://localhost:9876/chat`）
 
@@ -483,8 +514,10 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 | T02a | Admin 登录 + 侧边栏导航 | | |
 | T02b | Admin 公共目录管理 | | |
 | T02c | Admin API Key 管理 | | |
-| T02d | 用户端公共目录浏览 | | |
-| T02e | Admin 清理 + 退出登录 | | |
+| T02d | Admin OAuth2 配置管理 | | |
+| T02e | 用户端公共目录浏览 | | |
+| T02f | Admin 清理 + 退出登录 | | |
+| T02g | OAuth2 降级验证 | | |
 | T20 | Admin MFA 通行密钥管理 | | |
 | T21 | Admin MFA 登录验证 | | |
 | T03 | OAuth2 登录流程 | | |

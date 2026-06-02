@@ -1,6 +1,7 @@
 server:
   port: 9100
   mode: release  # debug / release / test
+  frontend_url: "http://localhost:9101"
 
 database:
   driver: sqlite              # mysql (默认) 或 sqlite
@@ -38,19 +39,6 @@ log:
   level: info      # debug / info / warn / error
   output: stdout   # stdout / file
   file_path: logs/agentdisk.log
-
-oauth2:
-  enabled: true               # 启用 OAuth2 Web 登录
-  client_id: "agentdisk"
-  client_secret: "agentdisk-secret"
-  auth_url: "http://localhost:3100/oauth2/authorize"
-  token_url: "http://localhost:3100/oauth2/token"
-  userinfo_url: "http://localhost:3100/oauth2/userinfo"
-  redirect_url: "http://localhost:9100/auth/callback"
-  frontend_url: "http://localhost:9101"
-  scopes:
-    - openid
-    - profile
 
 download_token:
   secret: "dev-dl-token-secret-for-testing"

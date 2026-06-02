@@ -60,20 +60,6 @@ log:
   output: stdout              # 日志输出：stdout / file
   file_path: logs/agentdisk.log  # 日志文件路径（output 为 file 时生效）
 
-# ==================== OAuth2 配置 ====================
-oauth2:
-  enabled: true                              # 是否启用 OAuth2 Web 登录
-  client_id: "agentdisk"                     # OAuth2 客户端 ID
-  # client_secret: 通过环境变量 OAUTH2_CLIENT_SECRET 注入
-  auth_url: "http://localhost:3100/oauth2/authorize"      # 授权端点
-  token_url: "http://localhost:3100/oauth2/token"         # 令牌端点
-  userinfo_url: "http://localhost:3100/oauth2/userinfo"   # 用户信息端点
-  redirect_url: "http://localhost:9100/auth/callback"     # 回调地址
-  frontend_url: "http://localhost:9101"                   # 前端地址
-  scopes:                                    # OAuth2 授权范围
-    - openid
-    - profile
-
 # ==================== 下载令牌配置 ====================
 download_token:
   secret: "dev-dl-token-secret"   # 下载令牌签名密钥
@@ -88,6 +74,7 @@ download_token:
 |------|------|--------|------|
 | `port` | string | `"9100"` | HTTP 服务监听端口 |
 | `mode` | string | `"release"` | Gin 框架运行模式。`debug` 输出详细日志，`release` 为生产模式，`test` 为测试模式 |
+| `frontend_url` | string | - | 前端首页地址，OAuth2 登录成功后重定向目标 |
 
 - 生产环境建议使用 `mode: release`，减少日志输出，提升性能
 - 开发调试时使用 `mode: debug`，可以看到请求路由和参数详情
@@ -185,27 +172,22 @@ JWT Token 中包含以下声明：
 | `agentGroupId` | 智能体组 ID（可选） |
 | `department` | 部门标识（可选） |
 
-### oauth2 - OAuth2 配置
+### OAuth2 配置（数据库管理）
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `enabled` | bool | `true` | 是否启用 OAuth2 登录 |
-| `client_id` | string | `"agentdisk"` | OAuth2 客户端 ID |
-| `client_secret` | string | - | 客户端密钥，通过 `OAUTH2_CLIENT_SECRET` 环境变量注入 |
-| `auth_url` | string | - | OAuth2 授权端点 |
-| `token_url` | string | - | OAuth2 令牌端点 |
-| `userinfo_url` | string | - | 用户信息端点 |
-| `redirect_url` | string | - | OAuth2 回调地址（指向后端） |
-| `frontend_url` | string | - | 前端首页地址 |
-| `scopes` | []string | `["openid", "profile"]` | OAuth2 授权范围 |
+OAuth2 配置存储在数据库中，通过 Admin 管理面板或 API 管理，不在 `config.yaml` 中配置。
 
-OAuth2 认证流程：
+详细配置说明请参考 [OAuth2 协议参考文档](../oauth2_protocol_reference.md) 和 [Admin 管理面板 - OAuth2 配置](guide/admin-panel.md#oauth2-动态配置)。
 
-1. 用户访问前端页面，未登录时跳转至 `auth_url`
-2. 用户在 OAuth2 Provider 完成认证
-3. Provider 回调 `redirect_url`，携带授权码
-4. 后端使用授权码换取 Token，获取用户信息
-5. 后端创建会话 Cookie，重定向回 `frontend_url`
+| 字段 | 说明 |
+|------|------|
+| `issuerUrl` | OAuth2 提供方基础地址，端点 URL 自动派生 |
+| `clientId` | OAuth2 客户端 ID |
+| `clientSecret` | OAuth2 客户端密钥 |
+| `redirectUrl` | OAuth2 回调地址（指向后端） |
+| `scopes` | 授权范围（逗号分隔），默认 `openid,profile` |
+| `enabled` | 是否启用 |
+
+无 OAuth2 配置时，`GET /auth/status` 返回 `{"oauth2": false}`，前端显示降级提示页。
 
 ### download_token - 下载令牌配置
 
@@ -246,6 +228,7 @@ OAuth2 认证流程：
 | `OSS_SECRET_KEY` | `oss.secret_key` | OSS Secret Key |
 | `JWT_SECRET` | `jwt.secret` | JWT 签名密钥 |
 | `REDIS_PASSWORD` | `redis.password` | Redis 密码 |
-| `OAUTH2_CLIENT_ID` | `oauth2.client_id` | OAuth2 客户端 ID |
-| `OAUTH2_CLIENT_SECRET` | `oauth2.client_secret` | OAuth2 客户端密钥 |
+| `OAUTH2_CLIENT_ID` | `oauth2.client_id` | OAuth2 客户端 ID（已废弃，改用 Admin API） |
+| `OAUTH2_CLIENT_SECRET` | `oauth2.client_secret` | OAuth2 客户端密钥（已废弃，改用 Admin API） |
+| `FRONTEND_URL` | `server.frontend_url` | 前端首页地址 |
 | `DL_TOKEN_SECRET` | `download_token.secret` | 下载令牌密钥 |

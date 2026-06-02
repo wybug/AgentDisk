@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { spaceApi } from '@/api/space';
+import axios from 'axios';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -38,6 +39,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       // ignore
     }
     set({ isAuthenticated: false, userName: null, userId: null, department: null });
-    window.location.href = '/auth/login';
+    try {
+      const res = await axios.get('/auth/status');
+      if (res.data?.data?.oauth2 === false) {
+        window.location.href = '/auth/unavailable';
+      } else {
+        window.location.href = '/auth/login';
+      }
+    } catch {
+      window.location.href = '/auth/unavailable';
+    }
   },
 }));

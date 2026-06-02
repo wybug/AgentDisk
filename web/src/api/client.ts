@@ -13,9 +13,18 @@ apiClient.interceptors.response.use(
     }
     return data;
   },
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      window.location.href = '/auth/login';
+      try {
+        const res = await axios.get('/auth/status');
+        if (res.data?.data?.oauth2 === false) {
+          window.location.href = '/auth/unavailable';
+        } else {
+          window.location.href = '/auth/login';
+        }
+      } catch {
+        window.location.href = '/auth/unavailable';
+      }
       return Promise.reject(error);
     }
     const msg = error.response?.data?.message || error.message;

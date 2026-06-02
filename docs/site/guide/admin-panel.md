@@ -187,7 +187,7 @@ curl http://localhost:9100/v1/disk/admin/dashboard \
 
 ## OAuth2 动态配置
 
-管理员可以在运行时动态修改 OAuth2 配置，无需重启服务。
+管理员可以在运行时动态修改 OAuth2 配置，无需重启服务。OAuth2 配置存储在数据库中，通过 Admin API 管理。
 
 ### 查看当前 OAuth2 配置
 
@@ -206,12 +206,9 @@ curl -X PUT http://localhost:9100/v1/disk/admin/oauth2 \
     "enabled": true,
     "clientId": "your-client-id",
     "clientSecret": "your-client-secret",
-    "authUrl": "https://your-idp.com/oauth2/authorize",
-    "tokenUrl": "https://your-idp.com/oauth2/token",
-    "userInfoUrl": "https://your-idp.com/oauth2/userinfo",
+    "issuerUrl": "https://your-idp.com",
     "redirectUrl": "https://your-domain.com/auth/callback",
-    "frontendUrl": "https://your-domain.com",
-    "scopes": "openid,profile,email"
+    "scopes": "openid,profile"
   }'
 ```
 
@@ -222,12 +219,22 @@ curl -X PUT http://localhost:9100/v1/disk/admin/oauth2 \
 | `enabled` | 是否启用 OAuth2 |
 | `clientId` | OAuth2 客户端 ID |
 | `clientSecret` | OAuth2 客户端密钥 |
-| `authUrl` | 授权端点 URL |
-| `tokenUrl` | 令牌端点 URL |
-| `userInfoUrl` | 用户信息端点 URL |
+| `issuerUrl` | OAuth2 提供方基础地址（如 `https://your-idp.com`），端点 URL 自动派生 |
 | `redirectUrl` | 回调地址 |
-| `frontendUrl` | 前端首页地址 |
-| `scopes` | 授权范围（逗号分隔） |
+| `scopes` | 授权范围（逗号分隔），默认 `openid,profile` |
+
+端点 URL 由 `issuerUrl` 自动派生：
+
+| 端点 | URL |
+|------|-----|
+| Authorization | `{issuerUrl}/oauth2/authorize` |
+| Token | `{issuerUrl}/oauth2/token` |
+| UserInfo | `{issuerUrl}/oauth2/userinfo` |
+
+### 无配置时的行为
+
+- `GET /auth/status` 返回 `{"oauth2": false}`
+- 前端显示"OAuth2 登录未配置"提示页
 
 ### 测试 OAuth2 连接
 

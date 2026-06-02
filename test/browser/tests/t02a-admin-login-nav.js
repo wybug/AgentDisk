@@ -199,6 +199,10 @@ describe('T02a: Admin 登录 + 侧边栏导航', () => {
   var hasOAuth2Form = ab.pageContainsText('Client ID') || ab.pageContainsText('OAuth2');
   assertCondition(hasOAuth2Form, 'TC-63: OAuth2 配置表单加载');
 
+  // 验证新字段：Issuer URL（替代了 Auth URL / Token URL / UserInfo URL）
+  var hasIssuerUrl = ab.pageContainsText('Issuer URL') || ab.pageContainsText('issuerUrl');
+  step('TC-63: OAuth2 表单包含 Issuer URL 字段', hasIssuerUrl, 'issuerUrl=' + hasIssuerUrl);
+
   var btnCheck = ab.evalStdin(`
     (function() {
       var btns = document.querySelectorAll('button');

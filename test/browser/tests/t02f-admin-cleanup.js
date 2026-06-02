@@ -4,7 +4,7 @@ const ab = require('../lib/agent-browser');
 const API_BASE = 'http://localhost:9100';
 const WEB_BASE = ab.BASE_URL;
 
-describe('T02e: Admin 清理 + 退出登录', () => {
+describe('T02f: Admin 清理 + 退出登录', () => {
   ab.closeBrowser();
 
   function apiCall(code) {

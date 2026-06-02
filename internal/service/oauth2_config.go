@@ -1,13 +1,18 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/repository"
 	"github.com/agentdisk/agent-disk/pkg/oauth2client"
 )
+
+// ErrOAuth2NotConfigured indicates no active OAuth2 configuration was found.
+var ErrOAuth2NotConfigured = errors.New("oauth2 not configured")
 
 // oauth2ConfigRepo defines the interface for OAuth2 config data access.
 type oauth2ConfigRepo interface {
@@ -21,7 +26,10 @@ type oauth2ConfigRepo interface {
 
 // OAuth2ConfigService handles OAuth2 configuration management.
 type OAuth2ConfigService struct {
-	repo oauth2ConfigRepo
+	repo     oauth2ConfigRepo
+	mu       sync.RWMutex
+	cached   *oauth2client.OAuthClient
+	cacheErr error
 }
 
 // NewOAuth2ConfigService creates a new OAuth2ConfigService.
@@ -45,23 +53,36 @@ func (s *OAuth2ConfigService) UpdateConfig(adminUser string, cfg *model.DiskOAut
 
 	existing, err := s.repo.GetActive()
 	if err != nil {
-		// No active config, create one
 		cfg.Enabled = true
 		cfg.Name = "default"
-		return s.repo.Create(cfg)
+		createErr := s.repo.Create(cfg)
+		if createErr != nil {
+			return createErr
+		}
+		s.invalidateCache()
+		return nil
 	}
 
 	existing.ClientID = cfg.ClientID
 	existing.ClientSecret = cfg.ClientSecret
-	existing.AuthURL = cfg.AuthURL
-	existing.TokenURL = cfg.TokenURL
-	existing.UserInfoURL = cfg.UserInfoURL
+	existing.IssuerURL = cfg.IssuerURL
 	existing.RedirectURL = cfg.RedirectURL
-	existing.FrontendURL = cfg.FrontendURL
 	existing.Scopes = cfg.Scopes
 	existing.Enabled = cfg.Enabled
 	existing.UpdatedBy = adminUser
-	return s.repo.Update(existing)
+	updateErr := s.repo.Update(existing)
+	if updateErr != nil {
+		return updateErr
+	}
+	s.invalidateCache()
+	return nil
+}
+
+func (s *OAuth2ConfigService) invalidateCache() {
+	s.mu.Lock()
+	s.cached = nil
+	s.cacheErr = nil
+	s.mu.Unlock()
 }
 
 // ListConfigs returns all OAuth2 configurations.
@@ -70,10 +91,44 @@ func (s *OAuth2ConfigService) ListConfigs() ([]model.DiskOAuth2Config, error) {
 }
 
 // BuildOAuth2Client creates an OAuth2 client from the active database config.
+// Returns nil if no active config exists or it is disabled.
+// Results are cached in-memory; cache is invalidated on UpdateConfig().
 func (s *OAuth2ConfigService) BuildOAuth2Client() (*oauth2client.OAuthClient, error) {
+	s.mu.RLock()
+	if s.cached != nil {
+		client := s.cached
+		s.mu.RUnlock()
+		return client, nil
+	}
+	if s.cacheErr != nil {
+		err := s.cacheErr
+		s.mu.RUnlock()
+		return nil, err
+	}
+	s.mu.RUnlock()
+
+	// Cache miss: acquire write lock and build
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if s.cached != nil {
+		return s.cached, nil
+	}
+
 	cfg, err := s.repo.GetActive()
 	if err != nil {
-		return nil, fmt.Errorf("no active OAuth2 config: %w", err)
+		s.cacheErr = ErrOAuth2NotConfigured
+		return nil, ErrOAuth2NotConfigured
+	}
+
+	if !cfg.Enabled {
+		s.cacheErr = ErrOAuth2NotConfigured
+		return nil, ErrOAuth2NotConfigured
+	}
+
+	if cfg.IssuerURL == "" {
+		return nil, fmt.Errorf("oauth2 config has empty issuer_url")
 	}
 
 	scopes := []string{}
@@ -81,13 +136,17 @@ func (s *OAuth2ConfigService) BuildOAuth2Client() (*oauth2client.OAuthClient, er
 		scopes = strings.Split(cfg.Scopes, ",")
 	}
 
-	return oauth2client.New(oauth2client.Config{
+	issuerURL := strings.TrimRight(cfg.IssuerURL, "/")
+
+	client := oauth2client.New(oauth2client.Config{
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
-		AuthURL:      cfg.AuthURL,
-		TokenURL:     cfg.TokenURL,
-		UserInfoURL:  cfg.UserInfoURL,
+		AuthURL:      issuerURL + "/oauth2/authorize",
+		TokenURL:     issuerURL + "/oauth2/token",
+		UserInfoURL:  issuerURL + "/oauth2/userinfo",
 		RedirectURL:  cfg.RedirectURL,
 		Scopes:       scopes,
-	}), nil
+	})
+	s.cached = client
+	return client, nil
 }

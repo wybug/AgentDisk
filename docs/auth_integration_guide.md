@@ -51,9 +51,43 @@ curl -X GET http://agentdisk:8080/v1/disk/space \
 
 ### 你需要什么
 
-- Agent 网关的 OAuth2 端点配置
+- Admin 管理面板（`/admin/oauth2`）已配置 OAuth2 参数
+- `issuer_url`: OAuth2 提供方基础地址（如 `http://localhost:3100`）
 - `client_id`: agentdisk
-- `redirect_uri`: `https://<agentdisk-host>/auth/callback`
+- `redirect_url`: `https://<agentdisk-host>/auth/callback`
+
+### OAuth2 配置管理
+
+OAuth2 配置存储在数据库中，通过 Admin API 管理：
+
+```bash
+# 查看当前配置
+GET /v1/disk/admin/oauth2
+
+# 写入配置
+PUT /v1/disk/admin/oauth2
+{
+  "enabled": true,
+  "clientId": "agentdisk",
+  "clientSecret": "agentdisk-secret",
+  "issuerUrl": "http://localhost:3100",
+  "redirectUrl": "http://localhost:9100/auth/callback",
+  "scopes": "openid,profile"
+}
+
+# 测试连接
+POST /v1/disk/admin/oauth2/test
+```
+
+端点 URL 由 `issuerUrl` 自动派生：
+- Authorization: `{issuerUrl}/oauth2/authorize`
+- Token: `{issuerUrl}/oauth2/token`
+- UserInfo: `{issuerUrl}/oauth2/userinfo`
+
+### 无配置时的行为
+
+- `GET /auth/status` 返回 `{"oauth2": false}`
+- 前端显示"OAuth2 登录未配置"提示页，不会出现死循环
 
 ### 方式 A: 从网关 Web 无感跳转（推荐）
 
@@ -340,8 +374,7 @@ signature = HMAC-SHA256(dlSecret, payloadBase64)
 |--------|------|------|
 | `JWT_SECRET` | JWT 签名密钥 | 是 |
 | `DL_TOKEN_SECRET` | 下载令牌签名密钥 | 是 |
-| `OAUTH2_CLIENT_ID` | OAuth2 客户端 ID | 启用 OAuth2 时 |
-| `OAUTH2_CLIENT_SECRET` | OAuth2 客户端密钥 | 启用 OAuth2 时 |
+| `FRONTEND_URL` | 前端地址 | 否（config.yaml 中配置） |
 | `DB_PASSWORD` | 数据库密码 | 是 |
 | `OSS_ACCESS_KEY` | OSS 访问密钥 | 是 |
 | `OSS_SECRET_KEY` | OSS 秘密密钥 | 是 |

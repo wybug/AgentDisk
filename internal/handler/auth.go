@@ -21,9 +21,14 @@ type Session struct {
 	ExpiresAt int64  `json:"expiresAt"`
 }
 
+// OAuth2ClientBuilder builds an OAuth2 client from dynamic config.
+type OAuth2ClientBuilder interface {
+	BuildOAuth2Client() (*oauth2client.OAuthClient, error)
+}
+
 // AuthHandler is a core domain type.
 type AuthHandler struct {
-	oauthClient  *oauth2client.OAuthClient
+	oauth2Svc    OAuth2ClientBuilder
 	sessions     map[string]*Session // In production, use Redis
 	cookieName   string
 	cookieMaxAge int
@@ -31,9 +36,9 @@ type AuthHandler struct {
 }
 
 // NewAuthHandler creates and returns a new AuthHandler.
-func NewAuthHandler(oauthClient *oauth2client.OAuthClient, frontendURL string) *AuthHandler {
+func NewAuthHandler(oauth2Svc OAuth2ClientBuilder, frontendURL string) *AuthHandler {
 	return &AuthHandler{
-		oauthClient:  oauthClient,
+		oauth2Svc:    oauth2Svc,
 		sessions:     make(map[string]*Session),
 		cookieName:   "agentdisk_session",
 		cookieMaxAge: 86400,
@@ -41,10 +46,24 @@ func NewAuthHandler(oauthClient *oauth2client.OAuthClient, frontendURL string) *
 	}
 }
 
+func (h *AuthHandler) buildClient() *oauth2client.OAuthClient {
+	if h.oauth2Svc == nil {
+		return nil
+	}
+	client, _ := h.oauth2Svc.BuildOAuth2Client()
+	return client
+}
+
+// Status returns whether OAuth2 is currently configured and enabled.
+func (h *AuthHandler) Status(c *gin.Context) {
+	response.OK(c, gin.H{"oauth2": h.buildClient() != nil})
+}
+
 // Login executes the Login use case.
 func (h *AuthHandler) Login(c *gin.Context) {
-	if h.oauthClient == nil {
-		response.InternalError(c, "OAuth2 not configured")
+	client := h.buildClient()
+	if client == nil {
+		response.BadRequest(c, "OAuth2 not configured")
 		return
 	}
 
@@ -63,7 +82,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	promptNone := c.Query("prompt") == "none" || c.Query("from") == "gateway"
 
 	_ = oauth2client.GenerateCodeChallenge(verifier)
-	authURL := h.oauthClient.AuthCodeURL(state, verifier, promptNone)
+	authURL := client.AuthCodeURL(state, verifier, promptNone)
 
 	// Store state and verifier in short-lived cookie for CSRF protection
 	stateData, err := json.Marshal(map[string]string{
@@ -81,8 +100,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 // Callback handles the request.
 func (h *AuthHandler) Callback(c *gin.Context) {
-	if h.oauthClient == nil {
-		response.InternalError(c, "OAuth2 not configured")
+	client := h.buildClient()
+	if client == nil {
+		response.BadRequest(c, "OAuth2 not configured")
 		return
 	}
 
@@ -132,13 +152,13 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	// Clear state cookie
 	c.SetCookie("oauth2_state", "", -1, "/", "", false, true)
 
-	token, err := h.oauthClient.Exchange(c.Request.Context(), code, stateData.Verifier)
+	token, err := client.Exchange(c.Request.Context(), code, stateData.Verifier)
 	if err != nil {
 		response.Unauthorized(c, fmt.Sprintf("token exchange failed: %v", err))
 		return
 	}
 
-	userInfo, err := h.oauthClient.GetUserInfo(c.Request.Context(), token)
+	userInfo, err := client.GetUserInfo(c.Request.Context(), token)
 	if err != nil {
 		response.Unauthorized(c, fmt.Sprintf("get userinfo failed: %v", err))
 		return
