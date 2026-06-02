@@ -35,7 +35,7 @@ func (h *FolderHandler) CreateFolder(c *gin.Context) {
 	userID := c.GetString("userId")
 	folder, err := h.svc.CreateFolder(userID, req.ParentID, req.FolderName)
 	if err != nil {
-		response.InternalError(c, err.Error())
+		response.BadRequest(c, err.Error())
 		return
 	}
 	response.Created(c, folder)

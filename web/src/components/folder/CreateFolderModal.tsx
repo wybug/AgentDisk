@@ -1,4 +1,4 @@
-import { Modal, Form, Input } from 'antd';
+import { Modal, Form, Input, message } from 'antd';
 import { folderApi } from '@/api/folder';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -13,12 +13,19 @@ export default function CreateFolderModal({ open, parentId, onClose }: Props) {
   const queryClient = useQueryClient();
 
   const handleOk = async () => {
-    const values = await form.validateFields();
-    await folderApi.create({ parentId, folderName: values.folderName });
-    queryClient.invalidateQueries({ queryKey: ['folders', parentId] });
-    queryClient.invalidateQueries({ queryKey: ['files', parentId] });
-    form.resetFields();
-    onClose();
+    try {
+      const values = await form.validateFields();
+      await folderApi.create({ parentId, folderName: values.folderName });
+      queryClient.invalidateQueries({ queryKey: ['folders', parentId] });
+      queryClient.invalidateQueries({ queryKey: ['files', parentId] });
+      form.resetFields();
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg) {
+        message.error(msg);
+      }
+    }
   };
 
   return (

@@ -110,7 +110,7 @@ describe('T04: 文件夹管理', () => {
   // ============================================================
   // T04.10 - 三级面包屑显示完整路径
   // ============================================================
-  ab.waitMs(1000);
+  ab.waitMs(2000);
   const bc3a = ab.pageContainsText('一级目录A');
   const bc3b = ab.pageContainsText('二级目录B');
   const bc3c = ab.pageContainsText('三级目录C');

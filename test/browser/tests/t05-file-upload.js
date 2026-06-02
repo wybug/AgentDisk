@@ -9,7 +9,8 @@ function uploadViaAPI(filePath) {
   const fileName = path.basename(filePath);
   const content = fs.readFileSync(filePath);
   const base64 = content.toString('base64');
-  return ab.evalStdin(`
+  // Store result in a global variable so we can read it after the Promise resolves
+  ab.evalStdin(`
     (function() {
       var byteString = atob('${base64}');
       var ab2 = new ArrayBuffer(byteString.length);
@@ -19,15 +20,19 @@ function uploadViaAPI(filePath) {
       var formData = new FormData();
       formData.append('file', file);
       formData.append('folderId', '0');
-      return fetch('/v1/disk/files/upload', { method: 'POST', body: formData, credentials: 'include' })
+      window.__uploadResult = '';
+      fetch('/v1/disk/files/upload', { method: 'POST', body: formData, credentials: 'include' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
-          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
-          return 'OK: ' + d.data.fileName + ' id=' + d.data.id;
+          if (d.code !== undefined && d.code !== 0) { window.__uploadResult = 'ERROR: ' + d.message; return; }
+          window.__uploadResult = 'OK: ' + d.data.fileName + ' id=' + d.data.id;
         })
-        .catch(function(e) { return 'FETCH ERROR: ' + e.message; });
+        .catch(function(e) { window.__uploadResult = 'FETCH ERROR: ' + e.message; });
     })()
   `);
+  ab.waitMs(3000);
+  var result = ab.evalStdin('window.__uploadResult') || '';
+  return result;
 }
 
 describe('T05: 文件上传', () => {
@@ -60,7 +65,6 @@ describe('T05: 文件上传', () => {
 
   // T05.2 - 上传 txt 文件
   const txtResult = uploadViaAPI(testTxt);
-  ab.waitMs(3000);
   const txtOk = txtResult.includes('OK:');
   assertCondition(txtOk, 'T05.2: txt 文件上传成功', txtResult);
   ab.screenshot('t03-02-txt-uploaded');
@@ -74,21 +78,18 @@ describe('T05: 文件上传', () => {
 
   // T05.4 - 上传 md 文件
   const mdResult = uploadViaAPI(testMd);
-  ab.waitMs(3000);
   const mdOk = mdResult.includes('OK:');
   step('T05.4: md 文件上传成功', mdOk, mdResult);
   ab.screenshot('t03-03-md-uploaded');
 
   // T05.5 - 上传 py 代码文件
   const pyResult = uploadViaAPI(testPy);
-  ab.waitMs(3000);
   const pyOk = pyResult.includes('OK:');
   step('T05.5: py 代码文件上传成功', pyOk, pyResult);
   ab.screenshot('t03-04-py-uploaded');
 
   // T05.6 - 上传 html 文件
   const htmlResult = uploadViaAPI(testHtml);
-  ab.waitMs(3000);
   const htmlOk = htmlResult.includes('OK:');
   assertCondition(htmlOk, 'T05.6: html 文件上传成功', htmlResult);
   ab.screenshot('t03-05-html-uploaded');
