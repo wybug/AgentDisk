@@ -43,6 +43,11 @@ func (m *MinioStorage) PresignedGetURL(ctx context.Context, key string, expires 
 	return m.client.PresignedGetURL(ctx, key, expires)
 }
 
+// PresignedDownloadURL delegates to oss.Client.PresignedDownloadURL.
+func (m *MinioStorage) PresignedDownloadURL(ctx context.Context, key string, expires time.Duration, filename string) (string, error) {
+	return m.client.PresignedDownloadURL(ctx, key, expires, filename)
+}
+
 // EnsureBucket delegates to oss.Client.EnsureBucket.
 func (m *MinioStorage) EnsureBucket(ctx context.Context) error {
 	return m.client.EnsureBucket(ctx)

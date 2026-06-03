@@ -2,7 +2,9 @@ package handler
 
 import (
 	"log"
+	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/agentdisk/agent-disk/internal/service"
 	"github.com/agentdisk/agent-disk/pkg/download_token"
@@ -198,6 +200,8 @@ func (h *FileHandler) CreateDownloadToken(c *gin.Context) {
 }
 
 // DownloadByToken handles the request.
+// Returns JSON (file + downloadUrl) when Accept includes "application/json",
+// otherwise redirects (302) to the presigned download URL for browser downloads.
 func (h *FileHandler) DownloadByToken(c *gin.Context) {
 	dlToken := c.Query("t")
 	if dlToken == "" {
@@ -218,14 +222,30 @@ func (h *FileHandler) DownloadByToken(c *gin.Context) {
 		return
 	}
 
-	file, url, err := h.svc.GetFile(c.Request.Context(), userID, fileID)
+	if acceptsJSON(c) {
+		file, url, err := h.svc.GetFile(c.Request.Context(), userID, fileID)
+		if err != nil {
+			response.Forbidden(c, "file not found or no permission")
+			return
+		}
+		response.OK(c, gin.H{
+			"file":        file,
+			"downloadUrl": url,
+		})
+		return
+	}
+
+	dlURL, err := h.svc.GetFileDownloadURL(c.Request.Context(), userID, fileID)
 	if err != nil {
 		response.Forbidden(c, "file not found or no permission")
 		return
 	}
 
-	response.OK(c, gin.H{
-		"file":        file,
-		"downloadUrl": url,
-	})
+	c.Redirect(http.StatusFound, dlURL)
+}
+
+// acceptsJSON checks if the client accepts JSON response.
+func acceptsJSON(c *gin.Context) bool {
+	accept := c.GetHeader("Accept")
+	return accept != "" && strings.Contains(accept, "application/json")
 }

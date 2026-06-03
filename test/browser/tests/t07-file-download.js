@@ -89,23 +89,24 @@ describe('T07: 文件下载', () => {
   assertCondition(tokenOk, 'T07.2: 获取下载令牌成功', tokenResult.substring(0, 200));
   ab.screenshot('t05-02-download-token');
 
-  // T07.3 - 验证下载 URL 可访问
+  // T07.3 - 验证下载 URL 重定向到预签名 URL
   const tokenMatch = tokenResult.match(/token=([a-zA-Z0-9._-]+)/);
   if (tokenMatch) {
     const downloadUrl = '/v1/disk/files/download?t=' + tokenMatch[1];
     const downloadCheck = ab.evalStdin(`
       (function() {
-        return fetch('${downloadUrl}', { credentials: 'include' })
+        return fetch('${downloadUrl}', { credentials: 'include', redirect: 'follow' })
           .then(function(r) {
             var ct = r.headers.get('content-type') || '';
-            return 'status=' + r.status + ' content-type=' + ct;
+            var disposition = r.headers.get('content-disposition') || '';
+            return 'status=' + r.status + ' content-type=' + ct + ' disposition=' + disposition;
           })
           .catch(function(e) { return 'FETCH ERROR: ' + e.message; });
       })()
     `);
     ab.waitMs(2000);
     const downloadOk = downloadCheck.includes('status=200');
-    assertCondition(downloadOk, 'T07.3: 下载 URL 可访问', downloadCheck);
+    assertCondition(downloadOk, 'T07.3: 下载 URL 重定向成功，文件可下载', downloadCheck);
   } else {
     step('T07.3: 无法提取 token，跳过下载验证', false, tokenResult);
   }

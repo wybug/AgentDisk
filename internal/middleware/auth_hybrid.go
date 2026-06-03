@@ -100,3 +100,32 @@ func HybridAuth(
 func IsAgentRequest(c *gin.Context) bool {
 	return c.GetString("agentId") != ""
 }
+
+// IsAPIKeyRequest returns true if the current request uses API Key auth.
+func IsAPIKeyRequest(c *gin.Context) bool {
+	return c.GetString("authMethod") == "api_key"
+}
+
+// RequireNonAPIKey blocks API Key access (for private endpoints).
+func RequireNonAPIKey() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if IsAPIKeyRequest(c) {
+			response.Forbidden(c, "API key cannot access this endpoint")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireAPIKey blocks non-API Key access (for admin-only public directory operations).
+func RequireAPIKey() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !IsAPIKeyRequest(c) {
+			response.Forbidden(c, "only API key can perform this action")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}

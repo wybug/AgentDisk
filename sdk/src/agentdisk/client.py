@@ -11,7 +11,6 @@ from .api import (
     _FileAPI,
     _FolderAPI,
     _PermissionAPI,
-    _PreviewAPI,
     _PublicDirectoryAPI,
     _RecycleAPI,
     _ShareAPI,
@@ -26,7 +25,6 @@ if TYPE_CHECKING:
     from .models.file import DiskFile, DownloadByTokenResponse, FileDetailResponse
     from .models.folder import DiskFolder
     from .models.permission import DiskPermission
-    from .models.preview import PreviewResult
     from .models.public_directory import DiskPublicDirectory
     from .models.recycle import DiskRecycleBin
     from .models.share import DiskShare
@@ -67,17 +65,31 @@ class AgentDiskClient:
         self._recycle = _RecycleAPI(self._http, token=token, api_key=api_key)
         self._tags = _TagAPI(self._http, token=token, api_key=api_key)
         self._shares = _ShareAPI(self._http, token=token, api_key=api_key)
-        self._preview = _PreviewAPI(self._http, token=token, api_key=api_key)
         self._space = _SpaceAPI(self._http, token=token, api_key=api_key)
         self._public_dirs = _PublicDirectoryAPI(self._http, token=token, api_key=api_key)
         self._resolver = _PathResolver(self._folders, self._files, cache_ttl=cache_ttl, public_dirs=self._public_dirs)
 
+    def _get_public_dir(self, path: str) -> DiskPublicDirectory | None:
+        """Return public directory info if path starts with a public dir name, else None."""
+        if self._resolver._is_public_path(path):
+            return self._resolver.resolve_public_directory(path)
+        return None
+
     # --- Folder operations ---
 
     def create_folder(self, path: str, *, exist_ok: bool = False) -> DiskFolder:
+        pub_dir = self._get_public_dir(path)
+        if pub_dir is not None:
+            _, sub = _split_public_subpath(path)
+            if not sub:
+                raise ValueError("Cannot create root of public directory")
+            return self._public_dirs.create_sub_folder(pub_dir.id, sub)
         return self._resolver.mkdir(path, exist_ok=exist_ok)
 
     def list_folders(self, path: str = "/") -> builtins.list[DiskFolder]:
+        pub_dir = self._get_public_dir(path)
+        if pub_dir is not None:
+            return self._public_dirs.list_sub_folders(pub_dir.id)
         folder_id = self._resolver.resolve_folder_id(path)
         return self._folders.list(folder_id)
 
@@ -109,7 +121,13 @@ class AgentDiskClient:
         auto_mkdir: bool = False,
         agent_id: str = "",
     ) -> DiskFile:
-        folder_path, _file_name = _split_file_path(path)
+        pub_dir = self._get_public_dir(path)
+        if pub_dir is not None:
+            folder_path, remote_name = _split_file_path(path)
+            with open(local_file, "rb") as f:
+                content = f.read()
+            return self._public_dirs.upload_file(pub_dir.id, remote_name, content)
+        folder_path, remote_name = _split_file_path(path)
         if auto_mkdir:
             self._resolver.mkdir(folder_path, exist_ok=True)
         folder_id = self._resolver.resolve_folder_id(folder_path)
@@ -117,6 +135,7 @@ class AgentDiskClient:
             local_file,
             folder_id=folder_id,
             agent_id=agent_id,
+            filename=remote_name,
         )
 
     def upload_bytes(
@@ -128,6 +147,10 @@ class AgentDiskClient:
         agent_id: str = "",
         content_type: str = "application/octet-stream",
     ) -> DiskFile:
+        pub_dir = self._get_public_dir(path)
+        if pub_dir is not None:
+            _, file_name = _split_file_path(path)
+            return self._public_dirs.upload_file(pub_dir.id, file_name, content, content_type)
         folder_path, file_name = _split_file_path(path)
         if auto_mkdir:
             self._resolver.mkdir(folder_path, exist_ok=True)
@@ -141,6 +164,9 @@ class AgentDiskClient:
         )
 
     def list_files(self, path: str = "/") -> builtins.list[DiskFile]:
+        pub_dir = self._get_public_dir(path)
+        if pub_dir is not None:
+            return self._public_dirs.list_files(pub_dir.id)
         folder_id = self._resolver.resolve_folder_id(path)
         return self._files.list(folder_id)
 
@@ -163,10 +189,20 @@ class AgentDiskClient:
         return self._files.update_bytes(file_obj.id, file_obj.file_name, content, content_type=content_type)
 
     def delete_file(self, path: str) -> None:
+        pub_dir = self._get_public_dir(path)
+        if pub_dir is not None:
+            file_obj = self._resolver.resolve_file(path)
+            self._public_dirs.delete_file(pub_dir.id, file_obj.id)
+            return
         file_obj = self._resolver.resolve_file(path)
         self._files.delete(file_obj.id)
 
     def download_file(self, path: str) -> DownloadByTokenResponse:
+        pub_dir = self._get_public_dir(path)
+        if pub_dir is not None:
+            file_obj = self._resolver.resolve_file(path)
+            token_data = self._public_dirs.create_download_token(pub_dir.id, file_obj.id)
+            return self._files.download_by_token(token_data["downloadToken"])
         file_obj = self._resolver.resolve_file(path)
         token_resp = self._files.create_download_token(file_obj.id)
         return self._files.download_by_token(token_resp.download_token)
@@ -316,30 +352,15 @@ class AgentDiskClient:
 
     # --- Preview operations ---
 
-    def preview(self, path: str) -> PreviewResult:
-        file_obj = self._resolver.resolve_file(path)
-        return self._preview.file(file_obj.id)
-
     # --- Space operations ---
 
     def get_space(self) -> UserDisk:
         return self._space.get()
 
-    # --- Public directory operations ---
+    # --- Public directory discovery ---
 
     def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
         return self._public_dirs.list_visible()
-
-    def get_public_directory(self, path: str) -> DiskPublicDirectory:
-        return self._resolver.resolve_public_directory(path)
-
-    def list_public_directory_folders(self, path: str) -> builtins.list[DiskFolder]:
-        _, folder_id = self._resolver.resolve_public_path(path)
-        return self._folders.list(folder_id)
-
-    def list_public_directory_files(self, path: str) -> builtins.list[DiskFile]:
-        _, folder_id = self._resolver.resolve_public_path(path)
-        return self._files.list(folder_id)
 
     # --- Cache management ---
 
@@ -368,4 +389,13 @@ def _split_file_path(path: str) -> tuple[str, str]:
     idx = normalized.rfind("/")
     if idx == -1:
         return "", normalized
+    return normalized[:idx], normalized[idx + 1 :]
+
+
+def _split_public_subpath(path: str) -> tuple[str, str]:
+    """Split 'public-dir-name/sub/path' into ('public-dir-name', 'sub/path')."""
+    normalized = path.strip("/")
+    idx = normalized.find("/")
+    if idx == -1:
+        return normalized, ""
     return normalized[:idx], normalized[idx + 1 :]

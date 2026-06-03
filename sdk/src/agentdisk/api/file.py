@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from ..models.file import (
     DiskFile,
@@ -23,13 +23,15 @@ class _FileAPI(BaseAPI):
         file_path: str,
         folder_id: int = 0,
         agent_id: str = "",
+        filename: str = "",
     ) -> DiskFile:
         p = Path(file_path)
+        remote_name = filename or p.name
         with open(p, "rb") as f:
             data = self._request(
                 "POST",
                 "/files/upload",
-                files={"file": (p.name, f)},
+                files={"file": (remote_name, f)},
                 data={"folderId": str(folder_id), **({"agentId": agent_id} if agent_id else {})},
             )
         return DiskFile.from_dict(data)
@@ -89,8 +91,15 @@ class _FileAPI(BaseAPI):
         data = self._request("POST", f"/files/{id}/download-token")
         return DownloadTokenResponse.from_dict(data)
 
+    _JSON_HEADERS: ClassVar[dict[str, str]] = {"Accept": "application/json"}
+
     def download_by_token(self, token: str) -> DownloadByTokenResponse:
-        data = self._request("GET", "/files/download", params={"t": token})
+        data = self._request(
+            "GET",
+            "/files/download",
+            params={"t": token},
+            extra_headers=self._JSON_HEADERS,
+        )
         return DownloadByTokenResponse.from_dict(data)
 
 
@@ -100,13 +109,15 @@ class _AsyncFileAPI(AsyncBaseAPI):
         file_path: str,
         folder_id: int = 0,
         agent_id: str = "",
+        filename: str = "",
     ) -> DiskFile:
         p = Path(file_path)
+        remote_name = filename or p.name
         with open(p, "rb") as f:
             data = await self._request(
                 "POST",
                 "/files/upload",
-                files={"file": (p.name, f)},
+                files={"file": (remote_name, f)},
                 data={"folderId": str(folder_id), **({"agentId": agent_id} if agent_id else {})},
             )
         return DiskFile.from_dict(data)
@@ -166,6 +177,13 @@ class _AsyncFileAPI(AsyncBaseAPI):
         data = await self._request("POST", f"/files/{id}/download-token")
         return DownloadTokenResponse.from_dict(data)
 
+    _JSON_HEADERS: ClassVar[dict[str, str]] = {"Accept": "application/json"}
+
     async def download_by_token(self, token: str) -> DownloadByTokenResponse:
-        data = await self._request("GET", "/files/download", params={"token": token})
+        data = await self._request(
+            "GET",
+            "/files/download",
+            params={"t": token},
+            extra_headers=self._JSON_HEADERS,
+        )
         return DownloadByTokenResponse.from_dict(data)

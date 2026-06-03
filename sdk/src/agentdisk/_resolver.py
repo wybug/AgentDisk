@@ -86,10 +86,33 @@ class _PathResolver:
         self._files = files
         self._cache = PathCache(ttl=cache_ttl)
         self._public_dirs = public_dirs
+        self._public_dir_names: list[str] | None = None
+
+    def _is_public_path(self, path: str) -> bool:
+        """Check if the first path segment matches a public directory display name."""
+        if self._public_dirs is None:
+            return False
+        norm = _normalize(path)
+        if not norm:
+            return False
+        first_seg = norm.split("/")[0]
+        # Check cache first
+        if self._public_dir_names is not None and first_seg in self._public_dir_names:
+            return True
+        # Cache miss or not loaded — refresh
+        try:
+            dirs = self._public_dirs.list_visible()
+            self._public_dir_names = [d.display_name for d in dirs]
+        except Exception:
+            return False
+        return first_seg in self._public_dir_names
 
     def resolve_folder_id(self, path: str) -> int:
         if not _normalize(path):
             return 0
+        if self._is_public_path(path):
+            _, folder_id = self.resolve_public_path(path)
+            return folder_id
         cached = self._cache.get(path)
         if cached is not None:
             return cached
@@ -99,6 +122,9 @@ class _PathResolver:
     def resolve_folder(self, path: str) -> DiskFolder:
         if not _normalize(path):
             raise NotFoundError(code=404, message="Root path does not represent a folder object")
+        if self._is_public_path(path):
+            _, folder_id = self.resolve_public_path(path)
+            return self._folders.get(folder_id)
         return self._resolve_folder(path)
 
     def resolve_file(self, path: str) -> DiskFile:
@@ -108,6 +134,18 @@ class _PathResolver:
         segments = normalized.split("/")
         folder_segments = segments[:-1]
         file_name = segments[-1]
+        if self._is_public_path(path):
+            pub_dir = self.resolve_public_directory(path)
+            if len(segments) <= 2:
+                # Direct child of public directory root
+                files = self._public_dirs.list_files(pub_dir.id)  # type: ignore[union-attr]
+            else:
+                folder_id = self.resolve_folder_id("/".join(folder_segments))
+                files = self._files.list(folder_id)
+            for f in files:
+                if f.file_name == file_name:
+                    return f
+            raise NotFoundError(code=404, message=f"File not found: {path}")
         folder_id = self.resolve_folder_id("/".join(folder_segments))
         files = self._files.list(folder_id)
         for f in files:
@@ -230,10 +268,43 @@ class _AsyncPathResolver:
         self._files = files
         self._cache = PathCache(ttl=cache_ttl)
         self._public_dirs = public_dirs
+        self._public_dir_names: list[str] | None = None
+
+    def _is_public_path(self, path: str) -> bool:
+        """Check if the first path segment matches a public directory display name."""
+        if self._public_dirs is None:
+            return False
+        norm = _normalize(path)
+        if not norm:
+            return False
+        first_seg = norm.split("/")[0]
+        return self._public_dir_names is not None and first_seg in self._public_dir_names
+
+    async def _check_public_path(self, path: str) -> bool:
+        if self._public_dirs is None:
+            return False
+        norm = _normalize(path)
+        if not norm:
+            return False
+        first_seg = norm.split("/")[0]
+        # Check cache first
+        if self._public_dir_names is not None and first_seg in self._public_dir_names:
+            return True
+        # Cache miss — refresh
+        try:
+            dirs = await self._public_dirs.list_visible()
+            self._public_dir_names = [d.display_name for d in dirs]
+        except Exception:
+            return False
+        return first_seg in self._public_dir_names
+        return first_seg in (self._public_dir_names or [])
 
     async def resolve_folder_id(self, path: str) -> int:
         if not _normalize(path):
             return 0
+        if await self._check_public_path(path):
+            _, folder_id = await self.resolve_public_path(path)
+            return folder_id
         cached = self._cache.get(path)
         if cached is not None:
             return cached
@@ -243,6 +314,9 @@ class _AsyncPathResolver:
     async def resolve_folder(self, path: str) -> DiskFolder:
         if not _normalize(path):
             raise NotFoundError(code=404, message="Root path does not represent a folder object")
+        if await self._check_public_path(path):
+            _, folder_id = await self.resolve_public_path(path)
+            return await self._folders.get(folder_id)
         return await self._resolve_folder(path)
 
     async def resolve_file(self, path: str) -> DiskFile:

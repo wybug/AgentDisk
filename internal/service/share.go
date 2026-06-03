@@ -27,16 +27,27 @@ type folderResourceRepo interface {
 	GetByID(id uint64) (*model.DiskFolder, error)
 }
 
+// publicDirGrantChecker checks if a user can access a public directory resource.
+type publicDirGrantChecker interface {
+	IsUserGrantedForFile(fileID uint64, userID string) (bool, error)
+}
+
 // ShareService represents a domain type.
 type ShareService struct {
-	repo       shareRepo
-	fileRepo   fileResourceRepo
-	folderRepo folderResourceRepo
+	repo            shareRepo
+	fileRepo        fileResourceRepo
+	folderRepo      folderResourceRepo
+	grantChecker    publicDirGrantChecker
 }
 
 // NewShareService creates a new ShareService.
 func NewShareService(repo *repository.ShareRepo, fileRepo *repository.FileRepo, folderRepo *repository.FolderRepo) *ShareService {
 	return &ShareService{repo: repo, fileRepo: fileRepo, folderRepo: folderRepo}
+}
+
+// SetGrantChecker injects a public directory grant checker.
+func (s *ShareService) SetGrantChecker(checker publicDirGrantChecker) {
+	s.grantChecker = checker
 }
 
 // CreateShare handles the request.
@@ -48,7 +59,15 @@ func (s *ShareService) CreateShare(userID string, resourceID uint64, resType, ex
 		if err != nil {
 			return nil, fmt.Errorf("文件不存在")
 		}
-		if f.UserID != userID {
+		if f.UserID == SystemUserID {
+			if s.grantChecker == nil {
+				return nil, fmt.Errorf("无权分享该文件")
+			}
+			granted, _ := s.grantChecker.IsUserGrantedForFile(resourceID, userID)
+			if !granted {
+				return nil, fmt.Errorf("无权分享该文件")
+			}
+		} else if f.UserID != userID {
 			return nil, fmt.Errorf("无权分享该文件")
 		}
 	case "folder":

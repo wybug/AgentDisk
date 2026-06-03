@@ -85,6 +85,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.DiskAdminUser{},
 		&model.DiskAPIKey{},
 		&model.DiskPublicDirectory{},
+		&model.DiskPublicDirectoryGrant{},
 		&model.DiskOAuth2Config{},
 		&model.DiskAdminPasskey{},
 	)

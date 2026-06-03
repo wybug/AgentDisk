@@ -145,12 +145,10 @@ function shareDownloadAPI(code, resourceId, extractCode) {
 function downloadByTokenAPI(token) {
   return ab.evalStdin(`
     (function() {
-      return fetch('/v1/disk/files/download?t=' + encodeURIComponent('${token}'))
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
-          var f = d.data.file || {};
-          return 'OK: fileId=' + f.id + ' fileName=' + (f.fileName || '') + ' hasUrl=' + (!!d.data.downloadUrl);
+      return fetch('/v1/disk/files/download?t=' + encodeURIComponent('${token}'), { redirect: 'follow' })
+        .then(function(r) {
+          var disposition = r.headers.get('content-disposition') || '';
+          return 'status=' + r.status + ' disposition=' + disposition;
         })
         .catch(function(e) { return 'ERR: ' + e.message; });
     })()
@@ -251,7 +249,7 @@ describe('T11: 分享管理', () => {
   var noCodeDlOk = noCodeDlResult.includes('OK:') && noCodeDlResult.includes('token=');
   step('T11.7d: 无提取码分享下载成功', noCodeDlOk, noCodeDlResult);
 
-  // T11.7e - 下载 token 验证：在同一 evalStdin 中完成获取 token + 调用下载
+  // T11.7e - 下载 token 验证：在同一 evalStdin 中完成获取 token + 调用下载（验证重定向）
   var verifyResult = ab.evalStdin(`
     (function() {
       return fetch('/v1/disk/share/download', {
@@ -264,20 +262,18 @@ describe('T11: 分享管理', () => {
           if (d.code !== undefined && d.code !== 0) return 'ERROR: ' + d.message;
           var token = d.data.downloadToken;
           if (!token) return 'ERROR: no token';
-          return fetch('/v1/disk/files/download?t=' + encodeURIComponent(token))
-            .then(function(r2) { return r2.json(); })
-            .then(function(d2) {
-              if (d2.code !== undefined && d2.code !== 0) return 'ERROR: ' + d2.message;
-              var f = d2.data.file || {};
-              return 'OK: fileId=' + f.id + ' fileName=' + (f.fileName || '') + ' hasUrl=' + (!!d2.data.downloadUrl);
+          return fetch('/v1/disk/files/download?t=' + encodeURIComponent(token), { redirect: 'follow' })
+            .then(function(r2) {
+              var disposition = r2.headers.get('content-disposition') || '';
+              return 'OK: status=' + r2.status + ' disposition=' + disposition;
             });
         })
         .catch(function(e) { return 'ERR: ' + e.message; });
     })()
   `);
   ab.waitMs(1500);
-  var verifyOk = verifyResult.includes('OK:') && verifyResult.includes('fileName=');
-  step('T11.7e: 下载 token 验证通过', verifyOk, verifyResult);
+  var verifyOk = verifyResult.includes('OK:') && verifyResult.includes('status=200');
+  step('T11.7e: 下载 token 验证通过（重定向下载成功）', verifyOk, verifyResult);
   ab.screenshot('t09-7e-download-verified');
 
   // Clean up no-code share

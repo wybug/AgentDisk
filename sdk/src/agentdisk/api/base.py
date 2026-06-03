@@ -34,12 +34,16 @@ class BaseAPI:
         json: dict | None = None,
         files: dict | None = None,
         data: dict | None = None,
+        extra_headers: dict | None = None,
     ) -> Any:
         url = f"{_PREFIX}{path}"
+        headers = self._headers()
+        if extra_headers:
+            headers.update(extra_headers)
         resp = self._client.request(
             method,
             url,
-            headers=self._headers(),
+            headers=headers,
             params=_drop_none(params or {}),
             json=json,
             files=files,
@@ -72,12 +76,16 @@ class AsyncBaseAPI:
         json: dict | None = None,
         files: dict | None = None,
         data: dict | None = None,
+        extra_headers: dict | None = None,
     ) -> Any:
         url = f"{_PREFIX}{path}"
+        headers = self._headers()
+        if extra_headers:
+            headers.update(extra_headers)
         resp = await self._client.request(
             method,
             url,
-            headers=self._headers(),
+            headers=headers,
             params=_drop_none(params or {}),
             json=json,
             files=files,

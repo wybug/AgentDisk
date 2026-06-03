@@ -17,10 +17,10 @@ Requires Python 3.9+.
 The SDK supports two authentication methods — JWT token or API Key:
 
 ```python
-# JWT token (from gateway auth)
+# JWT token (from gateway auth) — full private resource access + public directory read-only
 client = AgentDiskClient(base_url="http://localhost:9100", token="<jwt>")
 
-# API Key (from admin panel)
+# API Key (from admin panel) — public directory CRUD only, no private access
 client = AgentDiskClient(base_url="http://localhost:9100", api_key="<api-key>")
 ```
 
@@ -48,17 +48,17 @@ files = client.list_files("docs/reports")
 result = client.download_file("docs/reports/summary.md")
 client.download_file_to("docs/reports/summary.md", "/local/summary.md")
 
-# Share & preview
+# Share
 share = client.create_share("docs/reports", expire_hours=24)
-result = client.preview("docs/reports/summary.md")
 
 # Download shared file
 client.download_shared_file(code="AbC123", resource_id=42)
 
-# Public directory
+# Public directory — access by display_name as path
 pub_dirs = client.list_public_directories()
-pub_folders = client.list_public_directory_folders("shared-project")
-pub_files = client.list_public_directory_files("shared-project/docs")
+client.list_files("shared-project")                   # list files
+client.download_file("shared-project/data.csv")       # download
+client.create_share("shared-project/data.csv", is_file=True)  # share
 
 client.close()
 ```
@@ -81,9 +81,49 @@ async with AsyncAgentDiskClient(
     await client.download_file_to("docs/reports/summary.md", "/local/summary.md")
 ```
 
+### Admin Client (API Key only)
+
+```python
+from agentdisk import AgentDiskAdminClient
+
+admin = AgentDiskAdminClient(
+    base_url="http://localhost:9100",
+    api_key="<api-key>",
+)
+
+# Grant user access to a public directory
+admin.grant_access(public_dir_id=1, user_id="user-123")
+users = admin.list_granted_users(public_dir_id=1)
+
+# Revoke access
+admin.revoke_access(public_dir_id=1, user_id="user-123")
+admin.close()
+```
+
+## Authentication Matrix
+
+| Operation | JWT Token | API Key |
+|-----------|-----------|---------|
+| Private files/folders CRUD | Full access | Blocked |
+| Public directory list/browse | Granted users | Full access |
+| Public directory download/share | Granted users | Blocked |
+| Public directory upload/delete/create folder | Blocked | Full access |
+| User authorization management | Blocked | Full access |
+
 ## API Overview
 
 All operations use **path-based** API — no need to manage folder/file IDs manually.
+
+Public directories are accessed by their `display_name` as a path segment:
+
+```python
+# Private resource
+client.upload_file("docs/report.txt", "/local/report.txt")
+
+# Public directory (display_name = "shared-project")
+client.list_files("shared-project")
+client.download_file("shared-project/data.csv")
+```
 
 | Category | Methods |
 |----------|---------|
@@ -94,9 +134,8 @@ All operations use **path-based** API — no need to manage folder/file IDs manu
 | **Tags** | `bind_tag`, `unbind_tag`, `search_files` |
 | **Versions** | `list_versions`, `rollback_version` |
 | **Recycle Bin** | `list_recycle`, `restore`, `delete_permanent` |
-| **Preview** | `preview` |
 | **Space** | `get_space` |
-| **Public Directory** | `list_public_directories`, `get_public_directory`, `list_public_directory_folders`, `list_public_directory_files` |
+| **Public Directory** | `list_public_directories` |
 | **Cache** | `invalidate_cache`, `clear_cache` |
 
 ## License
