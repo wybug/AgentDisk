@@ -11,7 +11,6 @@ from .api import (
     _AsyncFileAPI,
     _AsyncFolderAPI,
     _AsyncPermissionAPI,
-    _AsyncPreviewAPI,
     _AsyncPublicDirectoryAPI,
     _AsyncRecycleAPI,
     _AsyncShareAPI,
@@ -26,7 +25,6 @@ if TYPE_CHECKING:
     from .models.file import DiskFile, DownloadByTokenResponse, FileDetailResponse
     from .models.folder import DiskFolder
     from .models.permission import DiskPermission
-    from .models.preview import PreviewResult
     from .models.public_directory import DiskPublicDirectory
     from .models.recycle import DiskRecycleBin
     from .models.share import DiskShare
@@ -66,7 +64,6 @@ class AsyncAgentDiskClient:
         self._recycle = _AsyncRecycleAPI(self._http, token=token, api_key=api_key)
         self._tags = _AsyncTagAPI(self._http, token=token, api_key=api_key)
         self._shares = _AsyncShareAPI(self._http, token=token, api_key=api_key)
-        self._preview = _AsyncPreviewAPI(self._http, token=token, api_key=api_key)
         self._space = _AsyncSpaceAPI(self._http, token=token, api_key=api_key)
         self._public_dirs = _AsyncPublicDirectoryAPI(self._http, token=token, api_key=api_key)
         self._resolver = _AsyncPathResolver(
@@ -317,32 +314,15 @@ class AsyncAgentDiskClient:
     async def delete_permanent(self, recycle_id: int) -> None:
         await self._recycle.delete_permanent(recycle_id)
 
-    # --- Preview operations ---
-
-    async def preview(self, path: str) -> PreviewResult:
-        file_obj = await self._resolver.resolve_file(path)
-        return await self._preview.file(file_obj.id)
-
     # --- Space operations ---
 
     async def get_space(self) -> UserDisk:
         return await self._space.get()
 
-    # --- Public directory operations ---
+    # --- Public directory discovery ---
 
     async def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
         return await self._public_dirs.list_visible()
-
-    async def get_public_directory(self, path: str) -> DiskPublicDirectory:
-        return await self._resolver.resolve_public_directory(path)
-
-    async def list_public_directory_folders(self, path: str) -> builtins.list[DiskFolder]:
-        _, folder_id = await self._resolver.resolve_public_path(path)
-        return await self._folders.list(folder_id)
-
-    async def list_public_directory_files(self, path: str) -> builtins.list[DiskFile]:
-        _, folder_id = await self._resolver.resolve_public_path(path)
-        return await self._files.list(folder_id)
 
     # --- Cache management ---
 

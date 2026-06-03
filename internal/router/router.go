@@ -90,6 +90,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	adminRepo := repository.NewAdminRepo(db)
 	apiKeyRepo := repository.NewAPIKeyRepo(db)
 	publicDirRepo := repository.NewPublicDirectoryRepo(db)
+	grantRepo := repository.NewPublicDirectoryGrantRepo(db)
 	oauth2ConfigRepo := repository.NewOAuth2ConfigRepo(db)
 	passkeyRepo := repository.NewAdminPasskeyRepo(db)
 
@@ -105,7 +106,8 @@ func Setup(cfg *config.Config) *gin.Engine {
 	previewSvc := service.NewPreviewService(fileSvc, fileStorage)
 	adminSvc := service.NewAdminService(adminRepo)
 	apiKeySvc := service.NewAPIKeyService(apiKeyRepo)
-	publicDirSvc := service.NewPublicDirectoryService(publicDirRepo, folderRepo)
+	publicDirSvc := service.NewPublicDirectoryService(publicDirRepo, folderRepo, grantRepo, fileRepo, fileStorage, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
+	shareSvc.SetGrantChecker(publicDirSvc)
 	oauth2ConfigSvc := service.NewOAuth2ConfigService(oauth2ConfigRepo)
 
 	// OAuth2 auth handler (reads DB config per-request for hot-reload)
@@ -200,59 +202,81 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// API v1 group with hybrid auth
 	v1 := r.Group("/v1/disk")
 	v1.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret, apiKeySvc))
-	// Space
-	v1.GET("/space", spaceH.GetSpace)
 
-	// Folders
-	v1.POST("/folders", folderH.CreateFolder)
-	v1.GET("/folders", folderH.ListFolders)
-	v1.GET("/folders/:id", folderH.GetFolder)
-	v1.GET("/folders/:id/ancestors", folderH.GetAncestors)
-	v1.PUT("/folders/:id", folderH.RenameFolder)
-	v1.DELETE("/folders/:id", folderH.DeleteFolder)
+	// Private endpoints — JWT only (block API Key)
+	private := v1.Group("")
+	private.Use(middleware.RequireNonAPIKey())
+	{
+		// Space
+		private.GET("/space", spaceH.GetSpace)
 
-	// Files
-	v1.POST("/files/upload", fileH.UploadFile)
-	v1.GET("/files/:id", fileH.GetFile)
-	v1.PUT("/files/:id", fileH.UpdateFile)
-	v1.DELETE("/files/:id", fileH.DeleteFile)
-	v1.GET("/files", fileH.ListFiles)
-	v1.POST("/files/:id/download-token", fileH.CreateDownloadToken)
+		// Folders
+		private.POST("/folders", folderH.CreateFolder)
+		private.GET("/folders", folderH.ListFolders)
+		private.GET("/folders/:id", folderH.GetFolder)
+		private.GET("/folders/:id/ancestors", folderH.GetAncestors)
+		private.PUT("/folders/:id", folderH.RenameFolder)
+		private.DELETE("/folders/:id", folderH.DeleteFolder)
 
-	// Permissions
-	v1.POST("/permissions", permH.GrantPermission)
-	v1.GET("/permissions/check", permH.CheckPermission)
-	v1.DELETE("/permissions", permH.RevokePermission)
-	v1.GET("/permissions", permH.ListPermissions)
+		// Files
+		private.POST("/files/upload", fileH.UploadFile)
+		private.GET("/files/:id", fileH.GetFile)
+		private.PUT("/files/:id", fileH.UpdateFile)
+		private.DELETE("/files/:id", fileH.DeleteFile)
+		private.GET("/files", fileH.ListFiles)
+		private.POST("/files/:id/download-token", fileH.CreateDownloadToken)
 
-	// Versions
-	v1.GET("/versions", versionH.ListVersions)
-	v1.POST("/versions/rollback", versionH.RollbackVersion)
+		// Permissions
+		private.POST("/permissions", permH.GrantPermission)
+		private.GET("/permissions/check", permH.CheckPermission)
+		private.DELETE("/permissions", permH.RevokePermission)
+		private.GET("/permissions", permH.ListPermissions)
 
-	// Recycle bin
-	v1.GET("/recycle", recycleH.ListRecycle)
-	v1.POST("/recycle/restore", recycleH.RestoreItem)
-	v1.DELETE("/recycle", recycleH.DeletePermanent)
+		// Versions
+		private.GET("/versions", versionH.ListVersions)
+		private.POST("/versions/rollback", versionH.RollbackVersion)
 
-	// Tags
-	v1.POST("/tags/bind", tagH.BindTag)
-	v1.POST("/tags/unbind", tagH.UnbindTag)
-	v1.GET("/tags/search", tagH.SearchByTags)
+		// Recycle bin
+		private.GET("/recycle", recycleH.ListRecycle)
+		private.POST("/recycle/restore", recycleH.RestoreItem)
+		private.DELETE("/recycle", recycleH.DeletePermanent)
 
-	// Shares
-	v1.POST("/shares", shareH.CreateShare)
-	v1.GET("/shares", shareH.ListShares)
-	v1.DELETE("/shares", shareH.RevokeShare)
+		// Tags
+		private.POST("/tags/bind", tagH.BindTag)
+		private.POST("/tags/unbind", tagH.UnbindTag)
+		private.GET("/tags/search", tagH.SearchByTags)
 
-	// Preview
-	v1.GET("/preview/:id", previewH.PreviewFile)
-	v1.GET("/preview/:id/html", previewH.PreviewHTMLFile)
+		// Shares
+		private.POST("/shares", shareH.CreateShare)
+		private.GET("/shares", shareH.ListShares)
+		private.DELETE("/shares", shareH.RevokeShare)
 
-	// Public directories (browse, all authenticated users + API key)
-	pdBrowse := v1.Group("/public-directories")
-	pdBrowse.GET("", publicDirH.ListVisible)
-	pdBrowse.GET("/:id", publicDirH.Get)
-	pdBrowse.GET("/:id/folders", publicDirH.ListSubFolders)
+		// Preview
+		private.GET("/preview/:id", previewH.PreviewFile)
+		private.GET("/preview/:id/html", previewH.PreviewHTMLFile)
+	}
+
+	// Public directories — readable by JWT (需授权) + API Key
+	pdRead := v1.Group("/public-directories")
+	pdRead.GET("", publicDirH.ListVisible)
+	pdRead.GET("/:id", publicDirH.Get)
+	pdRead.GET("/:id/folders", publicDirH.ListSubFolders)
+	pdRead.GET("/:id/files", publicDirH.ListFiles)
+	pdRead.POST("/:id/download-token", publicDirH.CreateDownloadToken)
+
+	// Public directories — writable by API Key only
+	pdWrite := v1.Group("/public-directories")
+	pdWrite.Use(middleware.RequireAPIKey())
+	pdWrite.POST("/:id/files/upload", publicDirH.UploadFile)
+	pdWrite.POST("/:id/folders", publicDirH.CreateSubFolder)
+	pdWrite.DELETE("/:id/files/:fileId", publicDirH.DeleteFile)
+
+	// Public directory grants — API Key only
+	pdGrants := v1.Group("/public-directories")
+	pdGrants.Use(middleware.RequireAPIKey())
+	pdGrants.POST("/:id/grants", publicDirH.GrantAccess)
+	pdGrants.DELETE("/:id/grants/:userId", publicDirH.RevokeAccess)
+	pdGrants.GET("/:id/grants", publicDirH.ListGrantedUsers)
 
 	// Public routes (no auth required)
 	r.GET("/v1/disk/share/:code", shareH.GetShare)

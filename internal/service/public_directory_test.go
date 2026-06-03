@@ -172,7 +172,7 @@ func TestPublicDirectoryService_ListVisible(t *testing.T) {
 	svc.CreatePublicDirectory("mkt-docs", ScopeDepartment, "marketing", "admin")
 
 	t.Run("engineering user sees global + engineering", func(t *testing.T) {
-		visible, err := svc.ListVisible("engineering")
+		visible, err := svc.ListVisible("engineering", "")
 		if err != nil {
 			t.Fatalf("ListVisible failed: %v", err)
 		}
@@ -182,7 +182,7 @@ func TestPublicDirectoryService_ListVisible(t *testing.T) {
 	})
 
 	t.Run("no department sees global + all departments", func(t *testing.T) {
-		visible, err := svc.ListVisible("")
+		visible, err := svc.ListVisible("", "")
 		if err != nil {
 			t.Fatalf("ListVisible failed: %v", err)
 		}

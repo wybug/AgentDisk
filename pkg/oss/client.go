@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -94,6 +95,7 @@ func (c *Client) PresignedDownloadURL(ctx context.Context, key string, expires t
 // BuildKey constructs OSS key following the path convention:
 // disk/user_{userId}/{fullPath}/{fileId}_{fileName}
 func BuildKey(userID, fullPath string, fileID uint64, fileName string) string {
+	fullPath = strings.TrimPrefix(fullPath, "/")
 	if fullPath != "" {
 		return fmt.Sprintf("disk/user_%s/%s/%d_%s", userID, fullPath, fileID, fileName)
 	}
