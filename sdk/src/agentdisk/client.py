@@ -109,7 +109,7 @@ class AgentDiskClient:
         auto_mkdir: bool = False,
         agent_id: str = "",
     ) -> DiskFile:
-        folder_path, _file_name = _split_file_path(path)
+        folder_path, remote_name = _split_file_path(path)
         if auto_mkdir:
             self._resolver.mkdir(folder_path, exist_ok=True)
         folder_id = self._resolver.resolve_folder_id(folder_path)
@@ -117,6 +117,7 @@ class AgentDiskClient:
             local_file,
             folder_id=folder_id,
             agent_id=agent_id,
+            filename=remote_name,
         )
 
     def upload_bytes(

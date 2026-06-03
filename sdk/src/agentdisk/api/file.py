@@ -23,13 +23,15 @@ class _FileAPI(BaseAPI):
         file_path: str,
         folder_id: int = 0,
         agent_id: str = "",
+        filename: str = "",
     ) -> DiskFile:
         p = Path(file_path)
+        remote_name = filename or p.name
         with open(p, "rb") as f:
             data = self._request(
                 "POST",
                 "/files/upload",
-                files={"file": (p.name, f)},
+                files={"file": (remote_name, f)},
                 data={"folderId": str(folder_id), **({"agentId": agent_id} if agent_id else {})},
             )
         return DiskFile.from_dict(data)
@@ -107,13 +109,15 @@ class _AsyncFileAPI(AsyncBaseAPI):
         file_path: str,
         folder_id: int = 0,
         agent_id: str = "",
+        filename: str = "",
     ) -> DiskFile:
         p = Path(file_path)
+        remote_name = filename or p.name
         with open(p, "rb") as f:
             data = await self._request(
                 "POST",
                 "/files/upload",
-                files={"file": (p.name, f)},
+                files={"file": (remote_name, f)},
                 data={"folderId": str(folder_id), **({"agentId": agent_id} if agent_id else {})},
             )
         return DiskFile.from_dict(data)
