@@ -99,6 +99,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.InternalError(c, "failed to encode state")
 		return
 	}
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("oauth2_state", base64.RawURLEncoding.EncodeToString(stateData), 600, "/", "", false, true)
 
 	c.Redirect(http.StatusFound, authURL)
@@ -112,11 +113,16 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
+	redirectURL := "/"
+	if h.frontendURL != "" {
+		redirectURL = h.frontendURL
+	}
+
 	// Check for OAuth2 error response (e.g., login_required)
 	if errParam := c.Query("error"); errParam != "" {
 		if errParam == "login_required" {
-			// SSO failed, redirect to standard login
-			h.Login(c)
+			// Provider requires login; do not retry to avoid infinite loop
+			c.Redirect(http.StatusFound, redirectURL+"?error=login_required")
 			return
 		}
 		response.Unauthorized(c, fmt.Sprintf("OAuth2 error: %s", errParam))
@@ -156,6 +162,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 
 	// Clear state cookie
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("oauth2_state", "", -1, "/", "", false, true)
 
 	token, err := client.Exchange(c.Request.Context(), code, stateData.Verifier)
@@ -179,8 +186,9 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 	h.sessions[sessionID] = session
 
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(h.cookieName, sessionID, h.cookieMaxAge, "/", "", false, true)
-	redirectURL := "/"
+	redirectURL = "/"
 	if h.frontendURL != "" {
 		redirectURL = h.frontendURL
 	}
@@ -193,6 +201,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if err == nil && sessionID != "" {
 		delete(h.sessions, sessionID)
 	}
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(h.cookieName, "", -1, "/", "", false, true)
 	response.OK(c, gin.H{"message": "logged out"})
 }
