@@ -85,7 +85,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	_ = oauth2client.GenerateCodeChallenge(verifier)
 	authURL := client.AuthCodeURL(state, verifier, promptNone)
 
-	// 透传 ai-web-backend 的 token（跨域 SSO 场景）
+	// 透传 token（跨域 SSO 场景）
 	if tk := c.Query("token"); tk != "" {
 		authURL += "&token=" + url.QueryEscape(tk)
 	}
