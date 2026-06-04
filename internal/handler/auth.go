@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/agentdisk/agent-disk/pkg/oauth2client"
@@ -83,6 +84,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	_ = oauth2client.GenerateCodeChallenge(verifier)
 	authURL := client.AuthCodeURL(state, verifier, promptNone)
+
+	// 透传 ai-web-backend 的 token（跨域 SSO 场景）
+	if tk := c.Query("token"); tk != "" {
+		authURL += "&token=" + url.QueryEscape(tk)
+	}
 
 	// Store state and verifier in short-lived cookie for CSRF protection
 	stateData, err := json.Marshal(map[string]string{
