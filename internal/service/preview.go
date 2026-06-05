@@ -24,8 +24,11 @@ func NewPreviewService(fileSvc *FileService, fileStorage storage.Storage) *Previ
 // PreviewResult represents a domain type.
 type PreviewResult struct {
 	FileType string `json:"fileType"`
-	URL      string `json:"url"`
+	URL      string `json:"url,omitempty"`
+	Content  string `json:"content,omitempty"`
 }
+
+const maxPreviewSize = 5 * 1024 * 1024 // 5MB
 
 // Preview handles the request.
 func (s *PreviewService) Preview(ctx context.Context, userID string, fileID uint64) (*PreviewResult, error) {
@@ -33,13 +36,34 @@ func (s *PreviewService) Preview(ctx context.Context, userID string, fileID uint
 	if err != nil {
 		return nil, err
 	}
-	return &PreviewResult{
-		FileType: classify(file),
-		URL:      url,
-	}, nil
+	cat := classify(file)
+
+	if cat == "markdown" || cat == "code" || cat == "text" {
+		obj, err := s.storage.Download(ctx, file.OSSKey)
+		if err != nil {
+			return nil, fmt.Errorf("download from oss: %w", err)
+		}
+		defer func() { _ = obj.Close() }()
+		return buildPreviewResult(cat, obj, url), nil
+	}
+
+	return buildPreviewResult(cat, nil, url), nil
 }
 
-const maxHTMLSize = 5 * 1024 * 1024 // 5MB
+// buildPreviewResult constructs a PreviewResult from category, content reader, and presigned URL.
+// For text/code/markdown files it reads content from reader; for others it uses the URL.
+func buildPreviewResult(cat string, content io.Reader, url string) *PreviewResult {
+	result := &PreviewResult{FileType: cat}
+	if cat == "markdown" || cat == "code" || cat == "text" {
+		if content != nil {
+			data, _ := io.ReadAll(io.LimitReader(content, maxPreviewSize))
+			result.Content = string(data)
+		}
+	} else {
+		result.URL = url
+	}
+	return result
+}
 
 // PreviewHTML returns raw HTML content for secure sandboxed preview.
 func (s *PreviewService) PreviewHTML(ctx context.Context, userID string, fileID uint64) (string, error) {
@@ -54,7 +78,7 @@ func (s *PreviewService) PreviewHTML(ctx context.Context, userID string, fileID 
 	}
 	defer func() { _ = obj.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(obj, maxHTMLSize))
+	data, err := io.ReadAll(io.LimitReader(obj, maxPreviewSize))
 	if err != nil {
 		return "", fmt.Errorf("read file: %w", err)
 	}
