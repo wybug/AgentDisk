@@ -151,12 +151,10 @@ def agent_client(agent_token):
 
 
 @pytest.fixture
-def async_client(user_token):
+async def async_client(user_token):
     c = AsyncAgentDiskClient(base_url=BASE_URL, token=user_token)
     yield c
-    import asyncio
-
-    asyncio.get_event_loop().run_until_complete(c.close())
+    await c.close()
 
 
 # --- Public directory test fixtures ---

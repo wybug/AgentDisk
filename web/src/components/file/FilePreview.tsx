@@ -46,10 +46,14 @@ export default function FilePreview({ file, onClose }: Props) {
         if (category === 'html') {
           const tokenResult = await fileApi.getDownloadToken(file.id);
           if (!cancelled) setHtmlPreviewUrl(`/v1/disk/preview/${file.id}/html?t=${encodeURIComponent(tokenResult.downloadToken)}`);
-        } else if (['markdown', 'code', 'text'].includes(category) && result.url) {
-          const resp = await fetch(result.url);
-          const text = await resp.text();
-          if (!cancelled) setContent(text);
+        } else if (['markdown', 'code', 'text'].includes(category)) {
+          if (result.content !== undefined && result.content !== null) {
+            if (!cancelled) setContent(result.content);
+          } else if (result.url) {
+            const resp = await fetch(result.url);
+            const text = await resp.text();
+            if (!cancelled) setContent(text);
+          }
         }
       } catch {
         // error handled by interceptor

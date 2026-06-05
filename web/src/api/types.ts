@@ -97,7 +97,8 @@ export interface DiskPermission {
 
 export interface PreviewResult {
   fileType: 'markdown' | 'code' | 'image' | 'text' | 'binary' | 'html';
-  url: string;
+  url?: string;
+  content?: string;
 }
 
 export interface CreateFolderRequest {
