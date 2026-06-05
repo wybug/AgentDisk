@@ -140,6 +140,20 @@ func TestAuth_Login_FromGateway(t *testing.T) {
 	}
 }
 
+func TestAuth_Login_NoTokenPassthrough(t *testing.T) {
+	h := newTestAuthHandler("https://example.com/token", "https://example.com/userinfo")
+	r := setupAuthRouter(h)
+
+	req := httptest.NewRequest("GET", "/auth/login?token=should_not_appear", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	location := w.Header().Get("Location")
+	if strings.Contains(location, "token=") {
+		t.Errorf("Location should not contain token parameter, got %s", location)
+	}
+}
+
 func TestAuth_Login_StandardFlow(t *testing.T) {
 	h := newTestAuthHandler("https://example.com/token", "https://example.com/userinfo")
 	r := setupAuthRouter(h)
