@@ -70,6 +70,40 @@ class AsyncAgentDiskClient:
             self._folders, self._files, cache_ttl=cache_ttl, public_dirs=self._public_dirs
         )
 
+    @property
+    def token(self) -> str:
+        return self._token
+
+    @token.setter
+    def token(self, value: str) -> None:
+        self._token = value
+        self._folders._token = value
+        self._files._token = value
+        self._permissions._token = value
+        self._versions._token = value
+        self._recycle._token = value
+        self._tags._token = value
+        self._shares._token = value
+        self._space._token = value
+        self._public_dirs._token = value
+
+    @property
+    def api_key(self) -> str:
+        return self._api_key
+
+    @api_key.setter
+    def api_key(self, value: str) -> None:
+        self._api_key = value
+        self._folders._api_key = value
+        self._files._api_key = value
+        self._permissions._api_key = value
+        self._versions._api_key = value
+        self._recycle._api_key = value
+        self._tags._api_key = value
+        self._shares._api_key = value
+        self._space._api_key = value
+        self._public_dirs._api_key = value
+
     # --- Folder operations ---
 
     async def create_folder(self, path: str, *, exist_ok: bool = False) -> DiskFolder:
