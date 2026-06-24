@@ -3,7 +3,7 @@ import type { ApiResponse, DiskShare, CreateShareRequest, DownloadTokenResult } 
 
 export const shareApi = {
   create: (data: CreateShareRequest) =>
-    apiClient.post('/v1/disk/shares', data),
+    apiClient.post<never, ApiResponse<DiskShare>>('/v1/disk/shares', data).then(r => r.data),
 
   list: () =>
     apiClient.get<never, ApiResponse<DiskShare[]>>('/v1/disk/shares').then(r => r.data),

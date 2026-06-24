@@ -294,6 +294,47 @@ describe('T11: 分享管理', () => {
   const fakeRejected = fakeShare.includes('ERROR') && (fakeShare.includes('不存在') || fakeShare.includes('not found') || fakeShare.includes('not exist'));
   assertCondition(fakeRejected, 'T11.8b: 分享不存在的文件返回错误', fakeShare);
 
+  // T11.8c - UI 打开分享链接页面（有提取码）
+  ab.open(ab.BASE_URL + '/share/' + shareCode);
+  ab.waitMs(2000);
+  const uiPageUrl = ab.getUrl();
+  const uiPageLoaded = uiPageUrl.includes('/share/' + shareCode) && (ab.pageContainsText('访问分享') || ab.pageContainsText('分享码'));
+  step('T11.8c: 分享链接页面可正常打开', uiPageLoaded, 'url=' + uiPageUrl + ' shareCode=' + shareCode);
+  ab.screenshot('t11-08c-share-page-loaded');
+
+  // 填入提取码并点击"访问"按钮
+  // 关键坑：必须用 agent-browser 的 type（CDP 真实键盘事件）才能让 React 19 的 onChange 更新 state，
+  // jsFill 的 native setter + dispatchEvent('input') 在 React 19 下不会同步到组件 state；
+  // 点击按钮必须用 DOM .click() —— agent-browser 的 CDP click 在此页面静默失效（不触发任何事件）。
+  ab.ab('focus', 'input');
+  ab.ab('type', 'input', 'abc123');
+  ab.waitMs(500);
+  ab.evalStdin('document.querySelector("button.ant-btn-primary").click()');
+  ab.waitMs(3000);
+  const uiAccessed = ab.pageContainsText('分享验证成功');
+  step('T11.8d: UI 输入正确提取码后验证通过', uiAccessed, 'uiAccessed=' + uiAccessed + ' url=' + ab.getUrl());
+  ab.screenshot('t11-08d-share-accessed-with-code');
+
+  // T11.8e - UI 访问无提取码分享（应无需提取码直接验证通过）
+  const noCodeForUI = createShareAPI(fileId, '', 10, 72);
+  ab.waitMs(1000);
+  const noCodeForUIMatch = noCodeForUI.match(/code=([a-zA-Z0-9]+)/);
+  const noCodeForUIShareCode = noCodeForUIMatch ? noCodeForUIMatch[1] : '';
+  ab.open(ab.BASE_URL + '/share/' + noCodeForUIShareCode);
+  ab.waitMs(2000);
+  ab.evalStdin('document.querySelector("button.ant-btn-primary").click()');
+  ab.waitMs(3000);
+  const uiNoCodeAccessed = ab.pageContainsText('分享验证成功');
+  step('T11.8e: UI 无提取码分享直接验证通过', uiNoCodeAccessed, 'uiNoCodeAccessed=' + uiNoCodeAccessed + ' code=' + noCodeForUIShareCode);
+  ab.screenshot('t11-08e-share-accessed-no-code');
+
+  // 清理 UI 测试用无提取码分享
+  const noCodeForUIIdMatch = noCodeForUI.match(/id=(\d+)/);
+  if (noCodeForUIIdMatch) {
+    revokeShareAPI(noCodeForUIIdMatch[1]);
+    ab.waitMs(300);
+  }
+
   // T11.9 - 撤销分享
   const revokeResult = revokeShareAPI(shareId);
   ab.waitMs(1000);

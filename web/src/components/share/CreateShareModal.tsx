@@ -17,19 +17,17 @@ export default function CreateShareModal({ file, open, onClose }: Props) {
     if (!file) return;
     const values = await form.validateFields();
     try {
-      await shareApi.create({
+      const share = await shareApi.create({
         resourceId: file.id,
         resType: 'file',
         extractCode: values.extractCode || undefined,
         maxVisit: values.maxVisit,
         expireHours: values.expireHours,
       });
-      // The API should return share info, but based on current response format
-      // we'll show success message
       message.success('分享创建成功');
       setShareResult({
-        shareCode: 'check shares page',
-        extractCode: values.extractCode || '',
+        shareCode: share.shareCode,
+        extractCode: share.extractCode || values.extractCode || '',
       });
     } catch (err: unknown) {
       message.error('创建失败: ' + (err instanceof Error ? err.message : String(err)));
