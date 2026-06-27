@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/service"
@@ -255,6 +254,11 @@ func (h *PublicDirectoryHandler) CreateDownloadToken(c *gin.Context) {
 }
 
 // CreateSubFolder handles POST /v1/disk/public-directories/:id/folders.
+//
+// Backward compatibility: callers that POST only folderName (form or JSON) get
+// a top-level sub-folder under the public directory root, exactly as before.
+// New callers may additionally send parentId to create a nested folder; the
+// parent must already live inside the same public directory.
 func (h *PublicDirectoryHandler) CreateSubFolder(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -262,19 +266,41 @@ func (h *PublicDirectoryHandler) CreateSubFolder(c *gin.Context) {
 		return
 	}
 
+	// Multipart form values take precedence for legacy agents that POST
+	// application/x-www-form-urlencoded. JSON body is the preferred shape for
+	// new callers because it carries parentId cleanly.
 	folderName := c.PostForm("folderName")
+	parentIDStr := c.PostForm("parentId")
 	if folderName == "" {
 		var req struct {
 			FolderName string `json:"folderName"`
+			ParentID   uint64 `json:"parentId"`
 		}
-		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
-			response.BadRequest(c, "folderName required")
-			return
+		if bindErr := c.ShouldBindJSON(&req); bindErr == nil {
+			folderName = req.FolderName
+			if req.ParentID != 0 {
+				parentIDStr = strconv.FormatUint(req.ParentID, 10)
+			}
 		}
-		folderName = req.FolderName
+	}
+	if folderName == "" {
+		response.BadRequest(c, "folderName required")
+		return
 	}
 
-	folder, err := h.pdSvc.CreateSubFolder(c.Request.Context(), id, folderName)
+	parentID := uint64(0)
+	if parentIDStr != "" {
+		pid, pErr := strconv.ParseUint(parentIDStr, 10, 64)
+		if pErr != nil {
+			response.BadRequest(c, "invalid parentId")
+			return
+		}
+		parentID = pid
+	}
+
+	// CreateNestedFolder with parentID=0 reproduces the legacy top-level
+	// behavior, so existing callers see no change.
+	folder, err := h.pdSvc.CreateNestedFolder(c.Request.Context(), id, parentID, folderName)
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return
@@ -342,9 +368,4 @@ func (h *PublicDirectoryHandler) ListGrantedUsers(c *gin.Context) {
 		return
 	}
 	response.OK(c, userIDs)
-}
-
-// redirectDownload redirects to presigned URL.
-func redirectDownload(c *gin.Context, url string) {
-	c.Redirect(http.StatusFound, url)
 }

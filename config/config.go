@@ -20,6 +20,7 @@ type Config struct {
 	Log           LogConfig           `mapstructure:"log"`
 	DownloadToken DownloadTokenConfig `mapstructure:"download_token"`
 	WebAuthn      WebAuthnConfig      `mapstructure:"webauthn"`
+	Okf           OkfConfig           `mapstructure:"okf"`
 }
 
 // ServerConfig represents a serverconfiguration.
@@ -91,6 +92,13 @@ type WebAuthnConfig struct {
 	Timeout       int    `mapstructure:"timeout"`
 }
 
+// OkfConfig configures the OKF v0.1 bundle APIs. When Enabled is false the OKF
+// reader routes are not registered and the public-directory content writer
+// skips OKF materialization (the original pdWrite text behavior is unchanged).
+type OkfConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 // Load handles HTTP requests.
 func Load(path string) (*Config, error) {
 	loadDotEnv()
@@ -113,7 +121,27 @@ func Load(path string) (*Config, error) {
 	// Expand ~ in paths to home directory
 	expandPaths(&cfg)
 
+	// Apply defaults for optional toggles. viper.IsSet distinguishes "key
+	// absent" from "key explicitly false", so the default is only applied
+	// when the operator did not write the key at all.
+	applyDefaults(&cfg)
+
 	return &cfg, nil
+}
+
+// applyDefaults fills in defaults for fields that should be "on" unless the
+// operator explicitly disables them. This keeps existing config files forward
+// compatible when a new opt-in feature is added.
+func applyDefaults(cfg *Config) {
+	// OKF is enabled by default. Operators opt out by setting
+	// `okf.enabled: false` in config.yaml or OKF_ENABLED=false in the env.
+	if v := os.Getenv("OKF_ENABLED"); v == "true" || v == "false" {
+		cfg.Okf.Enabled = v == "true"
+		return
+	}
+	if !viper.IsSet("okf.enabled") {
+		cfg.Okf.Enabled = true
+	}
 }
 
 // loadDotEnv reads .env file and sets environment variables (no external dependency).

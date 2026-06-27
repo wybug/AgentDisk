@@ -78,3 +78,18 @@ func (r *FileRepo) GetByMD5(userID, md5 string) ([]model.DiskFile, error) {
 		Find(&files).Error
 	return files, err
 }
+
+// GetByFolderAndName returns the most recent non-deleted file with the given
+// name inside a specific folder. Used by OKF to look up bundle-relative
+// markdown files inside nested public-directory folders. Returns
+// gorm.ErrRecordNotFound when no such file exists.
+func (r *FileRepo) GetByFolderAndName(folderID uint64, name string) (*model.DiskFile, error) {
+	var file model.DiskFile
+	err := r.db.Where("folder_id = ? AND file_name = ? AND is_deleted = ?", folderID, name, false).
+		Order("id DESC").
+		First(&file).Error
+	if err != nil {
+		return nil, err
+	}
+	return &file, nil
+}

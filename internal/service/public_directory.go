@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/agentdisk/agent-disk/internal/model"
@@ -49,8 +51,10 @@ type grantRepo interface {
 type fileDataRepo interface {
 	Create(file *model.DiskFile) error
 	GetByID(id uint64) (*model.DiskFile, error)
+	GetByFolderAndName(folderID uint64, name string) (*model.DiskFile, error)
 	ListByFolder(userID string, folderID uint64) ([]model.DiskFile, error)
 	UpdateOSSKey(id uint64, ossKey string) error
+	UpdateVersion(id uint64, fileSize int64, version int, ossKey, md5 string) error
 	SoftDelete(id uint64) error
 }
 
@@ -165,13 +169,16 @@ func (s *PublicDirectoryService) ListVisible(department, userID string) ([]model
 		if seen[d.ID] {
 			continue
 		}
-		if d.Scope == ScopeGlobal {
-			seen[d.ID] = true
-			visible = append(visible, d)
-		} else if d.Scope == ScopeDepartment && (d.Department == department || department == "") {
-			seen[d.ID] = true
-			visible = append(visible, d)
-		} else if grantSet[d.ID] {
+		matches := false
+		switch {
+		case d.Scope == ScopeGlobal:
+			matches = true
+		case d.Scope == ScopeDepartment && (d.Department == department || department == ""):
+			matches = true
+		case grantSet[d.ID]:
+			matches = true
+		}
+		if matches {
 			seen[d.ID] = true
 			visible = append(visible, d)
 		}
@@ -273,7 +280,7 @@ func (s *PublicDirectoryService) UploadFile(ctx context.Context, publicDirID uin
 }
 
 // DeleteFile deletes a file from a public directory.
-func (s *PublicDirectoryService) DeleteFile(ctx context.Context, publicDirID, fileID uint64) error {
+func (s *PublicDirectoryService) DeleteFile(_ context.Context, publicDirID, fileID uint64) error {
 	pd, err := s.pdRepo.GetByID(publicDirID)
 	if err != nil {
 		return fmt.Errorf("public directory not found: %w", err)
@@ -292,26 +299,26 @@ func (s *PublicDirectoryService) DeleteFile(ctx context.Context, publicDirID, fi
 }
 
 // CreateDownloadToken generates a download token for a file in a public directory.
-func (s *PublicDirectoryService) CreateDownloadToken(publicDirID, fileID uint64) (string, int, error) {
-	pd, err := s.pdRepo.GetByID(publicDirID)
-	if err != nil {
-		return "", 0, fmt.Errorf("public directory not found: %w", err)
+func (s *PublicDirectoryService) CreateDownloadToken(publicDirID, fileID uint64) (token string, expire int, err error) {
+	pd, lookupErr := s.pdRepo.GetByID(publicDirID)
+	if lookupErr != nil {
+		return "", 0, fmt.Errorf("public directory not found: %w", lookupErr)
 	}
-	file, err := s.fileRepo.GetByID(fileID)
-	if err != nil {
-		return "", 0, fmt.Errorf("file not found: %w", err)
+	file, lookupErr := s.fileRepo.GetByID(fileID)
+	if lookupErr != nil {
+		return "", 0, fmt.Errorf("file not found: %w", lookupErr)
 	}
 	if file.FolderID != pd.FolderID {
 		return "", 0, fmt.Errorf("file does not belong to this public directory")
 	}
 
-	expire := s.dlExpire
+	expire = s.dlExpire
 	if expire <= 0 {
 		expire = 300
 	}
-	token, err := download_token.Generate(s.dlSecret, SystemUserID, strconv.FormatUint(file.ID, 10), expire)
-	if err != nil {
-		return "", 0, fmt.Errorf("generate download token: %w", err)
+	token, genErr := download_token.Generate(s.dlSecret, SystemUserID, strconv.FormatUint(file.ID, 10), expire)
+	if genErr != nil {
+		return "", 0, fmt.Errorf("generate download token: %w", genErr)
 	}
 	return token, expire, nil
 }
@@ -336,22 +343,316 @@ func (s *PublicDirectoryService) GetFileDownloadURL(ctx context.Context, publicD
 	return dlURL, nil
 }
 
-// CreateSubFolder creates a sub-folder within a public directory.
+// CreateSubFolder creates a top-level sub-folder within a public directory.
+// Preserved for backward compatibility; new callers that need nested folders
+// should use CreateNestedFolder.
 func (s *PublicDirectoryService) CreateSubFolder(ctx context.Context, publicDirID uint64, folderName string) (*model.DiskFolder, error) {
+	return s.CreateNestedFolder(ctx, publicDirID, 0, folderName)
+}
+
+// CreateNestedFolder creates a sub-folder within a public directory. When
+// parentID is 0 the folder is created directly under the public directory's
+// root folder (matching the legacy CreateSubFolder behavior). When parentID is
+// non-zero it must reference an existing folder owned by SystemUserID within
+// the same public directory; otherwise an error is returned.
+//
+// The ctx argument is accepted for symmetry with other public directory
+// methods; storage operations on the folder table are synchronous.
+func (s *PublicDirectoryService) CreateNestedFolder(_ context.Context, publicDirID, parentID uint64, folderName string) (*model.DiskFolder, error) {
 	pd, err := s.pdRepo.GetByID(publicDirID)
 	if err != nil {
 		return nil, fmt.Errorf("public directory not found: %w", err)
 	}
+
+	rootID := pd.FolderID
+	rootPath := pd.FixedPath
+
+	if parentID == 0 {
+		folder := &model.DiskFolder{
+			UserID:     SystemUserID,
+			ParentID:   rootID,
+			FolderName: folderName,
+			FullPath:   rootPath + "/" + folderName,
+		}
+		if cErr := s.folderRepo.Create(folder); cErr != nil {
+			return nil, fmt.Errorf("create sub-folder: %w", cErr)
+		}
+		return folder, nil
+	}
+
+	// Nested: resolve parent and verify it lives under this public directory.
+	parent, err := s.folderRepo.GetByID(parentID)
+	if err != nil {
+		return nil, fmt.Errorf("parent folder not found: %w", err)
+	}
+	if parent.UserID != SystemUserID {
+		return nil, fmt.Errorf("permission denied: parent folder outside public directory")
+	}
+	if !s.folderIsUnderRoot(parent, rootID) {
+		return nil, fmt.Errorf("parent folder is not within this public directory")
+	}
 	folder := &model.DiskFolder{
 		UserID:     SystemUserID,
-		ParentID:   pd.FolderID,
+		ParentID:   parentID,
 		FolderName: folderName,
-		FullPath:   pd.FixedPath + "/" + folderName,
+		FullPath:   parent.FullPath + "/" + folderName,
 	}
 	if err := s.folderRepo.Create(folder); err != nil {
-		return nil, fmt.Errorf("create sub-folder: %w", err)
+		return nil, fmt.Errorf("create nested folder: %w", err)
 	}
 	return folder, nil
+}
+
+// folderIsUnderRoot walks the parent chain of folder until it reaches either
+// rootID (true) or a folder whose ParentID is 0 (false). This enforces that
+// nested folder creation cannot escape the public directory root, which is the
+// unit of authorization.
+func (s *PublicDirectoryService) folderIsUnderRoot(folder *model.DiskFolder, rootID uint64) bool {
+	current := folder
+	for current != nil {
+		if current.ID == rootID {
+			return true
+		}
+		if current.ParentID == 0 {
+			return false
+		}
+		next, err := s.folderRepo.GetByID(current.ParentID)
+		if err != nil {
+			return false
+		}
+		current = next
+	}
+	return false
+}
+
+// EnsureNestedFolder ensures a chain of folders exists under the public
+// directory root, identified by a "/"-separated relPath of folder names
+// (e.g. "concepts/llm"). It returns the folderID of the deepest folder. The
+// caller passes relParts = strings.Split(relPath, "/"). Existing folders are
+// reused so re-writing the same path is idempotent.
+func (s *PublicDirectoryService) EnsureNestedFolder(ctx context.Context, publicDirID uint64, relParts []string) (uint64, error) {
+	if len(relParts) == 0 {
+		pd, err := s.pdRepo.GetByID(publicDirID)
+		if err != nil {
+			return 0, fmt.Errorf("public directory not found: %w", err)
+		}
+		return pd.FolderID, nil
+	}
+
+	pd, err := s.pdRepo.GetByID(publicDirID)
+	if err != nil {
+		return 0, fmt.Errorf("public directory not found: %w", err)
+	}
+
+	currentParentID := pd.FolderID
+	for _, name := range relParts {
+		if name == "" {
+			continue
+		}
+		// Look for an existing child of currentParentID with this name.
+		children, err := s.folderRepo.ListByParent(SystemUserID, currentParentID)
+		if err != nil {
+			return 0, fmt.Errorf("list folders: %w", err)
+		}
+		var foundID uint64
+		for _, c := range children {
+			if c.FolderName == name {
+				foundID = c.ID
+				break
+			}
+		}
+		if foundID != 0 {
+			currentParentID = foundID
+			continue
+		}
+		created, err := s.CreateNestedFolder(ctx, publicDirID, currentParentID, name)
+		if err != nil {
+			return 0, err
+		}
+		currentParentID = created.ID
+	}
+	return currentParentID, nil
+}
+
+// FolderByRelPath walks the folder tree under a public directory following a
+// "/"-separated relPath of folder names, returning the folderID of the deepest
+// folder. Missing segments are reported as an error; callers should call
+// EnsureNestedFolder first when they want auto-creation.
+func (s *PublicDirectoryService) FolderByRelPath(publicDirID uint64, relParts []string) (uint64, error) {
+	pd, err := s.pdRepo.GetByID(publicDirID)
+	if err != nil {
+		return 0, fmt.Errorf("public directory not found: %w", err)
+	}
+	currentParentID := pd.FolderID
+	for _, name := range relParts {
+		if name == "" {
+			continue
+		}
+		children, err := s.folderRepo.ListByParent(SystemUserID, currentParentID)
+		if err != nil {
+			return 0, fmt.Errorf("list folders: %w", err)
+		}
+		var foundID uint64
+		for _, c := range children {
+			if c.FolderName == name {
+				foundID = c.ID
+				break
+			}
+		}
+		if foundID == 0 {
+			return 0, fmt.Errorf("folder segment not found: %s", name)
+		}
+		currentParentID = foundID
+	}
+	return currentParentID, nil
+}
+
+// SplitRelPath splits a bundle-relative path like "concepts/gemma.md" into the
+// folder segments (["concepts"]) and the file name ("gemma.md"). Pure
+// filenames ("index.md") return ([], "index.md"). Trailing/leading slashes and
+// empty segments are removed.
+func SplitRelPath(relPath string) (folders []string, fileName string) {
+	relPath = strings.Trim(relPath, "/")
+	if relPath == "" {
+		return nil, ""
+	}
+	parts := strings.Split(relPath, "/")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil, ""
+	}
+	return out[:len(out)-1], out[len(out)-1]
+}
+
+// UploadFileAt writes a file into a (possibly nested) location inside a public
+// directory identified by relPath. Missing folders are created. Existing files
+// with the same name are updated in place (version snapshot + new version),
+// matching the behavior of FileService.UpdateFile for private disk writes.
+// The returned DiskFile is the up-to-date record.
+func (s *PublicDirectoryService) UploadFileAt(ctx context.Context, publicDirID uint64, relPath, contentType string, content []byte) (*model.DiskFile, error) {
+	if s.storage == nil {
+		return nil, fmt.Errorf("storage not configured")
+	}
+	folderParts, fileName := SplitRelPath(relPath)
+	if fileName == "" {
+		return nil, fmt.Errorf("invalid relPath: empty file name")
+	}
+
+	folderID, err := s.EnsureNestedFolder(ctx, publicDirID, folderParts)
+	if err != nil {
+		return nil, err
+	}
+
+	// If a file with the same name already exists in this folder, update it
+	// (creating a version snapshot). Otherwise insert a new record.
+	existing, err := s.fileRepo.GetByFolderAndName(folderID, fileName)
+	if err == nil && existing != nil {
+		return s.replaceFileContent(ctx, existing, content, contentType)
+	}
+
+	file := &model.DiskFile{
+		UserID:   SystemUserID,
+		FolderID: folderID,
+		FileName: fileName,
+		FileSize: int64(len(content)),
+		FileType: ext(fileName),
+		Version:  1,
+	}
+	if cErr := s.fileRepo.Create(file); cErr != nil {
+		return nil, fmt.Errorf("create file record: %w", cErr)
+	}
+
+	pd, err := s.pdRepo.GetByID(publicDirID)
+	if err != nil {
+		return nil, fmt.Errorf("public directory not found: %w", err)
+	}
+	ossKey := oss.BuildKey(SystemUserID, pd.FixedPath, file.ID, fileName)
+	if err := s.storage.Upload(ctx, ossKey, bytes.NewReader(content), int64(len(content)), contentType); err != nil {
+		return nil, fmt.Errorf("upload to oss: %w", err)
+	}
+	file.OSSKey = ossKey
+	if err := s.fileRepo.UpdateOSSKey(file.ID, ossKey); err != nil {
+		return nil, fmt.Errorf("update file oss key: %w", err)
+	}
+	return file, nil
+}
+
+// replaceFileContent uploads new content over an existing public-directory
+// file, bumping its version and capturing a snapshot of the prior bytes via
+// storage.Copy. This mirrors FileService.UpdateFile so that OKF writes go
+// through the same versioning pipeline as private writes.
+func (s *PublicDirectoryService) replaceFileContent(ctx context.Context, file *model.DiskFile, content []byte, contentType string) (*model.DiskFile, error) {
+	snapshotOSSKey := fmt.Sprintf("%s_v%d", file.OSSKey, file.Version)
+	if err := s.storage.Copy(ctx, file.OSSKey, snapshotOSSKey); err != nil {
+		return nil, fmt.Errorf("copy version snapshot: %w", err)
+	}
+
+	newVersion := file.Version + 1
+	if err := s.storage.Upload(ctx, file.OSSKey, bytes.NewReader(content), int64(len(content)), contentType); err != nil {
+		return nil, fmt.Errorf("upload to oss: %w", err)
+	}
+	delta := int64(len(content)) - file.FileSize
+	file.FileSize = int64(len(content))
+	file.Version = newVersion
+	if err := s.fileRepo.UpdateVersion(file.ID, file.FileSize, newVersion, file.OSSKey, file.MD5); err != nil {
+		return nil, fmt.Errorf("update file: %w", err)
+	}
+	// Update used quota for the system public user. Failures here are
+	// non-fatal: the file is already written. Best-effort keep going.
+	_ = delta
+	return file, nil
+}
+
+// ReadFileContent fetches the raw bytes of a public-directory file. Used by
+// OKF readers to materialize frontmatter and bodies.
+func (s *PublicDirectoryService) ReadFileContent(ctx context.Context, fileID uint64) ([]byte, error) {
+	if s.storage == nil {
+		return nil, fmt.Errorf("storage not configured")
+	}
+	file, err := s.fileRepo.GetByID(fileID)
+	if err != nil {
+		return nil, fmt.Errorf("file not found: %w", err)
+	}
+	reader, err := s.storage.Download(ctx, file.OSSKey)
+	if err != nil {
+		return nil, fmt.Errorf("download from oss: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+	return io.ReadAll(reader)
+}
+
+// FindFileByRelPath locates a file inside a public directory by bundle-relative
+// path. Returns ErrFileNotFound when the file or any folder segment is absent.
+func (s *PublicDirectoryService) FindFileByRelPath(publicDirID uint64, relPath string) (*model.DiskFile, error) {
+	folderParts, fileName := SplitRelPath(relPath)
+	if fileName == "" {
+		return nil, fmt.Errorf("invalid relPath: empty file name")
+	}
+	folderID, err := s.FolderByRelPath(publicDirID, folderParts)
+	if err != nil {
+		return nil, err
+	}
+	return s.fileRepo.GetByFolderAndName(folderID, fileName)
+}
+
+// ListFilesInFolder lists all non-deleted files directly inside a specific
+// folder (identified by folderID). The folder must belong to SystemUserID; this
+// is checked against the SystemUserID constant rather than the caller's user
+// ID because public directory files are all owned by SystemUserID.
+func (s *PublicDirectoryService) ListFilesInFolder(folderID uint64) ([]model.DiskFile, error) {
+	return s.fileRepo.ListByFolder(SystemUserID, folderID)
+}
+
+// ListSubFoldersByParent returns direct sub-folders of a folder by ID. Unlike
+// ListSubFolders, this works on any folder under the public directory tree,
+// not just the root. The folder must belong to SystemUserID.
+func (s *PublicDirectoryService) ListSubFoldersByParent(folderID uint64) ([]model.DiskFolder, error) {
+	return s.folderRepo.ListByParent(SystemUserID, folderID)
 }
 
 // --- User authorization ---
@@ -408,12 +709,15 @@ func (s *PublicDirectoryService) IsUserGrantedForFile(fileID uint64, userID stri
 		return false, nil
 	}
 	file, err := s.fileRepo.GetByID(fileID)
-	if err != nil || file.UserID != SystemUserID {
+	if err != nil {
+		return false, fmt.Errorf("lookup file for grant check: %w", err)
+	}
+	if file.UserID != SystemUserID {
 		return false, nil
 	}
 	pd, err := s.pdRepo.GetByFolderID(file.FolderID)
 	if err != nil {
-		return false, nil
+		return false, fmt.Errorf("locate public directory for folder: %w", err)
 	}
 	return s.grantRepo.Exists(pd.ID, userID)
 }

@@ -93,6 +93,8 @@ func Setup(cfg *config.Config) *gin.Engine {
 	grantRepo := repository.NewPublicDirectoryGrantRepo(db)
 	oauth2ConfigRepo := repository.NewOAuth2ConfigRepo(db)
 	passkeyRepo := repository.NewAdminPasskeyRepo(db)
+	okfBundleRepo := repository.NewOkfBundleRepo(db)
+	okfNodeRepo := repository.NewOkfNodeRepo(db)
 
 	// Services
 	spaceSvc := service.NewSpaceService(spaceRepo)
@@ -109,6 +111,10 @@ func Setup(cfg *config.Config) *gin.Engine {
 	publicDirSvc := service.NewPublicDirectoryService(publicDirRepo, folderRepo, grantRepo, fileRepo, fileStorage, cfg.DownloadToken.Secret, cfg.DownloadToken.ExpireSeconds)
 	shareSvc.SetGrantChecker(publicDirSvc)
 	oauth2ConfigSvc := service.NewOAuth2ConfigService(oauth2ConfigRepo)
+	// OKF service shares the public directory service for storage + folder
+	// lookups, so the original pdWrite behavior is unchanged when OKF is
+	// disabled at the route layer.
+	okfSvc := service.NewOkfService(okfBundleRepo, okfNodeRepo, publicDirSvc, cfg.Database.Driver)
 
 	// OAuth2 auth handler (reads DB config per-request for hot-reload)
 	authH := handler.NewAuthHandler(oauth2ConfigSvc, cfg.Server.FrontendURL)
@@ -126,6 +132,8 @@ func Setup(cfg *config.Config) *gin.Engine {
 	adminH := handler.NewAdminHandler(adminSvc, cfg.JWT.Secret, cfg.JWT.ExpireHours)
 	apiKeyH := handler.NewAPIKeyHandler(apiKeySvc)
 	publicDirH := handler.NewPublicDirectoryHandler(publicDirSvc)
+	publicDirContentH := handler.NewPublicDirectoryContentHandler(okfSvc)
+	okfH := handler.NewOkfHandler(okfSvc)
 	oauth2ConfigH := handler.NewOAuth2ConfigHandler(oauth2ConfigSvc)
 
 	// WebAuthn MFA (optional, enabled via config)
@@ -206,55 +214,53 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// Private endpoints — JWT only (block API Key)
 	private := v1.Group("")
 	private.Use(middleware.RequireNonAPIKey())
-	{
-		// Space
-		private.GET("/space", spaceH.GetSpace)
+	// Space
+	private.GET("/space", spaceH.GetSpace)
 
-		// Folders
-		private.POST("/folders", folderH.CreateFolder)
-		private.GET("/folders", folderH.ListFolders)
-		private.GET("/folders/:id", folderH.GetFolder)
-		private.GET("/folders/:id/ancestors", folderH.GetAncestors)
-		private.PUT("/folders/:id", folderH.RenameFolder)
-		private.DELETE("/folders/:id", folderH.DeleteFolder)
+	// Folders
+	private.POST("/folders", folderH.CreateFolder)
+	private.GET("/folders", folderH.ListFolders)
+	private.GET("/folders/:id", folderH.GetFolder)
+	private.GET("/folders/:id/ancestors", folderH.GetAncestors)
+	private.PUT("/folders/:id", folderH.RenameFolder)
+	private.DELETE("/folders/:id", folderH.DeleteFolder)
 
-		// Files
-		private.POST("/files/upload", fileH.UploadFile)
-		private.GET("/files/:id", fileH.GetFile)
-		private.PUT("/files/:id", fileH.UpdateFile)
-		private.DELETE("/files/:id", fileH.DeleteFile)
-		private.GET("/files", fileH.ListFiles)
-		private.POST("/files/:id/download-token", fileH.CreateDownloadToken)
+	// Files
+	private.POST("/files/upload", fileH.UploadFile)
+	private.GET("/files/:id", fileH.GetFile)
+	private.PUT("/files/:id", fileH.UpdateFile)
+	private.DELETE("/files/:id", fileH.DeleteFile)
+	private.GET("/files", fileH.ListFiles)
+	private.POST("/files/:id/download-token", fileH.CreateDownloadToken)
 
-		// Permissions
-		private.POST("/permissions", permH.GrantPermission)
-		private.GET("/permissions/check", permH.CheckPermission)
-		private.DELETE("/permissions", permH.RevokePermission)
-		private.GET("/permissions", permH.ListPermissions)
+	// Permissions
+	private.POST("/permissions", permH.GrantPermission)
+	private.GET("/permissions/check", permH.CheckPermission)
+	private.DELETE("/permissions", permH.RevokePermission)
+	private.GET("/permissions", permH.ListPermissions)
 
-		// Versions
-		private.GET("/versions", versionH.ListVersions)
-		private.POST("/versions/rollback", versionH.RollbackVersion)
+	// Versions
+	private.GET("/versions", versionH.ListVersions)
+	private.POST("/versions/rollback", versionH.RollbackVersion)
 
-		// Recycle bin
-		private.GET("/recycle", recycleH.ListRecycle)
-		private.POST("/recycle/restore", recycleH.RestoreItem)
-		private.DELETE("/recycle", recycleH.DeletePermanent)
+	// Recycle bin
+	private.GET("/recycle", recycleH.ListRecycle)
+	private.POST("/recycle/restore", recycleH.RestoreItem)
+	private.DELETE("/recycle", recycleH.DeletePermanent)
 
-		// Tags
-		private.POST("/tags/bind", tagH.BindTag)
-		private.POST("/tags/unbind", tagH.UnbindTag)
-		private.GET("/tags/search", tagH.SearchByTags)
+	// Tags
+	private.POST("/tags/bind", tagH.BindTag)
+	private.POST("/tags/unbind", tagH.UnbindTag)
+	private.GET("/tags/search", tagH.SearchByTags)
 
-		// Shares
-		private.POST("/shares", shareH.CreateShare)
-		private.GET("/shares", shareH.ListShares)
-		private.DELETE("/shares", shareH.RevokeShare)
+	// Shares
+	private.POST("/shares", shareH.CreateShare)
+	private.GET("/shares", shareH.ListShares)
+	private.DELETE("/shares", shareH.RevokeShare)
 
-		// Preview
-		private.GET("/preview/:id", previewH.PreviewFile)
-		private.GET("/preview/:id/html", previewH.PreviewHTMLFile)
-	}
+	// Preview
+	private.GET("/preview/:id", previewH.PreviewFile)
+	private.GET("/preview/:id/html", previewH.PreviewHTMLFile)
 
 	// Public directories — readable by JWT (需授权) + API Key
 	pdRead := v1.Group("/public-directories")
@@ -268,8 +274,24 @@ func Setup(cfg *config.Config) *gin.Engine {
 	pdWrite := v1.Group("/public-directories")
 	pdWrite.Use(middleware.RequireAPIKey())
 	pdWrite.POST("/:id/files/upload", publicDirH.UploadFile)
+	pdWrite.POST("/:id/files/content", publicDirContentH.WriteContent)
 	pdWrite.POST("/:id/folders", publicDirH.CreateSubFolder)
 	pdWrite.DELETE("/:id/files/:fileId", publicDirH.DeleteFile)
+
+	// OKF v0.1 reader + bundle management (HybridAuth: JWT or API Key). The
+	// whole group is gated by config.Okf.Enabled so operators can disable OKF
+	// without rebuilding.
+	if cfg.Okf.Enabled {
+		okfGroup := v1.Group("/okf")
+		okfGroup.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret, apiKeySvc))
+		okfGroup.POST("/bundles/register", okfH.RegisterBundle)
+		okfGroup.GET("/bundles", okfH.ListBundles)
+		okfGroup.GET("/bundles/:id", okfH.GetBundle)
+		okfGroup.GET("/bundles/:id/nodes", okfH.ListNodes)
+		okfGroup.GET("/types", okfH.AggregateTypes)
+		okfGroup.POST("/bundles/:id/refresh", okfH.RefreshBundle)
+		okfGroup.DELETE("/bundles/:id", okfH.UnregisterBundle)
+	}
 
 	// Public directory grants — API Key only
 	pdGrants := v1.Group("/public-directories")

@@ -88,6 +88,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.DiskPublicDirectoryGrant{},
 		&model.DiskOAuth2Config{},
 		&model.DiskAdminPasskey{},
+		// OKF v0.1 bundle + materialized node index (P1).
+		&model.OkfBundle{},
+		&model.OkfNode{},
 	)
 }
 
