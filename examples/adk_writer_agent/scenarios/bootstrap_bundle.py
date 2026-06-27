@@ -24,17 +24,19 @@ import time
 from pathlib import Path
 from typing import Any
 
-# Allow `python -m scenarios.bootstrap_bundle` to find the parent package even
-# when run from the scenarios/ subdir. We sys.path-mutate BEFORE the import.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT.parent))
+# Allow `python -m scenarios.bootstrap_bundle` to find the adk_writer_agent
+# package even when the project is NOT pip-installed. We sys.path-mutate BEFORE
+# the import. When the package is installed via `pip install -e .` this is a
+# no-op (the import resolves via the installed egg-link).
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
 
 # python-dotenv is optional at runtime; only used for local dev convenience.
 try:
     from dotenv import load_dotenv  # type: ignore[import-not-found]
 
-    load_dotenv(_REPO_ROOT / ".env")
+    load_dotenv(_PKG_ROOT / ".env")
 except ImportError:  # pragma: no cover - dev convenience only
     pass
 
