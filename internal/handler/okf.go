@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"sort"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/model"
@@ -17,10 +18,10 @@ import (
 // service + OSS stack.
 type okfHandlerService interface {
 	RegisterBundle(ctx context.Context, publicDirectoryID uint64) (*model.OkfBundle, error)
-	ListBundles() ([]model.OkfBundle, error)
-	GetBundle(id uint64) (*model.OkfBundle, error)
-	ListNodesByType(bundleID uint64, typeFilter, tagFilter string) ([]model.OkfNode, error)
-	AggregateByType(bundleID uint64) ([]repository.TypeCount, error)
+	ListBundles(userID, department string) ([]model.OkfBundle, error)
+	GetBundle(id uint64, userID, department string) (*model.OkfBundle, error)
+	ListNodesByType(bundleID uint64, typeFilter, tagFilter, userID, department string) ([]model.OkfNode, error)
+	AggregateByType(bundleID uint64, userID, department string) ([]repository.TypeCount, error)
 	RefreshBundle(ctx context.Context, id uint64) (*model.OkfBundle, error)
 	UnregisterBundle(id uint64) error
 	WriteMarkdown(ctx context.Context, req service.WriteMarkdownRequest) (*model.OkfNode, error)
@@ -62,7 +63,8 @@ func (h *OkfHandler) RegisterBundle(c *gin.Context) {
 
 // ListBundles handles GET /v1/disk/okf/bundles.
 func (h *OkfHandler) ListBundles(c *gin.Context) {
-	bundles, err := h.svc.ListBundles()
+	userID, department := readUserContext(c)
+	bundles, err := h.svc.ListBundles(userID, department)
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return
@@ -80,7 +82,8 @@ func (h *OkfHandler) GetBundle(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	bundle, err := h.svc.GetBundle(id)
+	userID, department := readUserContext(c)
+	bundle, err := h.svc.GetBundle(id, userID, department)
 	if err != nil {
 		h.respondOkfError(c, err)
 		return
@@ -94,7 +97,9 @@ func (h *OkfHandler) GetBundle(c *gin.Context) {
 //   - type: filter by OKF type (exact match)
 //   - tag: filter by tag (exact match; node must include this tag)
 //
-// Both filters are optional.
+// Both filters are optional. The response is wrapped as {"nodes": [...]} so the
+// wire shape matches the OKF SDK docstring contract (an object envelope, not a
+// bare array).
 func (h *OkfHandler) ListNodes(c *gin.Context) {
 	id, err := parseIDParam(c)
 	if err != nil {
@@ -102,7 +107,8 @@ func (h *OkfHandler) ListNodes(c *gin.Context) {
 	}
 	typeFilter := c.Query("type")
 	tagFilter := c.Query("tag")
-	nodes, err := h.svc.ListNodesByType(id, typeFilter, tagFilter)
+	userID, department := readUserContext(c)
+	nodes, err := h.svc.ListNodesByType(id, typeFilter, tagFilter, userID, department)
 	if err != nil {
 		h.respondOkfError(c, err)
 		return
@@ -111,22 +117,25 @@ func (h *OkfHandler) ListNodes(c *gin.Context) {
 	for i := range nodes {
 		out = append(out, nodeToResponse(&nodes[i]))
 	}
-	response.OK(c, out)
+	response.OK(c, gin.H{"nodes": out})
 }
 
 // AggregateTypes handles GET /v1/disk/okf/types.
 //
-// Returns a global type→count rollup across all registered bundles. Useful for
-// dashboards that want to show "what kinds of knowledge live on this disk".
+// Returns a global type→count rollup across all registered bundles as an array
+// of {"type": string, "count": int} objects. The array shape (rather than a
+// map) matches the OKF SDK docstring contract and stays stable when callers
+// iterate without depending on map ordering.
 func (h *OkfHandler) AggregateTypes(c *gin.Context) {
-	bundles, err := h.svc.ListBundles()
+	userID, department := readUserContext(c)
+	bundles, err := h.svc.ListBundles(userID, department)
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return
 	}
 	rollup := map[string]uint32{}
 	for i := range bundles {
-		counts, cErr := h.svc.AggregateByType(bundles[i].ID)
+		counts, cErr := h.svc.AggregateByType(bundles[i].ID, userID, department)
 		if cErr != nil {
 			response.InternalError(c, cErr.Error())
 			return
@@ -135,7 +144,28 @@ func (h *OkfHandler) AggregateTypes(c *gin.Context) {
 			rollup[tc.Type] += tc.Count
 		}
 	}
-	response.OK(c, rollup)
+	// Emit a deterministic order: sorted by count desc, then type asc, so the
+	// response is stable across requests and reproducible in tests.
+	out := make([]gin.H, 0, len(rollup))
+	for _, k := range sortedRollupKeys(rollup) {
+		out = append(out, gin.H{"type": k, "count": rollup[k]})
+	}
+	response.OK(c, out)
+}
+
+// sortedRollupKeys returns the keys of m ordered by count desc then key asc.
+func sortedRollupKeys(m map[string]uint32) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if m[keys[i]] != m[keys[j]] {
+			return m[keys[i]] > m[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
+	return keys
 }
 
 // RefreshBundle handles POST /v1/disk/okf/bundles/:id/refresh.
@@ -172,8 +202,8 @@ func (h *OkfHandler) UnregisterBundle(c *gin.Context) {
 }
 
 // respondOkfError maps service-layer OKF errors onto HTTP responses. Client
-// errors (bad input, not found) get their semantic status; everything else is
-// a 500 so we never leak internal details.
+// errors (bad input, not found, forbidden) get their semantic status; everything
+// else is a 500 so we never leak internal details.
 func (h *OkfHandler) respondOkfError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrOkfMissingType):
@@ -182,11 +212,23 @@ func (h *OkfHandler) respondOkfError(c *gin.Context, err error) {
 		response.BadRequest(c, err.Error())
 	case errors.Is(err, service.ErrOkfReservedName):
 		response.BadRequest(c, err.Error())
+	case errors.Is(err, service.ErrOkfForbidden):
+		response.Forbidden(c, "bundle not visible to caller")
 	case errors.Is(err, service.ErrOkfBundleNotFound):
 		response.NotFound(c, "bundle not found")
 	default:
 		response.InternalError(c, err.Error())
 	}
+}
+
+// readUserContext pulls the caller's userId + department from the gin context.
+// Both are populated by HybridAuth for JWT, OAuth2, and API Key auth, so the
+// OKF reader ACL works uniformly across all three auth methods. The values may
+// be empty for anonymous callers, in which case ListVisible still includes
+// global-scope directories but nothing department-scoped or individually
+// granted.
+func readUserContext(c *gin.Context) (userID, department string) {
+	return c.GetString("userId"), c.GetString("department")
 }
 
 // parseIDParam extracts and validates the :id path parameter as uint64. On
@@ -203,10 +245,11 @@ func parseIDParam(c *gin.Context) (uint64, error) {
 
 // bundleToResponse renders an OkfBundle as a JSON-friendly map. We use a map
 // rather than the model struct directly so the response shape is decoupled
-// from the table layout (the struct exposes GORM tags, not API tags).
+// from the table layout (the struct exposes GORM tags, not API tags). The
+// primary key is exposed as "bundleId" to match the OKF SDK docstring contract.
 func bundleToResponse(b *model.OkfBundle) gin.H {
 	return gin.H{
-		"id":                b.ID,
+		"bundleId":          b.ID,
 		"publicDirectoryId": b.PublicDirectoryID,
 		"okfVersion":        b.OkfVersion,
 		"rootIndexFileId":   b.RootIndexFileID,
@@ -222,7 +265,8 @@ func bundleToResponse(b *model.OkfBundle) gin.H {
 
 // nodeToResponse renders an OkfNode as a JSON-friendly map. Tags and Extra are
 // deserialized so the wire format matches the OKF frontmatter shape rather
-// than the raw JSON column bytes.
+// than the raw JSON column bytes. The primary key is exposed as "nodeId" to
+// match the OKF SDK docstring contract.
 func nodeToResponse(n *model.OkfNode) gin.H {
 	tags, _ := n.GetTags()
 	if tags == nil {
@@ -233,7 +277,7 @@ func nodeToResponse(n *model.OkfNode) gin.H {
 		extra = map[string]any{}
 	}
 	return gin.H{
-		"id":            n.ID,
+		"nodeId":        n.ID,
 		"bundleId":      n.BundleID,
 		"fileId":        n.FileID,
 		"relPath":       n.RelPath,

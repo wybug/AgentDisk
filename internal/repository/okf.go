@@ -185,10 +185,17 @@ func (r *OkfNodeRepo) DeleteByBundle(tx *gorm.DB, bundleID uint64) error {
 	return exec.Where("bundle_id = ?", bundleID).Delete(&model.OkfNode{}).Error
 }
 
-// CountByBundle returns the total node count for a bundle.
-func (r *OkfNodeRepo) CountByBundle(bundleID uint64) (uint32, error) {
+// CountByBundle returns the total node count for a bundle. tx is the
+// in-progress transaction (or nil to use the repo's default handle); passing
+// the caller's tx keeps the count inside the same transaction as the
+// surrounding upserts so the bundle's node_count is consistent on commit.
+func (r *OkfNodeRepo) CountByBundle(tx *gorm.DB, bundleID uint64) (uint32, error) {
+	exec := tx
+	if exec == nil {
+		exec = r.db
+	}
 	var count int64
-	err := r.db.Model(&model.OkfNode{}).Where("bundle_id = ?", bundleID).Count(&count).Error
+	err := exec.Model(&model.OkfNode{}).Where("bundle_id = ?", bundleID).Count(&count).Error
 	if err != nil {
 		return 0, err
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -185,7 +186,7 @@ func (r *fakeOkfNodeRepo) DeleteByBundle(_ *gorm.DB, bundleID uint64) error {
 	return nil
 }
 
-func (r *fakeOkfNodeRepo) CountByBundle(bundleID uint64) (uint32, error) {
+func (r *fakeOkfNodeRepo) CountByBundle(_ *gorm.DB, bundleID uint64) (uint32, error) {
 	var count uint32
 	for _, n := range r.nodes {
 		if n.BundleID == bundleID {
@@ -564,7 +565,7 @@ func TestOkfService_ListBundles(t *testing.T) {
 	_ = bundles.Create(b1)
 	_ = bundles.Create(b2)
 
-	got, err := svc.ListBundles()
+	got, err := svc.ListBundles("", "")
 	if err != nil {
 		t.Fatalf("ListBundles: %v", err)
 	}
@@ -579,7 +580,7 @@ func TestOkfService_GetBundle_NotFound(t *testing.T) {
 	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
 	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
 
-	_, err := svc.GetBundle(999)
+	_, err := svc.GetBundle(999, "", "")
 	if !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
 	}
@@ -617,7 +618,7 @@ func TestOkfService_ListNodes_Filters(t *testing.T) {
 	}
 
 	// Filter by type.
-	got, err := svc.ListNodesByType(bundle.ID, "concept", "")
+	got, err := svc.ListNodesByType(bundle.ID, "concept", "", "", "")
 	if err != nil {
 		t.Fatalf("ListNodesByType concept: %v", err)
 	}
@@ -626,7 +627,7 @@ func TestOkfService_ListNodes_Filters(t *testing.T) {
 	}
 
 	// Filter by tag.
-	got, err = svc.ListNodesByType(bundle.ID, "", "llm")
+	got, err = svc.ListNodesByType(bundle.ID, "", "llm", "", "")
 	if err != nil {
 		t.Fatalf("ListNodesByType llm: %v", err)
 	}
@@ -635,7 +636,7 @@ func TestOkfService_ListNodes_Filters(t *testing.T) {
 	}
 
 	// Filter by both.
-	got, err = svc.ListNodesByType(bundle.ID, "concept", "llm")
+	got, err = svc.ListNodesByType(bundle.ID, "concept", "llm", "", "")
 	if err != nil {
 		t.Fatalf("ListNodesByType concept+llm: %v", err)
 	}
@@ -662,7 +663,7 @@ func TestOkfService_AggregateByType(t *testing.T) {
 	}
 	_ = nodes.Upsert(nil, &model.OkfNode{BundleID: bundle.ID, RelPath: "c.md", Type: "guide"})
 
-	got, err := svc.AggregateByType(bundle.ID)
+	got, err := svc.AggregateByType(bundle.ID, "", "")
 	if err != nil {
 		t.Fatalf("AggregateByType: %v", err)
 	}
@@ -706,6 +707,130 @@ func TestOkfService_UnregisterBundle_NotFound(t *testing.T) {
 
 	if err := svc.UnregisterBundle(999); !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
+	}
+}
+
+// stubVisibility is a hand-rolled okfVisibility for the ACL tests. It returns
+// a fixed map of which public directories the caller can see.
+type stubVisibility struct {
+	visible map[uint64]bool
+	err     error
+}
+
+func (s stubVisibility) VisiblePublicDirIDs(_, _ string) (map[uint64]bool, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.visible, nil
+}
+
+// newOkfSvcWithVisibility wires an OkfService against the fake repos and a
+// stub visibility checker. The caller controls which public directory IDs the
+// caller is allowed to see.
+func newOkfSvcWithVisibility(t *testing.T, visible map[uint64]bool) *OkfService {
+	t.Helper()
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	svc.SetVisibility(stubVisibility{visible: visible})
+	return svc
+}
+
+func TestOkfService_ReaderACL_RejectsCrossUser(t *testing.T) {
+	// Bundle 1 → public directory 7. Caller "alice" has NO grant on PD 7.
+	svc := newOkfSvcWithVisibility(t, map[uint64]bool{}) // nothing visible
+	// Seed bundle pointing at PD 7 directly (bypass RegisterBundle so we don't
+	// have to materialize index.md for this ACL test).
+	bundle := &model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"}
+	if err := svc.bundles.Create(bundle); err != nil {
+		t.Fatalf("seed bundle: %v", err)
+	}
+	// Seed one node so the not-found path is not the failure mode.
+	_ = svc.nodes.Upsert(nil, &model.OkfNode{BundleID: 1, RelPath: "a.md", Type: "concept"})
+
+	// GetBundle rejects.
+	if _, err := svc.GetBundle(1, "alice", "eng"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("GetBundle: expected ErrOkfForbidden, got %v", err)
+	}
+	// ListNodesByType rejects.
+	if _, err := svc.ListNodesByType(1, "", "", "alice", "eng"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("ListNodesByType: expected ErrOkfForbidden, got %v", err)
+	}
+	// AggregateByType rejects.
+	if _, err := svc.AggregateByType(1, "alice", "eng"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("AggregateByType: expected ErrOkfForbidden, got %v", err)
+	}
+	// ListBundles filters the bundle out.
+	got, err := svc.ListBundles("alice", "eng")
+	if err != nil {
+		t.Fatalf("ListBundles: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ListBundles cross-user: got %d bundles, want 0", len(got))
+	}
+}
+
+func TestOkfService_ReaderACL_AllowsGrantedUser(t *testing.T) {
+	// Bundle 1 → PD 7. Caller "alice" has a grant on PD 7.
+	svc := newOkfSvcWithVisibility(t, map[uint64]bool{7: true})
+	bundle := &model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"}
+	if err := svc.bundles.Create(bundle); err != nil {
+		t.Fatalf("seed bundle: %v", err)
+	}
+	_ = svc.nodes.Upsert(nil, &model.OkfNode{BundleID: 1, RelPath: "a.md", Type: "concept"})
+
+	if _, err := svc.GetBundle(1, "alice", "eng"); err != nil {
+		t.Errorf("GetBundle granted: %v", err)
+	}
+	if _, err := svc.ListNodesByType(1, "", "", "alice", "eng"); err != nil {
+		t.Errorf("ListNodesByType granted: %v", err)
+	}
+	if _, err := svc.AggregateByType(1, "alice", "eng"); err != nil {
+		t.Errorf("AggregateByType granted: %v", err)
+	}
+	got, err := svc.ListBundles("alice", "eng")
+	if err != nil {
+		t.Fatalf("ListBundles: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("ListBundles granted: got %d bundles, want 1", len(got))
+	}
+}
+
+func TestOkfService_ReaderACL_VisibilityErrorPropagates(t *testing.T) {
+	// When the visibility check itself errors (e.g. grant repo down), the
+	// reader must surface the wrapped error rather than accidentally allowing
+	// or hiding data via the not-found branch.
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	svc.SetVisibility(stubVisibility{err: errors.New("grant repo down")})
+	bundle := &model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"}
+	_ = bundles.Create(bundle)
+
+	if _, err := svc.GetBundle(1, "alice", "eng"); err == nil {
+		t.Error("GetBundle: expected visibility error, got nil")
+	}
+}
+
+func TestOkfService_ReaderACL_APIAKeySystemUserSeesAll(t *testing.T) {
+	// The HybridAuth middleware sets userId=__system_public__ + department from
+	// the API key. ListVisible treats __system_public__ as a system caller and
+	// returns every active public directory, so the OKF reader ACL should let
+	// API-keyed callers see every bundle. We simulate that by setting visible
+	// to the full set the production pdVisibility would produce.
+	svc := newOkfSvcWithVisibility(t, map[uint64]bool{7: true, 8: true})
+	_ = svc.bundles.Create(&model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"})
+	_ = svc.bundles.Create(&model.OkfBundle{ID: 2, PublicDirectoryID: 8, OkfVersion: "0.1"})
+
+	got, err := svc.ListBundles("__system_public__", "")
+	if err != nil {
+		t.Fatalf("ListBundles: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("ListBundles system user: got %d, want 2 (all bundles)", len(got))
 	}
 }
 
@@ -800,10 +925,10 @@ func TestOkfService_GetBundle_NotFoundBranch(t *testing.T) {
 	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
 	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
 
-	if _, err := svc.AggregateByType(999); !errors.Is(err, ErrOkfBundleNotFound) {
+	if _, err := svc.AggregateByType(999, "", ""); !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("AggregateByType: expected ErrOkfBundleNotFound, got %v", err)
 	}
-	if _, err := svc.ListNodesByType(999, "", ""); !errors.Is(err, ErrOkfBundleNotFound) {
+	if _, err := svc.ListNodesByType(999, "", "", "", ""); !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("ListNodesByType: expected ErrOkfBundleNotFound, got %v", err)
 	}
 	if _, err := svc.RefreshBundle(context.Background(), 999); !errors.Is(err, ErrOkfBundleNotFound) {
@@ -872,7 +997,7 @@ func TestOkfService_WriteMarkdown_RapidRewrite(t *testing.T) {
 	}
 	// Bundle still has index.md + note.md = 2 nodes; second write must upsert
 	// in place rather than adding a third.
-	count, _ := nodes.CountByBundle(first.BundleID)
+	count, _ := nodes.CountByBundle(nil, first.BundleID)
 	if count != 2 {
 		t.Errorf("node count = %d, want 2 (upsert should not duplicate)", count)
 	}
@@ -897,14 +1022,18 @@ func TestOkfService_IsNotFound(t *testing.T) {
 	if !isNotFound(gorm.ErrRecordNotFound) {
 		t.Error("gorm.ErrRecordNotFound should be not-found")
 	}
-	if !isNotFound(errors.New("record not found")) {
-		t.Error("literal 'record not found' should be not-found")
+	// Wrapped sentinel must still be detected (public directory service wraps
+	// its repo errors with fmt.Errorf).
+	wrapped := fmt.Errorf("lookup failed: %w", gorm.ErrRecordNotFound)
+	if !isNotFound(wrapped) {
+		t.Error("wrapped gorm.ErrRecordNotFound should be not-found")
 	}
-	if !isNotFound(errors.New("not found")) {
-		t.Error("literal 'not found' should be not-found")
-	}
+	// Unrelated errors must not be treated as not-found.
 	if isNotFound(errors.New("disk full")) {
 		t.Error("unrelated error should not be not-found")
+	}
+	if isNotFound(errors.New("record not found")) {
+		t.Error("literal string match must not be treated as not-found (use errors.Is)")
 	}
 }
 
@@ -1179,7 +1308,7 @@ func TestOkfService_RefreshBundle_WalksTree(t *testing.T) {
 	}
 
 	// The walk must descend both nested folders.
-	agg, err := svc.AggregateByType(bundle.ID)
+	agg, err := svc.AggregateByType(bundle.ID, "", "")
 	if err != nil {
 		t.Fatalf("AggregateByType: %v", err)
 	}

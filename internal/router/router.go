@@ -113,8 +113,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 	oauth2ConfigSvc := service.NewOAuth2ConfigService(oauth2ConfigRepo)
 	// OKF service shares the public directory service for storage + folder
 	// lookups, so the original pdWrite behavior is unchanged when OKF is
-	// disabled at the route layer.
-	okfSvc := service.NewOkfService(okfBundleRepo, okfNodeRepo, publicDirSvc, cfg.Database.Driver)
+	// disabled at the route layer. db is the same GORM handle the repos use, so
+	// the OKF service can wrap multi-step materialization in a transaction.
+	okfSvc := service.NewOkfService(okfBundleRepo, okfNodeRepo, publicDirSvc, cfg.Database.Driver, db)
 
 	// OAuth2 auth handler (reads DB config per-request for hot-reload)
 	authH := handler.NewAuthHandler(oauth2ConfigSvc, cfg.Server.FrontendURL)
@@ -274,14 +275,18 @@ func Setup(cfg *config.Config) *gin.Engine {
 	pdWrite := v1.Group("/public-directories")
 	pdWrite.Use(middleware.RequireAPIKey())
 	pdWrite.POST("/:id/files/upload", publicDirH.UploadFile)
-	pdWrite.POST("/:id/files/content", publicDirContentH.WriteContent)
 	pdWrite.POST("/:id/folders", publicDirH.CreateSubFolder)
 	pdWrite.DELETE("/:id/files/:fileId", publicDirH.DeleteFile)
 
 	// OKF v0.1 reader + bundle management (HybridAuth: JWT or API Key). The
 	// whole group is gated by config.Okf.Enabled so operators can disable OKF
-	// without rebuilding.
+	// without rebuilding. The content-writer route lives here too because it
+	// materializes nodes through the OKF service, so it must stay disabled when
+	// OKF is off — otherwise an API-keyed writer could trigger materialization
+	// even after operators flipped the OKF switch off.
 	if cfg.Okf.Enabled {
+		pdWrite.POST("/:id/files/content", publicDirContentH.WriteContent)
+
 		okfGroup := v1.Group("/okf")
 		okfGroup.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret, apiKeySvc))
 		okfGroup.POST("/bundles/register", okfH.RegisterBundle)

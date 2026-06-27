@@ -30,6 +30,10 @@ var (
 	ErrOkfReservedName = errors.New("okf: reserved file name has extra constraints")
 	// ErrOkfBundleNotFound is returned when a bundle lookup misses.
 	ErrOkfBundleNotFound = errors.New("okf: bundle not found")
+	// ErrOkfForbidden is returned when a reader asks for a bundle whose
+	// underlying public directory is not visible to them. Surfaces to handlers
+	// as 403 to enforce CLAUDE.md §4.6 userId isolation on the OKF reader API.
+	ErrOkfForbidden = errors.New("okf: bundle not visible to caller")
 )
 
 // okfBundleRepo is the storage interface for OKF bundles.
@@ -50,17 +54,29 @@ type okfNodeRepo interface {
 	ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
 	AggregateByType(bundleID uint64) ([]repository.TypeCount, error)
 	DeleteByBundle(tx *gorm.DB, bundleID uint64) error
-	CountByBundle(bundleID uint64) (uint32, error)
+	CountByBundle(tx *gorm.DB, bundleID uint64) (uint32, error)
 }
 
 // okfPublicDir captures the public-directory operations OKF needs: locating
 // the directory, writing files at nested paths, reading file contents, and
-// discovering files by relPath.
+// discovering files by relPath. ListVisible feeds the reader-side visibility
+// filter so a caller can only read bundles whose public directory they can
+// already see via grant / scope rules.
 type okfPublicDir interface {
 	GetPublicDirectory(id uint64) (*model.DiskPublicDirectory, error)
 	UploadFileAt(ctx context.Context, publicDirID uint64, relPath, contentType string, content []byte) (*model.DiskFile, error)
 	ReadFileContent(ctx context.Context, fileID uint64) ([]byte, error)
 	FindFileByRelPath(publicDirID uint64, relPath string) (*model.DiskFile, error)
+}
+
+// okfVisibility is the narrow interface OKF needs to enforce reader-side
+// visibility. It is split from okfPublicDir so unit tests can stub the
+// visibility check without standing up the full public directory service.
+type okfVisibility interface {
+	// VisiblePublicDirIDs returns the set of public directory IDs the caller
+	// can see. System-scoped callers (API Key with __system_public__) see all
+	// active public directories via ListVisible with the system sentinel.
+	VisiblePublicDirIDs(department, userID string) (map[uint64]bool, error)
 }
 
 // OkfService implements OKF v0.1 bundle registration, the materialized node
@@ -71,23 +87,57 @@ type OkfService struct {
 	bundles  okfBundleRepo
 	nodes    okfNodeRepo
 	pdSvc    okfPublicDir
+	vis      okfVisibility
 	dbDriver string
+	// db is the GORM handle used to wrap multi-step materialization in a single
+	// transaction. It is nil in unit tests that swap in fake repos; in that case
+	// runTx falls back to executing the body without a real transaction.
+	db *gorm.DB
+}
+
+// pdVisibility adapts PublicDirectoryService.ListVisible onto the
+// okfVisibility interface. The OKF service uses it to filter the reader APIs
+// (GetBundle / ListNodes / ListBundles / AggregateTypes) so a caller can only
+// see bundles whose underlying public directory they already have access to.
+type pdVisibility struct {
+	pd *PublicDirectoryService
+}
+
+// VisiblePublicDirIDs delegates to PublicDirectoryService.ListVisible and
+// projects the result into a set lookup.
+func (v pdVisibility) VisiblePublicDirIDs(department, userID string) (map[uint64]bool, error) {
+	dirs, err := v.pd.ListVisible(department, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint64]bool, len(dirs))
+	for i := range dirs {
+		out[dirs[i].ID] = true
+	}
+	return out, nil
 }
 
 // NewOkfService creates a new OkfService. dbDriver is the configured database
 // driver ("mysql" or "sqlite"); it selects which ListByBundle implementation
 // is used for tag filtering, because the JSON_CONTAINS predicate is MySQL-only.
-func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeRepo, pdSvc *PublicDirectoryService, dbDriver string) *OkfService {
+// db is the GORM handle used to transactionally wrap node materialization; pass
+// the same *gorm.DB the repos use.
+func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeRepo, pdSvc *PublicDirectoryService, dbDriver string, db *gorm.DB) *OkfService {
 	return &OkfService{
 		bundles:  bundles,
 		nodes:    nodes,
 		pdSvc:    pdSvc,
+		vis:      pdVisibility{pd: pdSvc},
 		dbDriver: dbDriver,
+		db:       db,
 	}
 }
 
 // NewOkfServiceFromRepo constructs an OkfService from raw repo interfaces.
-// Intended for tests that swap in fake repos.
+// Intended for tests that swap in fake repos. The service runs without a real
+// *gorm.DB; multi-step operations execute without a surrounding transaction.
+// Callers that want reader-side visibility filtering should also use
+// SetVisibility to inject a stub; otherwise readers see every bundle.
 func NewOkfServiceFromRepo(bundles okfBundleRepo, nodes okfNodeRepo, pdSvc okfPublicDir, dbDriver string) *OkfService {
 	return &OkfService{
 		bundles:  bundles,
@@ -96,6 +146,11 @@ func NewOkfServiceFromRepo(bundles okfBundleRepo, nodes okfNodeRepo, pdSvc okfPu
 		dbDriver: dbDriver,
 	}
 }
+
+// SetVisibility overrides the reader-side visibility checker. Used by tests
+// that swap in fake repos and want to drive the ACL path without the full
+// public directory service.
+func (s *OkfService) SetVisibility(v okfVisibility) { s.vis = v }
 
 // RegisterBundle registers a public directory as an OKF bundle. The directory
 // must contain an index.md whose frontmatter declares okf_version; otherwise
@@ -135,12 +190,12 @@ func (s *OkfService) RegisterBundle(ctx context.Context, publicDirectoryID uint6
 
 	// Materialize index.md as the first node so the bundle has a usable index
 	// immediately after registration.
-	if _, mErr := s.materializeNode(ctx, bundle, model.OkfReservedRootRelPath, indexFile, body); mErr != nil {
+	if _, mErr := s.materializeNode(ctx, nil, bundle, model.OkfReservedRootRelPath, indexFile, body); mErr != nil {
 		// Materialization failure must not fail registration: the bundle row is
 		// the source of truth, and a later RefreshBundle can repair the index.
 		_ = mErr
 	}
-	bundle.NodeCount, _ = s.nodes.CountByBundle(bundle.ID)
+	bundle.NodeCount, _ = s.nodes.CountByBundle(nil, bundle.ID)
 	return bundle, nil
 }
 
@@ -226,7 +281,9 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 	}
 
 	// If this write is index.md, refresh bundle root metadata so titles /
-	// descriptions stay in sync with the latest content.
+	// descriptions stay in sync with the latest content. This runs before the
+	// materialization transaction so a metadata-update failure surfaces
+	// immediately rather than as a transaction rollback.
 	if relPath == model.OkfReservedRootRelPath {
 		bundle.RootIndexFileID = file.ID
 		bundle.Title = fm.Title
@@ -237,12 +294,26 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 		_ = s.bundles.Update(bundle)
 	}
 
-	node, mErr := s.materializeNode(ctx, bundle, relPath, file, req.Content)
-	if mErr != nil {
-		return nil, mErr
+	// Materialize the node, recompute node_count, and persist the bundle in a
+	// single transaction so concurrent writers cannot observe a half-updated
+	// index (node materialized but count stale, or vice versa). On rollback the
+	// caller sees the error and the OSS file is the only durable side-effect.
+	var node *model.OkfNode
+	if err := s.runTx(ctx, func(tx *gorm.DB) error {
+		n, mErr := s.materializeNode(ctx, tx, bundle, relPath, file, req.Content)
+		if mErr != nil {
+			return mErr
+		}
+		node = n
+		count, cErr := s.nodes.CountByBundle(tx, bundle.ID)
+		if cErr != nil {
+			return fmt.Errorf("count nodes: %w", cErr)
+		}
+		bundle.NodeCount = count
+		return s.bundles.Update(bundle)
+	}); err != nil {
+		return nil, err
 	}
-	bundle.NodeCount, _ = s.nodes.CountByBundle(bundle.ID)
-	_ = s.bundles.Update(bundle)
 	return node, nil
 }
 
@@ -286,8 +357,10 @@ func (s *OkfService) validateFrontmatterForPath(relPath string, fm okf.Frontmatt
 // materializeNode builds an OkfNode row from the markdown body, computes a
 // content hash for change detection, and upserts it. Unknown frontmatter keys
 // are preserved in extra_json (OKF §9). The function is forgiving: parse
-// failures are surfaced as a no-op rather than rejecting the write.
-func (s *OkfService) materializeNode(_ context.Context, bundle *model.OkfBundle, relPath string, file *model.DiskFile, body []byte) (*model.OkfNode, error) {
+// failures are surfaced as a no-op rather than rejecting the write. tx is the
+// in-progress transaction (or nil when running outside a transaction, e.g. in
+// unit tests with fake repos).
+func (s *OkfService) materializeNode(_ context.Context, tx *gorm.DB, bundle *model.OkfBundle, relPath string, file *model.DiskFile, body []byte) (*model.OkfNode, error) {
 	fm, _, err := okf.Parse(body)
 	if err != nil {
 		return nil, fmt.Errorf("parse markdown: %w", err)
@@ -314,7 +387,7 @@ func (s *OkfService) materializeNode(_ context.Context, bundle *model.OkfBundle,
 		return nil, fmt.Errorf("serialize extra: %w", err)
 	}
 
-	if err := s.nodes.Upsert(nil, node); err != nil {
+	if err := s.nodes.Upsert(tx, node); err != nil {
 		return nil, fmt.Errorf("upsert node: %w", err)
 	}
 	return node, nil
@@ -330,15 +403,36 @@ func detectBrokenLink(_ *model.OkfBundle, _ string, _ []byte) bool {
 	return false
 }
 
-// ListBundles returns every registered bundle. Status filter is currently
-// unused (always returns active + archived); the repository accepts it for a
-// future "archived" view.
-func (s *OkfService) ListBundles() ([]model.OkfBundle, error) {
-	return s.bundles.List("", 0, 0)
+// ListBundles returns every registered bundle visible to the caller. userID +
+// department drive the same ListVisible filter as the public directory API, so
+// a reader cannot enumerate bundles whose underlying directory they would not
+// be allowed to open directly.
+func (s *OkfService) ListBundles(userID, department string) ([]model.OkfBundle, error) {
+	all, err := s.bundles.List("", 0, 0)
+	if err != nil {
+		return nil, err
+	}
+	allowed, err := s.visibleBundleSet(userID, department)
+	if err != nil {
+		return nil, err
+	}
+	// nil allowed set means "no visibility provider configured" (unit tests);
+	// return everything unchanged so the legacy callers keep working.
+	if allowed == nil {
+		return all, nil
+	}
+	out := make([]model.OkfBundle, 0, len(all))
+	for i := range all {
+		if allowed[all[i].PublicDirectoryID] {
+			out = append(out, all[i])
+		}
+	}
+	return out, nil
 }
 
-// GetBundle returns a single bundle by ID.
-func (s *OkfService) GetBundle(id uint64) (*model.OkfBundle, error) {
+// GetBundle returns a single bundle by ID. Returns ErrOkfForbidden when the
+// caller cannot see the bundle's underlying public directory.
+func (s *OkfService) GetBundle(id uint64, userID, department string) (*model.OkfBundle, error) {
 	b, err := s.bundles.GetByID(id)
 	if err != nil {
 		if isNotFound(err) {
@@ -346,16 +440,24 @@ func (s *OkfService) GetBundle(id uint64) (*model.OkfBundle, error) {
 		}
 		return nil, err
 	}
+	if err := s.requireBundleVisible(b, userID, department); err != nil {
+		return nil, err
+	}
 	return b, nil
 }
 
 // ListNodesByType returns the nodes for a bundle, optionally narrowed by type
 // or tag. type and tag are exact-match filters; pass empty strings to skip.
-func (s *OkfService) ListNodesByType(bundleID uint64, typeFilter, tagFilter string) ([]model.OkfNode, error) {
-	if _, err := s.bundles.GetByID(bundleID); err != nil {
+// Returns ErrOkfForbidden when the caller cannot see the bundle.
+func (s *OkfService) ListNodesByType(bundleID uint64, typeFilter, tagFilter, userID, department string) ([]model.OkfNode, error) {
+	bundle, err := s.bundles.GetByID(bundleID)
+	if err != nil {
 		if isNotFound(err) {
 			return nil, ErrOkfBundleNotFound
 		}
+		return nil, err
+	}
+	if err := s.requireBundleVisible(bundle, userID, department); err != nil {
 		return nil, err
 	}
 	filter := repository.NodeListFilter{Type: typeFilter, Tag: tagFilter}
@@ -365,20 +467,60 @@ func (s *OkfService) ListNodesByType(bundleID uint64, typeFilter, tagFilter stri
 	return s.nodes.ListByBundle(bundleID, filter)
 }
 
-// AggregateByType returns per-type node counts for a bundle.
-func (s *OkfService) AggregateByType(bundleID uint64) ([]repository.TypeCount, error) {
-	if _, err := s.bundles.GetByID(bundleID); err != nil {
+// AggregateByType returns per-type node counts for a bundle. Returns
+// ErrOkfForbidden when the caller cannot see the bundle.
+func (s *OkfService) AggregateByType(bundleID uint64, userID, department string) ([]repository.TypeCount, error) {
+	bundle, err := s.bundles.GetByID(bundleID)
+	if err != nil {
 		if isNotFound(err) {
 			return nil, ErrOkfBundleNotFound
 		}
 		return nil, err
 	}
+	if err := s.requireBundleVisible(bundle, userID, department); err != nil {
+		return nil, err
+	}
 	return s.nodes.AggregateByType(bundleID)
+}
+
+// requireBundleVisible returns ErrOkfForbidden when the caller's visibility
+// set does not include the bundle's public directory. When no visibility
+// provider is configured (nil), the check is skipped — this preserves the
+// unit-test path that wires OkfService via NewOkfServiceFromRepo without a
+// public directory service.
+func (s *OkfService) requireBundleVisible(b *model.OkfBundle, userID, department string) error {
+	if s.vis == nil {
+		return nil
+	}
+	allowed, err := s.vis.VisiblePublicDirIDs(department, userID)
+	if err != nil {
+		return fmt.Errorf("compute visibility: %w", err)
+	}
+	if !allowed[b.PublicDirectoryID] {
+		return ErrOkfForbidden
+	}
+	return nil
+}
+
+// visibleBundleSet returns the set of public directory IDs visible to the
+// caller. Returns an empty set (not nil) so callers can index it without a
+// nil check. When no visibility provider is configured, every bundle is
+// visible (preserves the unit-test path).
+func (s *OkfService) visibleBundleSet(userID, department string) (map[uint64]bool, error) {
+	if s.vis == nil {
+		// Without a visibility checker, return nil to signal "no filtering";
+		// the caller treats nil as "all visible".
+		return nil, nil
+	}
+	return s.vis.VisiblePublicDirIDs(department, userID)
 }
 
 // RefreshBundle re-scans the public directory for .md files and rebuilds the
 // materialized node index. Existing nodes are deleted before re-scanning, so
 // removed files drop out of the index. The bundle's node_count is updated.
+// The whole delete → walk → upsert → count → update sequence runs in a single
+// transaction so readers never observe an empty index between the clear and
+// the rebuild, and a failed refresh rolls back the original nodes.
 func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBundle, error) {
 	bundle, err := s.bundles.GetByID(id)
 	if err != nil {
@@ -388,24 +530,33 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 		return nil, err
 	}
 
-	if err := s.nodes.DeleteByBundle(nil, bundle.ID); err != nil {
-		return nil, fmt.Errorf("clear nodes: %w", err)
-	}
-
-	// Walk the public directory tree and re-materialize every .md file.
-	if err := s.walkAndMaterialize(ctx, bundle, bundle.PublicDirectoryID); err != nil {
+	if err := s.runTx(ctx, func(tx *gorm.DB) error {
+		if err := s.nodes.DeleteByBundle(tx, bundle.ID); err != nil {
+			return fmt.Errorf("clear nodes: %w", err)
+		}
+		// Walk the public directory tree and re-materialize every .md file
+		// inside the same transaction so a partial refresh rolls back.
+		if err := s.walkAndMaterialize(ctx, tx, bundle, bundle.PublicDirectoryID); err != nil {
+			return err
+		}
+		count, cErr := s.nodes.CountByBundle(tx, bundle.ID)
+		if cErr != nil {
+			return fmt.Errorf("count nodes: %w", cErr)
+		}
+		bundle.NodeCount = count
+		return s.bundles.Update(bundle)
+	}); err != nil {
 		return nil, err
 	}
-
-	bundle.NodeCount, _ = s.nodes.CountByBundle(bundle.ID)
-	_ = s.bundles.Update(bundle)
 	return bundle, nil
 }
 
 // walkAndMaterialize scans the public directory for markdown files and
 // re-materializes each one. Used by RefreshBundle. The walk descends the
-// entire folder tree under the bundle's public directory.
-func (s *OkfService) walkAndMaterialize(ctx context.Context, bundle *model.OkfBundle, publicDirID uint64) error {
+// entire folder tree under the bundle's public directory. tx is the
+// in-progress transaction (or nil in unit tests) so each upsert joins the
+// caller's atomic refresh.
+func (s *OkfService) walkAndMaterialize(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, publicDirID uint64) error {
 	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
 	if !ok {
 		// In tests with a stub pdSvc we cannot walk the folder tree; the
@@ -418,14 +569,15 @@ func (s *OkfService) walkAndMaterialize(ctx context.Context, bundle *model.OkfBu
 		return fmt.Errorf("public directory not found: %w", err)
 	}
 	rootFolder := &model.DiskFolder{ID: pd.FolderID, FolderName: "", FullPath: pd.FixedPath}
-	return s.materializeFolderTree(ctx, bundle, rootFolder, "")
+	return s.materializeFolderTree(ctx, tx, bundle, rootFolder, "")
 }
 
 // materializeFolderTree walks one folder, materializes its .md files, then
 // recurses into its sub-folders. relPrefix is the bundle-relative path of the
 // current folder ("" at the root). Per-file parse errors are tolerated so one
-// bad file does not abort a refresh.
-func (s *OkfService) materializeFolderTree(ctx context.Context, bundle *model.OkfBundle, folder *model.DiskFolder, relPrefix string) error {
+// bad file does not abort a refresh. tx threads the surrounding transaction
+// through each per-file upsert.
+func (s *OkfService) materializeFolderTree(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, folder *model.DiskFolder, relPrefix string) error {
 	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
 	if !ok {
 		return nil
@@ -448,7 +600,7 @@ func (s *OkfService) materializeFolderTree(ctx context.Context, bundle *model.Ok
 		if rErr != nil {
 			continue
 		}
-		if _, mErr := s.materializeNode(ctx, bundle, rel, &f, body); mErr != nil {
+		if _, mErr := s.materializeNode(ctx, tx, bundle, rel, &f, body); mErr != nil {
 			continue
 		}
 	}
@@ -466,7 +618,7 @@ func (s *OkfService) materializeFolderTree(ctx context.Context, bundle *model.Ok
 		if relPrefix != "" {
 			subRel = relPrefix + "/" + child.FolderName
 		}
-		if err := s.materializeFolderTree(ctx, bundle, &child, subRel); err != nil {
+		if err := s.materializeFolderTree(ctx, tx, bundle, &child, subRel); err != nil {
 			return err
 		}
 	}
@@ -489,9 +641,11 @@ func (s *OkfService) UnregisterBundle(id uint64) error {
 	return s.bundles.Delete(id)
 }
 
-// isNotFound returns true for any "record not found" error from GORM or any of
-// the test stubs that mimic ErrRecordNotFound. We accept error wrapping
-// because the public directory service fmt.Errorf-wraps its underlying errors.
+// isNotFound returns true for any "record not found" error from GORM or the
+// bundle-not-found sentinel. Uses errors.Is so it works through fmt.Errorf
+// wrapping (the public directory service wraps its repo errors) and against
+// GORM's sentinel directly (which the OkfBundleRepo / OkfNodeRepo return
+// verbatim from db.First().Error).
 func isNotFound(err error) bool {
 	if err == nil {
 		return false
@@ -499,11 +653,19 @@ func isNotFound(err error) bool {
 	if errors.Is(err, ErrOkfBundleNotFound) {
 		return true
 	}
-	// repository lookups return raw gorm.ErrRecordNotFound (not wrapped) so a
-	// direct equality check is enough. The "not found" string match covers the
-	// test stubs that mimic ErrRecordNotFound with a literal error.
-	msg := err.Error()
-	return strings.Contains(msg, "record not found") || msg == "not found"
+	return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+// runTx wraps fn in a GORM transaction when s.db is configured, so that
+// multi-step materialization (delete → walk → upsert → count → update) is
+// atomic. When s.db is nil (unit tests with fake repos), fn runs directly with
+// a nil tx and the fake repos fall back to their own handle. ctx is threaded
+// in via WithContext so long-running materializations honor request cancel.
+func (s *OkfService) runTx(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	if s.db == nil {
+		return fn(nil)
+	}
+	return s.db.WithContext(ctx).Transaction(fn)
 }
 
 // normalizeRelPath cleans a bundle-relative path: trims leading/trailing
