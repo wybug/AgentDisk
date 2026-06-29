@@ -147,7 +147,7 @@ func TestExtractLinks_EmptyBody(t *testing.T) {
 // referencing a missing target. After ScanBundleLinks the source node's
 // has_broken_link flag must be true and the missing target reported.
 func TestScanBundleLinks_DetectsBrokenLink(t *testing.T) {
-	_, nodes, pub, svc := okfTestHarness(t)
+	_, nodes, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -189,7 +189,7 @@ func TestScanBundleLinks_DetectsBrokenLink(t *testing.T) {
 // TestScanBundleLinks_TargetExists verifies that a link to an existing node is
 // not flagged, and that the source node's flag stays false.
 func TestScanBundleLinks_TargetExists(t *testing.T) {
-	_, nodes, pub, svc := okfTestHarness(t)
+	_, nodes, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -225,7 +225,7 @@ func TestScanBundleLinks_TargetExists(t *testing.T) {
 // TestScanBundleLinks_NotFound asserts the bundle-not-found sentinel is
 // returned for a missing bundle.
 func TestScanBundleLinks_NotFound(t *testing.T) {
-	_, _, _, svc := okfTestHarness(t)
+	_, _, _, _, svc := okfTestHarness(t)
 	_, err := svc.ScanBundleLinks(context.Background(), 999)
 	if !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
@@ -235,7 +235,7 @@ func TestScanBundleLinks_NotFound(t *testing.T) {
 // TestScanBundleLinks_ClearsFlagWhenFixed verifies that fixing a previously
 // broken link flips has_broken_link back to false on a subsequent scan.
 func TestScanBundleLinks_ClearsFlagWhenFixed(t *testing.T) {
-	_, nodes, pub, svc := okfTestHarness(t)
+	_, nodes, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -275,7 +275,7 @@ func TestScanBundleLinks_ClearsFlagWhenFixed(t *testing.T) {
 // TestListBrokenLinks_Pagination exercises the cursor pagination path by
 // exceeding the limit and walking two pages.
 func TestListBrokenLinks_Pagination(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -319,7 +319,7 @@ func TestListBrokenLinks_Pagination(t *testing.T) {
 // TestListBrokenLinks_Forbidden covers the visibility check: an opaque
 // visibility stub that denies the bundle forces ErrOkfForbidden.
 func TestListBrokenLinks_Forbidden(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	bundle, err := svc.RegisterBundle(context.Background(), 7)
 	if err != nil {
@@ -335,7 +335,7 @@ func TestListBrokenLinks_Forbidden(t *testing.T) {
 
 // TestListBrokenLinks_NotFound covers the missing-bundle path.
 func TestListBrokenLinks_NotFound(t *testing.T) {
-	_, _, _, svc := okfTestHarness(t)
+	_, _, _, _, svc := okfTestHarness(t)
 	_, _, err := svc.ListBrokenLinks(context.Background(), 999, "", "", 0, 50)
 	if !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
@@ -347,7 +347,7 @@ func TestListBrokenLinks_NotFound(t *testing.T) {
 // must get ErrOkfForbidden rather than a scan running over data they cannot
 // otherwise read. The handler maps this to 403.
 func TestScanBundleLinksForHandler_Forbidden(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	bundle, err := svc.RegisterBundle(context.Background(), 7)
 	if err != nil {
@@ -362,23 +362,24 @@ func TestScanBundleLinksForHandler_Forbidden(t *testing.T) {
 // TestScanBundleLinksForHandler_NotFound covers the missing-bundle path so
 // the wrapper surfaces the same sentinel as the underlying scan.
 func TestScanBundleLinksForHandler_NotFound(t *testing.T) {
-	_, _, _, svc := okfTestHarness(t)
+	_, _, _, _, svc := okfTestHarness(t)
 	if _, err := svc.ScanBundleLinksForHandler(context.Background(), 999, "user-x", "dept-y"); !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
 	}
 }
 
 // okfTestHarness wires a fresh OkfService against in-memory fakes. Returns
-// the bundle repo, node repo, public dir stub, and service so individual
-// tests can drive whichever layer they need.
-func okfTestHarness(t *testing.T) (*fakeOkfBundleRepo, *fakeOkfNodeRepo, *fakeOkfPublicDir, *OkfService) {
+// the bundle repo, node repo, edge repo, public dir stub, and service so
+// individual tests can drive whichever layer they need.
+func okfTestHarness(t *testing.T) (*fakeOkfBundleRepo, *fakeOkfNodeRepo, *fakeOkfEdgeRepo, *fakeOkfPublicDir, *OkfService) {
 	t.Helper()
 	bundles := newFakeOkfBundleRepo()
 	nodes := newFakeOkfNodeRepo()
+	edges := newFakeOkfEdgeRepo(nodes)
 	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
 	pub := newFakeOkfPublicDir(pd)
-	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
-	return bundles, nodes, pub, svc
+	svc := NewOkfServiceFromRepo(bundles, nodes, edges, pub, "sqlite")
+	return bundles, nodes, edges, pub, svc
 }
 
 // Ensure gorm import is exercised by helpers that check ErrRecordNotFound in

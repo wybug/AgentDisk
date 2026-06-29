@@ -97,6 +97,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	passkeyRepo := repository.NewAdminPasskeyRepo(db)
 	okfBundleRepo := repository.NewOkfBundleRepo(db)
 	okfNodeRepo := repository.NewOkfNodeRepo(db)
+	okfEdgeRepo := repository.NewOkfEdgeRepo(db)
 
 	// Services
 	spaceSvc := service.NewSpaceService(spaceRepo)
@@ -117,7 +118,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// lookups, so the original pdWrite behavior is unchanged when OKF is
 	// disabled at the route layer. db is the same GORM handle the repos use, so
 	// the OKF service can wrap multi-step materialization in a transaction.
-	okfSvc := service.NewOkfService(okfBundleRepo, okfNodeRepo, publicDirSvc, cfg.Database.Driver, db)
+	okfSvc := service.NewOkfService(okfBundleRepo, okfNodeRepo, okfEdgeRepo, publicDirSvc, cfg.Database.Driver, db)
 	okfSvc.SetAutoIndexUpdate(cfg.Okf.AutoIndexUpdate)
 	if cfg.Okf.LockTTLSeconds > 0 || cfg.Okf.RedisAddr != "" {
 		// Wire the Redis-backed bundle lock when an address is configured. A

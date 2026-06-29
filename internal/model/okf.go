@@ -31,8 +31,8 @@ type OkfBundle struct {
 	Status            string    `gorm:"size:16;not null;default:active" json:"status"`
 	NodeCount         uint32    `gorm:"not null;default:0" json:"nodeCount"`
 	EdgeCount         uint32    `gorm:"not null;default:0" json:"edgeCount"`
-	CreatedAt         time.Time `gorm:"type:datetime(3);not null" json:"createdAt"`
-	UpdatedAt         time.Time `gorm:"type:datetime(3);not null" json:"updatedAt"`
+	CreatedAt         time.Time `gorm:"type:datetime;not null" json:"createdAt"`
+	UpdatedAt         time.Time `gorm:"type:datetime;not null" json:"updatedAt"`
 }
 
 // TableName overrides the table name for OkfBundle.
@@ -53,14 +53,42 @@ type OkfNode struct {
 	TagsJSON      *string   `gorm:"type:json" json:"tagsJson,omitempty"`
 	Timestamp     string    `gorm:"size:32" json:"timestamp"`
 	HasBrokenLink bool      `gorm:"not null;default:false" json:"hasBrokenLink"`
+	LinkCount     uint32    `gorm:"not null;default:0" json:"linkCount"`
+	BacklinkCount uint32    `gorm:"not null;default:0" json:"backlinkCount"`
 	ExtraJSON     *string   `gorm:"type:json" json:"extraJson,omitempty"`
 	ContentHash   string    `gorm:"size:64;index:idx_content_hash" json:"contentHash"`
-	CreatedAt     time.Time `gorm:"type:datetime(3);not null" json:"createdAt"`
-	UpdatedAt     time.Time `gorm:"type:datetime(3);not null" json:"updatedAt"`
+	CreatedAt     time.Time `gorm:"type:datetime;not null" json:"createdAt"`
+	UpdatedAt     time.Time `gorm:"type:datetime;not null" json:"updatedAt"`
 }
 
 // TableName overrides the table name for OkfNode.
 func (OkfNode) TableName() string { return "disk_okf_node" }
+
+// OkfEdge is one directed link between two OkfNodes (or to a missing dst,
+// when DstExists=false). The edge table is the materialized knowledge graph:
+// writes to a bundle's .md files upsert the source node's edges atomically.
+//
+// All queries carry PublicDirID so a bundle's graph slice is clustered on a
+// composite index — that is what makes 1-hop and reverse traversal cheap. The
+// unique key on (src_node_id, dst_rel_path, src_line) makes edge replacement
+// idempotent: re-writing the same .md produces the same edge set.
+type OkfEdge struct {
+	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	PublicDirID uint64    `gorm:"not null;index:idx_edge_src,priority:1;index:idx_edge_dst,priority:1;index:idx_edge_broken,priority:1;index:idx_edge_relpath,priority:1" json:"publicDirId"`
+	SrcNodeID   uint64    `gorm:"not null;uniqueIndex:uk_edge_src_line,priority:1;index:idx_edge_src,priority:2" json:"srcNodeId"`
+	DstNodeID   uint64    `gorm:"index:idx_edge_dst,priority:2" json:"dstNodeId"`
+	DstRelPath  string    `gorm:"size:1024;not null;uniqueIndex:uk_edge_src_line,priority:2" json:"dstRelPath"`
+	DstExists   bool      `gorm:"not null;default:false;index:idx_edge_broken,priority:2" json:"dstExists"`
+	LinkText    string    `gorm:"size:512" json:"linkText"`
+	SrcLine     int       `gorm:"not null;default:0;uniqueIndex:uk_edge_src_line,priority:3" json:"srcLine"`
+	LinkKind    string    `gorm:"size:16;not null" json:"linkKind"`
+	Anchor      string    `gorm:"size:128" json:"anchor"`
+	CreatedAt   time.Time `gorm:"type:datetime;not null" json:"createdAt"`
+	UpdatedAt   time.Time `gorm:"type:datetime;not null" json:"updatedAt"`
+}
+
+// TableName overrides the table name for OkfEdge.
+func (OkfEdge) TableName() string { return "disk_okf_edge" }
 
 // GetTags deserializes TagsJSON into a []string. An empty or missing JSON
 // value yields a non-nil empty slice so callers can range without a nil check.

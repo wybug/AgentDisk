@@ -58,6 +58,18 @@ type okfNodeRepo interface {
 	CountByBundle(tx *gorm.DB, bundleID uint64) (uint32, error)
 }
 
+// okfEdgeRepo is the storage interface for the OKF edge graph. Implementations
+// cluster on public_dir_id so per-bundle reads and writes stay index-only.
+type okfEdgeRepo interface {
+	ReplaceForSrc(tx *gorm.DB, publicDirID, srcNodeID uint64, edges []model.OkfEdge) error
+	ListBySrc(publicDirID, srcNodeID uint64, limit int) ([]model.OkfEdge, error)
+	ListByDst(publicDirID, dstNodeID uint64, limit int) ([]model.OkfEdge, error)
+	ListBrokenByBundle(publicDirID uint64, cursor uint64, limit int) ([]model.OkfEdge, uint64, error)
+	CountByBundle(tx *gorm.DB, bundleID, publicDirID uint64) (uint32, error)
+	DeleteByBundle(tx *gorm.DB, publicDirID uint64) error
+	AdjustBacklinks(tx *gorm.DB, increment, decrement []uint64) error
+}
+
 // okfPublicDir captures the public-directory operations OKF needs: locating
 // the directory, writing files at nested paths, reading file contents, and
 // discovering files by relPath. ListVisible feeds the reader-side visibility
@@ -87,6 +99,7 @@ type okfVisibility interface {
 type OkfService struct {
 	bundles  okfBundleRepo
 	nodes    okfNodeRepo
+	edges    okfEdgeRepo
 	pdSvc    okfPublicDir
 	vis      okfVisibility
 	dbDriver string
@@ -136,10 +149,11 @@ func (v pdVisibility) VisiblePublicDirIDs(department, userID string) (map[uint64
 // is used for tag filtering, because the JSON_CONTAINS predicate is MySQL-only.
 // db is the GORM handle used to transactionally wrap node materialization; pass
 // the same *gorm.DB the repos use.
-func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeRepo, pdSvc *PublicDirectoryService, dbDriver string, db *gorm.DB) *OkfService {
+func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeRepo, edges *repository.OkfEdgeRepo, pdSvc *PublicDirectoryService, dbDriver string, db *gorm.DB) *OkfService {
 	return &OkfService{
 		bundles:         bundles,
 		nodes:           nodes,
+		edges:           edges,
 		pdSvc:           pdSvc,
 		vis:             pdVisibility{pd: pdSvc},
 		dbDriver:        dbDriver,
@@ -154,10 +168,11 @@ func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeR
 // *gorm.DB; multi-step operations execute without a surrounding transaction.
 // Callers that want reader-side visibility filtering should also use
 // SetVisibility to inject a stub; otherwise readers see every bundle.
-func NewOkfServiceFromRepo(bundles okfBundleRepo, nodes okfNodeRepo, pdSvc okfPublicDir, dbDriver string) *OkfService {
+func NewOkfServiceFromRepo(bundles okfBundleRepo, nodes okfNodeRepo, edges okfEdgeRepo, pdSvc okfPublicDir, dbDriver string) *OkfService {
 	return &OkfService{
 		bundles:         bundles,
 		nodes:           nodes,
+		edges:           edges,
 		pdSvc:           pdSvc,
 		dbDriver:        dbDriver,
 		lock:            NoOpBundleLock{},
@@ -356,17 +371,12 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 	// caller sees the error and the OSS file is the only durable side-effect.
 	var node *model.OkfNode
 	if err := s.runTx(ctx, func(tx *gorm.DB) error {
-		n, mErr := s.materializeNode(ctx, tx, bundle, relPath, file, req.Content)
-		if mErr != nil {
-			return mErr
+		n, err := s.materializeNodeTx(ctx, tx, bundle, relPath, file, req.Content)
+		if err != nil {
+			return err
 		}
 		node = n
-		count, cErr := s.nodes.CountByBundle(tx, bundle.ID)
-		if cErr != nil {
-			return fmt.Errorf("count nodes: %w", cErr)
-		}
-		bundle.NodeCount = count
-		return s.bundles.Update(bundle)
+		return s.refreshBundleCounts(tx, bundle)
 	}); err != nil {
 		return nil, err
 	}
@@ -422,10 +432,48 @@ func (s *OkfService) lookupNodeForLog(bundleID uint64, relPath string) (*model.O
 	return n, true
 }
 
+// materializeNodeTx wraps the in-transaction work for WriteMarkdown: upsert
+// the node, then materialize its outgoing edges when an edge repo is wired.
+// Split out from WriteMarkdown to keep the parent function's cognitive
+// complexity under the lint ceiling.
+func (s *OkfService) materializeNodeTx(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, relPath string, file *model.DiskFile, content []byte) (*model.OkfNode, error) {
+	node, err := s.materializeNode(ctx, tx, bundle, relPath, file, content)
+	if err != nil {
+		return nil, err
+	}
+	if s.edges != nil {
+		if gErr := s.materializeEdges(ctx, tx, bundle, node, content); gErr != nil {
+			return nil, gErr
+		}
+	}
+	return node, nil
+}
+
+// refreshBundleCounts recomputes node_count (always) and edge_count (when an
+// edge repo is wired) and persists the bundle row. Called inside the
+// WriteMarkdown transaction so the counts commit atomically with the node.
+func (s *OkfService) refreshBundleCounts(tx *gorm.DB, bundle *model.OkfBundle) error {
+	count, err := s.nodes.CountByBundle(tx, bundle.ID)
+	if err != nil {
+		return fmt.Errorf("count nodes: %w", err)
+	}
+	bundle.NodeCount = count
+	if s.edges != nil {
+		edgeCount, err := s.edges.CountByBundle(tx, bundle.ID, bundle.PublicDirectoryID)
+		if err != nil {
+			return fmt.Errorf("count edges: %w", err)
+		}
+		bundle.EdgeCount = edgeCount
+	}
+	return s.bundles.Update(bundle)
+}
+
 // postWriteSyncHooks runs the synchronous post-write side-effects:
 //   - AppendLogEntry: records "create" / "update" so log.md stays in sync.
-//   - broken-link scan for this single node: cheaper than a full scan, and
-//     keeps has_broken_link fresh per write.
+//   - broken-link scan for this single node, when the edge graph is not wired.
+//     With P3a the edge materializer updates has_broken_link inside the write
+//     transaction, so this single-node scan becomes redundant — it only runs
+//     in the unit-test path (no edge repo) to keep the flag fresh.
 //
 // Both are best-effort; failures are swallowed to keep the write durable.
 func (s *OkfService) postWriteSyncHooks(ctx context.Context, _ *model.OkfBundle, node *model.OkfNode, relPath string, body []byte, existedBefore bool) {
@@ -438,6 +486,11 @@ func (s *OkfService) postWriteSyncHooks(ctx context.Context, _ *model.OkfBundle,
 	}
 	_ = s.AppendLogEntry(ctx, node.BundleID, action, relPath, s.logUserID)
 
+	if s.edges != nil {
+		// Edge materializer already maintained has_broken_link; skip the
+		// redundant scan to avoid a second ExtractLinks pass.
+		return
+	}
 	broken := s.nodeHasBrokenLink(node.BundleID, relPath, body)
 	_ = s.updateNodeBrokenFlag(node, broken)
 }
@@ -709,6 +762,11 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 		if err := s.nodes.DeleteByBundle(tx, bundle.ID); err != nil {
 			return fmt.Errorf("clear nodes: %w", err)
 		}
+		if s.edges != nil {
+			if err := s.edges.DeleteByBundle(tx, bundle.PublicDirectoryID); err != nil {
+				return fmt.Errorf("clear edges: %w", err)
+			}
+		}
 		// Walk the public directory tree and re-materialize every .md file
 		// inside the same transaction so a partial refresh rolls back.
 		if err := s.walkAndMaterialize(ctx, tx, bundle, bundle.PublicDirectoryID); err != nil {
@@ -719,6 +777,13 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 			return fmt.Errorf("count nodes: %w", cErr)
 		}
 		bundle.NodeCount = count
+		if s.edges != nil {
+			edgeCount, eErr := s.edges.CountByBundle(tx, bundle.ID, bundle.PublicDirectoryID)
+			if eErr != nil {
+				return fmt.Errorf("count edges: %w", eErr)
+			}
+			bundle.EdgeCount = edgeCount
+		}
 		return s.bundles.Update(bundle)
 	}); err != nil {
 		return nil, err
@@ -734,6 +799,10 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 // entire folder tree under the bundle's public directory. tx is the
 // in-progress transaction (or nil in unit tests) so each upsert joins the
 // caller's atomic refresh.
+//
+// Edges are materialized in a second pass once every node exists, so a
+// forward-reference from a.md to b.md resolves correctly even if b.md is
+// visited after a.md in the walk order.
 func (s *OkfService) walkAndMaterialize(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, publicDirID uint64) error {
 	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
 	if !ok {
@@ -747,7 +816,15 @@ func (s *OkfService) walkAndMaterialize(ctx context.Context, tx *gorm.DB, bundle
 		return fmt.Errorf("public directory not found: %w", err)
 	}
 	rootFolder := &model.DiskFolder{ID: pd.FolderID, FolderName: "", FullPath: pd.FixedPath}
-	return s.materializeFolderTree(ctx, tx, bundle, rootFolder, "")
+	if err := s.materializeFolderTree(ctx, tx, bundle, rootFolder, ""); err != nil {
+		return err
+	}
+	if s.edges == nil {
+		return nil
+	}
+	// Second pass: with every node in place, derive edges from each body.
+	// Cross-references resolve cleanly now that the full node set is durable.
+	return s.materializeEdgeTree(ctx, tx, bundle, rootFolder, "")
 }
 
 // materializeFolderTree walks one folder, materializes its .md files, then
@@ -810,11 +887,70 @@ func (s *OkfService) materializeFolderTree(ctx context.Context, tx *gorm.DB, bun
 	return nil
 }
 
+// materializeEdgeTree is the second-pass edge walker paired with
+// materializeFolderTree. It visits the same folders in the same order, reads
+// each .md body again, and runs materializeEdges against the node that
+// already exists at that relPath. The first pass guarantees every node is
+// durable, so bundle-relative links resolve cleanly.
+func (s *OkfService) materializeEdgeTree(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, folder *model.DiskFolder, relPrefix string) error {
+	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
+	if !ok {
+		return nil
+	}
+	files, err := pdSvc.ListFilesInFolder(folder.ID)
+	if err != nil {
+		return fmt.Errorf("list files in folder %s: %w", folder.FolderName, err)
+	}
+	for i := range files {
+		f := files[i]
+		if !strings.HasSuffix(f.FileName, ".md") {
+			continue
+		}
+		rel := f.FileName
+		if relPrefix != "" {
+			rel = relPrefix + "/" + f.FileName
+		}
+		if rel == model.OkfReservedLogRelPath {
+			continue
+		}
+		node, nErr := s.nodes.GetByBundleAndRelPath(bundle.ID, rel)
+		if nErr != nil {
+			continue
+		}
+		body, rErr := pdSvc.ReadFileContent(ctx, f.ID)
+		if rErr != nil {
+			continue
+		}
+		if mErr := s.materializeEdges(ctx, tx, bundle, node, body); mErr != nil {
+			continue
+		}
+	}
+	children, err := pdSvc.ListSubFoldersByParent(folder.ID)
+	if err != nil {
+		return fmt.Errorf("list sub folders of %s: %w", folder.FolderName, err)
+	}
+	for i := range children {
+		child := children[i]
+		if child.IsDeleted {
+			continue
+		}
+		subRel := child.FolderName
+		if relPrefix != "" {
+			subRel = relPrefix + "/" + child.FolderName
+		}
+		if err := s.materializeEdgeTree(ctx, tx, bundle, &child, subRel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // UnregisterBundle removes a bundle registration. The underlying public
 // directory and its files are untouched: only the OKF bundle + node index rows
 // are deleted, so the directory can be re-registered later.
 func (s *OkfService) UnregisterBundle(id uint64) error {
-	if _, err := s.bundles.GetByID(id); err != nil {
+	bundle, err := s.bundles.GetByID(id)
+	if err != nil {
 		if isNotFound(err) {
 			return ErrOkfBundleNotFound
 		}
@@ -826,6 +962,13 @@ func (s *OkfService) UnregisterBundle(id uint64) error {
 	_ = s.AppendLogEntry(context.Background(), id, LogActionUnregister, "", s.logUserID)
 	if err := s.nodes.DeleteByBundle(nil, id); err != nil {
 		return fmt.Errorf("clear nodes: %w", err)
+	}
+	// Best-effort edge cleanup. The bundle row is going away; leaving edges
+	// behind would corrupt a future re-registration of the same public
+	// directory. Swallow the error: a failed edge delete should not un-delete
+	// the bundle row we are about to drop.
+	if s.edges != nil {
+		_ = s.edges.DeleteByBundle(nil, bundle.PublicDirectoryID)
 	}
 	return s.bundles.Delete(id)
 }
