@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/agentdisk/agent-disk/pkg/storage"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // Setup handles the operation.
@@ -116,6 +118,23 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// disabled at the route layer. db is the same GORM handle the repos use, so
 	// the OKF service can wrap multi-step materialization in a transaction.
 	okfSvc := service.NewOkfService(okfBundleRepo, okfNodeRepo, publicDirSvc, cfg.Database.Driver, db)
+	okfSvc.SetAutoIndexUpdate(cfg.Okf.AutoIndexUpdate)
+	if cfg.Okf.LockTTLSeconds > 0 || cfg.Okf.RedisAddr != "" {
+		// Wire the Redis-backed bundle lock when an address is configured. A
+		// missing address falls back to the no-op lock (last-writer-wins) so
+		// single-writer deployments are not forced to run Redis just for OKF.
+		if cfg.Okf.RedisAddr != "" {
+			redisClient := redis.NewClient(&redis.Options{Addr: cfg.Okf.RedisAddr})
+			// Ping once so a misconfigured address surfaces at startup rather
+			// than as a 500 on the first write. On failure we log and fall
+			// back to the no-op lock so the process still serves reads.
+			if pErr := redisClient.Ping(context.Background()).Err(); pErr != nil {
+				log.Printf("warning: okf redis ping failed (%v); writer lock falls back to no-op", pErr)
+			} else {
+				okfSvc.SetBundleLock(service.NewRedisBundleLock(redisClient, cfg.Okf.LockTTLSeconds))
+			}
+		}
+	}
 
 	// OAuth2 auth handler (reads DB config per-request for hot-reload)
 	authH := handler.NewAuthHandler(oauth2ConfigSvc, cfg.Server.FrontendURL)
@@ -135,6 +154,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	publicDirH := handler.NewPublicDirectoryHandler(publicDirSvc)
 	publicDirContentH := handler.NewPublicDirectoryContentHandler(okfSvc)
 	okfH := handler.NewOkfHandler(okfSvc)
+	okfScanH := handler.NewOkfScanHandler(okfSvc)
 	oauth2ConfigH := handler.NewOAuth2ConfigHandler(oauth2ConfigSvc)
 
 	// WebAuthn MFA (optional, enabled via config)
@@ -296,6 +316,13 @@ func Setup(cfg *config.Config) *gin.Engine {
 		okfGroup.GET("/types", okfH.AggregateTypes)
 		okfGroup.POST("/bundles/:id/refresh", okfH.RefreshBundle)
 		okfGroup.DELETE("/bundles/:id", okfH.UnregisterBundle)
+		// P2 maintenance routes: dead-link scan, broken-link listing, and
+		// on-demand index.md regeneration. All three reuse the same HybridAuth
+		// + ACL chain as the rest of the OKF group, so access is governed by
+		// the public-directory visibility rules.
+		okfGroup.POST("/bundles/:id/scan", okfScanH.ScanBundle)
+		okfGroup.GET("/bundles/:id/broken-links", okfScanH.ListBrokenLinks)
+		okfGroup.POST("/bundles/:id/regenerate-index", okfScanH.RegenerateIndex)
 	}
 
 	// Public directory grants — API Key only

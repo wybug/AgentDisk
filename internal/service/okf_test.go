@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,11 @@ func (r *fakeOkfNodeRepo) filterNodes(bundleID uint64, filter repository.NodeLis
 		}
 		out = append(out, *n)
 	}
+	// Stable order by ID so P2 pagination tests get a deterministic walk.
+	// The real repo orders by rel_path; for the fake we need a stable key and
+	// ID is the natural one. Callers that want rel_path order can sort the
+	// result themselves.
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
@@ -1345,5 +1351,200 @@ func TestOkfService_RefreshBundle_WalkFailsOnMissingPD(t *testing.T) {
 
 	if _, err := svc.RefreshBundle(ctx, bundle.ID); err == nil {
 		t.Error("expected RefreshBundle to fail when public directory is missing")
+	}
+}
+
+// ── P2 integration tests ──
+
+// fakeBundleLock is a test-only BundleLock that records Acquire calls and
+// can be configured to reject the second caller. Used by the WriteMarkdown
+// lock-integration tests.
+type fakeBundleLock struct {
+	held      bool
+	acquireFn func(bundleID uint64) error
+}
+
+func (f *fakeBundleLock) Acquire(_ context.Context, bundleID uint64) (func(), error) {
+	if f.acquireFn != nil {
+		if err := f.acquireFn(bundleID); err != nil {
+			return nil, err
+		}
+	}
+	if f.held {
+		return nil, ErrOkfLockHeld
+	}
+	f.held = true
+	released := false
+	return func() {
+		if released {
+			return
+		}
+		released = true
+		f.held = false
+	}, nil
+}
+
+// TestWriteMarkdown_AcquiresBundleLock verifies the writer takes the bundle
+// lock for the duration of a write. We install a fake lock whose Acquire
+// fails when called twice; if the writer released the first lock, the second
+// write succeeds, otherwise it sees ErrOkfLockHeld.
+func TestWriteMarkdown_AcquiresBundleLock(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	lock := &fakeBundleLock{}
+	svc.SetBundleLock(lock)
+
+	if _, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7, RelPath: "a.md",
+		Content: mustTypedMD("concept", "A"),
+	}); err != nil {
+		t.Fatalf("WriteMarkdown: %v", err)
+	}
+	// After release the lock must be free for the next writer.
+	if lock.held {
+		t.Errorf("lock still held after WriteMarkdown returned")
+	}
+
+	// Force the lock to deny; the writer must surface ErrOkfLockHeld.
+	lock.acquireFn = func(_ uint64) error { return ErrOkfLockHeld }
+	_, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7, RelPath: "b.md",
+		Content: mustTypedMD("concept", "B"),
+	})
+	if !errors.Is(err, ErrOkfLockHeld) {
+		t.Errorf("expected ErrOkfLockHeld, got %v", err)
+	}
+}
+
+// TestWriteMarkdown_AppendsLogEntry verifies a successful write produces a
+// log.md row tagged "create" for a fresh file and "update" for a re-write.
+func TestWriteMarkdown_AppendsLogEntry(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	svc.SetAutoIndexUpdate(false) // skip async regen so the test stays focused
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	if _, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7, RelPath: "a.md",
+		Content: mustTypedMD("concept", "A"),
+	}); err != nil {
+		t.Fatalf("first WriteMarkdown: %v", err)
+	}
+	if _, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7, RelPath: "a.md",
+		Content: mustTypedMD("concept", "A v2"),
+	}); err != nil {
+		t.Fatalf("second WriteMarkdown: %v", err)
+	}
+
+	file, err := pub.FindFileByRelPath(7, "log.md")
+	if err != nil {
+		t.Fatalf("log.md missing: %v", err)
+	}
+	body, _ := pub.ReadFileContent(context.Background(), file.ID)
+	s := string(body)
+	// register + create + update rows.
+	rows := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(rows) < 3 {
+		t.Fatalf("log.md rows = %d, want >= 3", len(rows))
+	}
+	// Walk rows in order; expect register, create, update.
+	want := []string{LogActionRegister, LogActionCreate, LogActionUpdate}
+	for i, wantAction := range want {
+		fields := strings.Split(rows[i], "\t")
+		if len(fields) < 2 {
+			t.Errorf("row %d fields = %d, want >= 2", i, len(fields))
+			continue
+		}
+		if fields[1] != wantAction {
+			t.Errorf("row %d action = %q, want %q", i, fields[1], wantAction)
+		}
+	}
+}
+
+// TestWriteMarkdown_UpdatesBrokenLinkFlag verifies that a WriteMarkdown call
+// whose body contains a broken link flips has_broken_link on the resulting
+// node, and that fixing the link on a subsequent write clears the flag.
+func TestWriteMarkdown_UpdatesBrokenLinkFlag(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	svc.SetAutoIndexUpdate(false)
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	// Write with a broken link.
+	body1 := []byte("---\ntype: concept\ntitle: A\n---\n[miss](./missing.md)\n")
+	node, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7, RelPath: "a.md", Content: body1,
+	})
+	if err != nil {
+		t.Fatalf("WriteMarkdown: %v", err)
+	}
+	if !node.HasBrokenLink {
+		t.Errorf("HasBrokenLink after broken write = false, want true")
+	}
+
+	// Re-write with no links; the flag should clear.
+	body2 := []byte("---\ntype: concept\ntitle: A v2\n---\nplain body\n")
+	node2, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7, RelPath: "a.md", Content: body2,
+	})
+	if err != nil {
+		t.Fatalf("WriteMarkdown v2: %v", err)
+	}
+	if node2.HasBrokenLink {
+		t.Errorf("HasBrokenLink after clean write = true, want false")
+	}
+}
+
+// TestWriteMarkdown_AutoIndexDisabled verifies that disabling AutoIndexUpdate
+// skips index regeneration but still appends log + computes broken-link.
+func TestWriteMarkdown_AutoIndexDisabled(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", "Original"))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	svc.SetAutoIndexUpdate(false)
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	if _, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7, RelPath: "a.md",
+		Content: mustTypedMD("concept", "A"),
+	}); err != nil {
+		t.Fatalf("WriteMarkdown: %v", err)
+	}
+	// The auto-index is off, so the user-authored index.md must be untouched.
+	file, err := pub.FindFileByRelPath(7, "index.md")
+	if err != nil {
+		t.Fatalf("index.md missing: %v", err)
+	}
+	body, _ := pub.ReadFileContent(context.Background(), file.ID)
+	// The body should still carry the original frontmatter from the seeded
+	// index.md, not the generated header.
+	if !strings.Contains(string(body), "Original") {
+		t.Errorf("auto-index overwrote user content: %q", string(body))
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -96,7 +97,14 @@ type WebAuthnConfig struct {
 // reader routes are not registered and the public-directory content writer
 // skips OKF materialization (the original pdWrite text behavior is unchanged).
 type OkfConfig struct {
-	Enabled bool `mapstructure:"enabled"`
+	Enabled         bool `mapstructure:"enabled"`
+	AutoIndexUpdate bool `mapstructure:"autoIndexUpdate"` // default true via ApplyDefaults
+	LockTTLSeconds  int  `mapstructure:"lockTTLSeconds"`  // default 5 via ApplyDefaults
+	// RedisAddr is the optional Redis address used by the OKF bundle writer
+	// lock. When empty, the writer falls back to a no-op lock (last-writer-
+	// wins). Operators that want strict serialization must point this at the
+	// same Redis the rest of the process uses.
+	RedisAddr string `mapstructure:"redisAddr"`
 }
 
 // Load handles HTTP requests.
@@ -137,10 +145,31 @@ func applyDefaults(cfg *Config) {
 	// `okf.enabled: false` in config.yaml or OKF_ENABLED=false in the env.
 	if v := os.Getenv("OKF_ENABLED"); v == "true" || v == "false" {
 		cfg.Okf.Enabled = v == "true"
-		return
-	}
-	if !viper.IsSet("okf.enabled") {
+	} else if !viper.IsSet("okf.enabled") {
 		cfg.Okf.Enabled = true
+	}
+	// AutoIndexUpdate is on by default. viper.IsSet distinguishes "key
+	// absent" from "key explicitly false", so the default is only applied
+	// when the operator did not write the key at all.
+	if v := os.Getenv("OKF_AUTO_INDEX_UPDATE"); v == "true" || v == "false" {
+		cfg.Okf.AutoIndexUpdate = v == "true"
+	} else if !viper.IsSet("okf.autoIndexUpdate") {
+		cfg.Okf.AutoIndexUpdate = true
+	}
+	// LockTTLSeconds defaults to 5s, the OKF spec's recommended ceiling for
+	// a markdown write. Operators that take longer writes can bump it.
+	if cfg.Okf.LockTTLSeconds <= 0 {
+		if v := os.Getenv("OKF_LOCK_TTL_SECONDS"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				cfg.Okf.LockTTLSeconds = n
+			}
+		}
+	}
+	if cfg.Okf.LockTTLSeconds <= 0 {
+		cfg.Okf.LockTTLSeconds = 5
+	}
+	if v := os.Getenv("OKF_REDIS_ADDR"); v != "" {
+		cfg.Okf.RedisAddr = v
 	}
 }
 
