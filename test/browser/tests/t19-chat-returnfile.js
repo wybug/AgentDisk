@@ -16,7 +16,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const MOCK_PORT = 9876;
+const MOCK_PORT = 9103;
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures');
 
 // --- Helpers ---

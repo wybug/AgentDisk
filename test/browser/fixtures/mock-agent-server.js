@@ -4,14 +4,14 @@
  * Replays recorded SSE fixture files for fast browser testing.
  *
  * Usage: node mock-agent-server.js [port] [fixture-dir]
- *   port        - HTTP port (default 9876)
+ *   port        - HTTP port (default 9103)
  *   fixture-dir - directory containing .txt SSE fixture files
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = parseInt(process.argv[2] || '9876', 10);
+const PORT = parseInt(process.argv[2] || '9103', 10);
 const FIXTURE_DIR = process.argv[3] || __dirname;
 
 const server = http.createServer((req, res) => {

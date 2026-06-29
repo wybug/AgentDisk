@@ -495,12 +495,12 @@ T19 (Chat ReturnFile + Markdown 渲染，独立)
 
 **前置条件**：
 - 测试网关（port 3100）已启动
-- Mock Agent 服务器（port 9876）已启动：`cd test/browser && node runner.js t19-record`
-- 已注册带 endpoints 的 Agent（Chat URL 指向 `http://localhost:9876/chat`）
+- Mock Agent 服务器（port 9103）已启动：`cd test/browser && node runner.js t19-record`
+- 已注册带 endpoints 的 Agent（Chat URL 指向 `http://localhost:9103/chat`）
 
 | 步骤 | 操作 | 预期结果 | 实际结果 | 通过 |
 |------|------|----------|----------|------|
-| T19.1 | 启动 Mock Agent 服务器（port 9876） | 服务启动成功，监听 9876 端口 | | |
+| T19.1 | 启动 Mock Agent 服务器（port 9103） | 服务启动成功，监听 9103 端口 | | |
 | T19.2 | 在网关注册 Agent（endpoints.chat 指向 Mock 服务器） | 注册成功，获取 agentId | | |
 | T19.3 | 进入该 Agent 的 Chat 页面 | Chat 页面加载，显示消息输入区域 | | |
 | T19.4 | 输入测试消息并发送 | 流式响应正确显示，内容逐步渲染 | | |
