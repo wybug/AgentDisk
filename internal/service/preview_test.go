@@ -220,9 +220,7 @@ func TestBuildPreviewResult_NilReaderNonTextReturnsURL(t *testing.T) {
 // Verify buildPreviewResult doesn't panic with nil reader for text types.
 func TestBuildPreviewResult_NilReaderTextPanicsOrEmpty(t *testing.T) {
 	defer func() {
-		if r := recover(); r != nil {
-			// nil reader panic is acceptable for text types
-		}
+		_ = recover() // nil reader panic is acceptable for text types
 	}()
 	f := &model.DiskFile{FileType: "txt"}
 	cat := classify(f)

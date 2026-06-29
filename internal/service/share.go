@@ -34,10 +34,10 @@ type publicDirGrantChecker interface {
 
 // ShareService represents a domain type.
 type ShareService struct {
-	repo            shareRepo
-	fileRepo        fileResourceRepo
-	folderRepo      folderResourceRepo
-	grantChecker    publicDirGrantChecker
+	repo         shareRepo
+	fileRepo     fileResourceRepo
+	folderRepo   folderResourceRepo
+	grantChecker publicDirGrantChecker
 }
 
 // NewShareService creates a new ShareService.

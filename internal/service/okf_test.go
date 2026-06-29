@@ -1,0 +1,1349 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/agentdisk/agent-disk/internal/model"
+	"github.com/agentdisk/agent-disk/internal/repository"
+	"github.com/agentdisk/agent-disk/pkg/okf"
+	"github.com/agentdisk/agent-disk/pkg/storage"
+	"gorm.io/gorm"
+)
+
+// ── Fake repositories ──
+
+type fakeOkfBundleRepo struct {
+	bundles map[uint64]*model.OkfBundle
+	nextID  uint64
+}
+
+func newFakeOkfBundleRepo() *fakeOkfBundleRepo {
+	return &fakeOkfBundleRepo{bundles: map[uint64]*model.OkfBundle{}, nextID: 1}
+}
+
+func (r *fakeOkfBundleRepo) Create(b *model.OkfBundle) error {
+	if b.ID == 0 {
+		b.ID = r.nextID
+		r.nextID++
+	}
+	r.bundles[b.ID] = b
+	return nil
+}
+
+func (r *fakeOkfBundleRepo) GetByID(id uint64) (*model.OkfBundle, error) {
+	if b, ok := r.bundles[id]; ok {
+		return b, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeOkfBundleRepo) GetByPublicDirectoryID(pdID uint64) (*model.OkfBundle, error) {
+	for _, b := range r.bundles {
+		if b.PublicDirectoryID == pdID {
+			return b, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeOkfBundleRepo) List(_ string, _, _ int) ([]model.OkfBundle, error) {
+	out := make([]model.OkfBundle, 0, len(r.bundles))
+	for _, b := range r.bundles {
+		out = append(out, *b)
+	}
+	return out, nil
+}
+
+func (r *fakeOkfBundleRepo) Update(b *model.OkfBundle) error {
+	r.bundles[b.ID] = b
+	return nil
+}
+
+func (r *fakeOkfBundleRepo) Delete(id uint64) error {
+	delete(r.bundles, id)
+	return nil
+}
+
+type fakeOkfNodeRepo struct {
+	nodes  map[uint64]*model.OkfNode
+	byKey  map[string]uint64 // bundleID:relPath -> node ID
+	nextID uint64
+}
+
+func newFakeOkfNodeRepo() *fakeOkfNodeRepo {
+	return &fakeOkfNodeRepo{
+		nodes:  map[uint64]*model.OkfNode{},
+		byKey:  map[string]uint64{},
+		nextID: 1,
+	}
+}
+
+func keyFor(bundleID uint64, rel string) string {
+	return strings.Join([]string{uintToStr(bundleID), rel}, ":")
+}
+
+func uintToStr(n uint64) string {
+	if n == 0 {
+		return "0"
+	}
+	out := make([]byte, 0, 20)
+	for n > 0 {
+		out = append([]byte{byte('0' + n%10)}, out...)
+		n /= 10
+	}
+	return string(out)
+}
+
+func (r *fakeOkfNodeRepo) Upsert(_ *gorm.DB, n *model.OkfNode) error {
+	k := keyFor(n.BundleID, n.RelPath)
+	if id, ok := r.byKey[k]; ok {
+		existing := r.nodes[id]
+		n.ID = existing.ID
+		n.CreatedAt = existing.CreatedAt
+		r.nodes[n.ID] = n
+		return nil
+	}
+	if n.ID == 0 {
+		n.ID = r.nextID
+		r.nextID++
+	}
+	r.nodes[n.ID] = n
+	r.byKey[k] = n.ID
+	return nil
+}
+
+func (r *fakeOkfNodeRepo) GetByBundleAndRelPath(bundleID uint64, rel string) (*model.OkfNode, error) {
+	if id, ok := r.byKey[keyFor(bundleID, rel)]; ok {
+		return r.nodes[id], nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeOkfNodeRepo) ListByBundle(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error) {
+	return r.filterNodes(bundleID, filter), nil
+}
+
+func (r *fakeOkfNodeRepo) ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error) {
+	return r.filterNodes(bundleID, filter), nil
+}
+
+func (r *fakeOkfNodeRepo) filterNodes(bundleID uint64, filter repository.NodeListFilter) []model.OkfNode {
+	out := []model.OkfNode{}
+	for _, n := range r.nodes {
+		if n.BundleID != bundleID {
+			continue
+		}
+		if filter.Type != "" && n.Type != filter.Type {
+			continue
+		}
+		if filter.Tag != "" {
+			tags, _ := n.GetTags()
+			found := false
+			for _, t := range tags {
+				if t == filter.Tag {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		out = append(out, *n)
+	}
+	return out
+}
+
+func (r *fakeOkfNodeRepo) AggregateByType(bundleID uint64) ([]repository.TypeCount, error) {
+	counts := map[string]uint32{}
+	for _, n := range r.nodes {
+		if n.BundleID != bundleID {
+			continue
+		}
+		counts[n.Type]++
+	}
+	out := make([]repository.TypeCount, 0, len(counts))
+	for t, c := range counts {
+		out = append(out, repository.TypeCount{Type: t, Count: c})
+	}
+	return out, nil
+}
+
+func (r *fakeOkfNodeRepo) DeleteByBundle(_ *gorm.DB, bundleID uint64) error {
+	for id, n := range r.nodes {
+		if n.BundleID == bundleID {
+			delete(r.nodes, id)
+			delete(r.byKey, keyFor(n.BundleID, n.RelPath))
+		}
+	}
+	return nil
+}
+
+func (r *fakeOkfNodeRepo) CountByBundle(_ *gorm.DB, bundleID uint64) (uint32, error) {
+	var count uint32
+	for _, n := range r.nodes {
+		if n.BundleID == bundleID {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// fakeOkfPublicDir is a stub okfPublicDir for service-layer tests. It keeps an
+// in-memory map of relPath -> file content and exposes the operations the OKF
+// service calls.
+type fakeOkfPublicDir struct {
+	pd            *model.DiskPublicDirectory
+	files         map[string]*model.DiskFile
+	nextFID       uint64
+	rawContent    map[string][]byte
+	readFailureOn string // when non-empty, ReadFileContent for this relPath errors
+	uploadErr     error  // when non-nil, UploadFileAt returns this error
+}
+
+func newFakeOkfPublicDir(pd *model.DiskPublicDirectory) *fakeOkfPublicDir {
+	return &fakeOkfPublicDir{pd: pd, files: map[string]*model.DiskFile{}, nextFID: 1}
+}
+
+func (p *fakeOkfPublicDir) GetPublicDirectory(_ uint64) (*model.DiskPublicDirectory, error) {
+	if p.pd == nil {
+		return nil, errors.New("not found")
+	}
+	return p.pd, nil
+}
+
+func (p *fakeOkfPublicDir) UploadFileAt(_ context.Context, _ uint64, relPath, _ string, content []byte) (*model.DiskFile, error) {
+	if p.uploadErr != nil {
+		return nil, p.uploadErr
+	}
+	if p.rawContent == nil {
+		p.rawContent = map[string][]byte{}
+	}
+	if existing, ok := p.files[relPath]; ok {
+		existing.FileSize = int64(len(content))
+		existing.Version++
+		p.rawContent[relPath] = content
+		return existing, nil
+	}
+	f := &model.DiskFile{
+		ID:       p.nextFID,
+		FileName: relPath,
+		FileSize: int64(len(content)),
+		Version:  1,
+	}
+	p.nextFID++
+	p.files[relPath] = f
+	p.rawContent[relPath] = content
+	return f, nil
+}
+
+func (p *fakeOkfPublicDir) ReadFileContent(_ context.Context, fileID uint64) ([]byte, error) {
+	for rel, f := range p.files {
+		if f.ID == fileID {
+			if p.readFailureOn != "" && rel == p.readFailureOn {
+				return nil, errors.New("simulated read failure")
+			}
+			return p.contentFor(rel), nil
+		}
+	}
+	return nil, errors.New("not found")
+}
+
+func (p *fakeOkfPublicDir) FindFileByRelPath(_ uint64, relPath string) (*model.DiskFile, error) {
+	if f, ok := p.files[relPath]; ok {
+		return f, nil
+	}
+	return nil, errors.New("not found")
+}
+
+// seedContent stores raw bytes against a relPath for ReadFileContent.
+func (p *fakeOkfPublicDir) seedContent(rel string, body []byte) {
+	if p.rawContent == nil {
+		p.rawContent = map[string][]byte{}
+	}
+	if _, ok := p.files[rel]; !ok {
+		p.files[rel] = &model.DiskFile{ID: p.nextFID, FileName: rel, Version: 1}
+		p.nextFID++
+	}
+	p.files[rel].FileSize = int64(len(body))
+	p.rawContent[rel] = body
+}
+
+// contentFor returns the seeded content for rel.
+func (p *fakeOkfPublicDir) contentFor(rel string) []byte {
+	if p.rawContent == nil {
+		return nil
+	}
+	return p.rawContent[rel]
+}
+
+// ── Helpers ──
+
+func mustIndexMD(t *testing.T, okfVersion, title string) []byte {
+	t.Helper()
+	body := "---\n"
+	body += "type: bundle\n"
+	if title != "" {
+		body += "title: " + title + "\n"
+	}
+	if okfVersion != "" {
+		body += "okf_version: \"" + okfVersion + "\"\n"
+	}
+	body += "---\n\n# Bundle\n"
+	return []byte(body)
+}
+
+func mustTypedMD(typ, title string) []byte {
+	body := "---\ntype: " + typ + "\ntitle: " + title + "\n---\n\nBody\n"
+	return []byte(body)
+}
+
+// ── Tests ──
+
+func TestOkfService_RegisterBundle_Success(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, DisplayName: "kb", FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", "My Bundle"))
+
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	if bundle.PublicDirectoryID != 7 {
+		t.Errorf("publicDirectoryID = %d, want 7", bundle.PublicDirectoryID)
+	}
+	if bundle.OkfVersion != "0.1" {
+		t.Errorf("okfVersion = %q, want 0.1", bundle.OkfVersion)
+	}
+	if bundle.Title != "My Bundle" {
+		t.Errorf("title = %q, want My Bundle", bundle.Title)
+	}
+	if bundle.NodeCount != 1 {
+		t.Errorf("nodeCount = %d, want 1 (index.md materialized)", bundle.NodeCount)
+	}
+}
+
+func TestOkfService_RegisterBundle_NotRoot(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	// index.md without okf_version
+	pub.seedContent("index.md", []byte("---\ntype: bundle\n---\nbody"))
+
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	_, err := svc.RegisterBundle(context.Background(), 7)
+	if !errors.Is(err, ErrOkfNotBundleRoot) {
+		t.Fatalf("expected ErrOkfNotBundleRoot, got %v", err)
+	}
+}
+
+func TestOkfService_RegisterBundle_Idempotent(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	first, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("first RegisterBundle: %v", err)
+	}
+	second, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("second RegisterBundle: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Errorf("idempotent: first.ID=%d second.ID=%d", first.ID, second.ID)
+	}
+}
+
+func TestOkfService_WriteMarkdown_MissingType(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	// Pre-register bundle so we hit the writer path directly.
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	// Missing type → 400-equivalent error.
+	_, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "note.md",
+		Content:           []byte("---\ntitle: missing type\n---\nbody"),
+	})
+	if !errors.Is(err, ErrOkfMissingType) {
+		t.Fatalf("expected ErrOkfMissingType, got %v", err)
+	}
+}
+
+func TestOkfService_WriteMarkdown_Success(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	node, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "concepts/gemma.md",
+		Content:           mustTypedMD("concept", "Gemma"),
+	})
+	if err != nil {
+		t.Fatalf("WriteMarkdown: %v", err)
+	}
+	if node.Type != "concept" {
+		t.Errorf("type = %q, want concept", node.Type)
+	}
+	if node.Title != "Gemma" {
+		t.Errorf("title = %q, want Gemma", node.Title)
+	}
+	if node.RelPath != "concepts/gemma.md" {
+		t.Errorf("relPath = %q, want concepts/gemma.md", node.RelPath)
+	}
+	if node.ContentHash == "" {
+		t.Error("contentHash should be populated")
+	}
+
+	// Node must be retrievable.
+	got, err := nodes.GetByBundleAndRelPath(1, "concepts/gemma.md")
+	if err != nil {
+		t.Fatalf("GetByBundleAndRelPath: %v", err)
+	}
+	if got.ID != node.ID {
+		t.Errorf("stored node ID mismatch: got %d want %d", got.ID, node.ID)
+	}
+}
+
+func TestOkfService_WriteMarkdown_NestedPath(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	// Multi-segment path; the service must normalize backslashes and dots.
+	rel := "./concepts/llm/gemma.md"
+	node, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           rel,
+		Content:           mustTypedMD("concept", "Nested"),
+	})
+	if err != nil {
+		t.Fatalf("WriteMarkdown nested: %v", err)
+	}
+	if node.RelPath != "concepts/llm/gemma.md" {
+		t.Errorf("relPath = %q, want concepts/llm/gemma.md", node.RelPath)
+	}
+}
+
+func TestOkfService_WriteMarkdown_AutoRegistersBundle(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	// No index.md pre-seeded: the writer will be the first to put one down.
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	// Writing index.md as the first file must auto-register the bundle.
+	_, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "index.md",
+		Content:           mustIndexMD(t, "0.1", "From Writer"),
+	})
+	if err != nil {
+		t.Fatalf("WriteMarkdown index.md: %v", err)
+	}
+	b, err := bundles.GetByPublicDirectoryID(7)
+	if err != nil {
+		t.Fatalf("bundle not auto-registered: %v", err)
+	}
+	if b.Title != "From Writer" {
+		t.Errorf("title = %q, want From Writer", b.Title)
+	}
+}
+
+func TestOkfService_WriteMarkdown_LogMdmustNotHaveFrontmatter(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	// log.md with a Type field is rejected.
+	_, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "log.md",
+		Content:           []byte("---\ntype: changelog\n---\nentry"),
+	})
+	if !errors.Is(err, ErrOkfReservedName) {
+		t.Fatalf("expected ErrOkfReservedName, got %v", err)
+	}
+
+	// log.md plain body is allowed.
+	_, err = svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "log.md",
+		Content:           []byte("plain entry"),
+	})
+	if err != nil {
+		t.Fatalf("plain log.md should be accepted, got %v", err)
+	}
+}
+
+func TestOkfService_WriteMarkdown_ExtraFrontmatterPreserved(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	body := []byte("---\ntype: concept\nauthor: alice\nreviewers:\n  - bob\n---\nbody")
+	node, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "c.md",
+		Content:           body,
+	})
+	if err != nil {
+		t.Fatalf("WriteMarkdown: %v", err)
+	}
+	extra, _ := node.GetExtra()
+	if extra["author"] != "alice" {
+		t.Errorf("extra[author] = %v, want alice", extra["author"])
+	}
+	if _, ok := extra["reviewers"]; !ok {
+		t.Errorf("extra[reviewers] missing; got %v", extra)
+	}
+}
+
+func TestOkfService_ListBundles(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd1 := &model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"}
+	pub := newFakeOkfPublicDir(pd1)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	b1 := &model.OkfBundle{PublicDirectoryID: 1, OkfVersion: "0.1", Title: "A"}
+	b2 := &model.OkfBundle{PublicDirectoryID: 2, OkfVersion: "0.1", Title: "B"}
+	_ = bundles.Create(b1)
+	_ = bundles.Create(b2)
+
+	got, err := svc.ListBundles("", "")
+	if err != nil {
+		t.Fatalf("ListBundles: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("len = %d, want 2", len(got))
+	}
+}
+
+func TestOkfService_GetBundle_NotFound(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	_, err := svc.GetBundle(999, "", "")
+	if !errors.Is(err, ErrOkfBundleNotFound) {
+		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
+	}
+}
+
+func TestOkfService_ListNodes_Filters(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	// Seed three nodes.
+	seeds := []struct {
+		rel  string
+		typ  string
+		tags []string
+	}{
+		{"a.md", "concept", []string{"llm"}},
+		{"b.md", "guide", []string{"llm", "gemma"}},
+		{"c.md", "concept", []string{"search"}},
+	}
+	for _, s := range seeds {
+		n := &model.OkfNode{BundleID: bundle.ID, RelPath: s.rel, Type: s.typ, Title: s.rel}
+		_ = n.SetTags(s.tags)
+		if err := nodes.Upsert(nil, n); err != nil {
+			t.Fatalf("Upsert %s: %v", s.rel, err)
+		}
+	}
+
+	// Filter by type.
+	got, err := svc.ListNodesByType(bundle.ID, "concept", "", "", "")
+	if err != nil {
+		t.Fatalf("ListNodesByType concept: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("type=concept: got %d, want 2", len(got))
+	}
+
+	// Filter by tag.
+	got, err = svc.ListNodesByType(bundle.ID, "", "llm", "", "")
+	if err != nil {
+		t.Fatalf("ListNodesByType llm: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("tag=llm: got %d, want 2", len(got))
+	}
+
+	// Filter by both.
+	got, err = svc.ListNodesByType(bundle.ID, "concept", "llm", "", "")
+	if err != nil {
+		t.Fatalf("ListNodesByType concept+llm: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("type=concept,tag=llm: got %d, want 1", len(got))
+	}
+}
+
+func TestOkfService_AggregateByType(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	for _, rel := range []string{"a.md", "b.md"} {
+		_ = nodes.Upsert(nil, &model.OkfNode{BundleID: bundle.ID, RelPath: rel, Type: "concept"})
+	}
+	_ = nodes.Upsert(nil, &model.OkfNode{BundleID: bundle.ID, RelPath: "c.md", Type: "guide"})
+
+	got, err := svc.AggregateByType(bundle.ID, "", "")
+	if err != nil {
+		t.Fatalf("AggregateByType: %v", err)
+	}
+	want := map[string]uint32{"concept": 2, "guide": 1}
+	gotMap := map[string]uint32{}
+	for _, tc := range got {
+		gotMap[tc.Type] = tc.Count
+	}
+	for k, v := range want {
+		if gotMap[k] != v {
+			t.Errorf("count[%s] = %d, want %d", k, gotMap[k], v)
+		}
+	}
+}
+
+func TestOkfService_UnregisterBundle(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	if err := svc.UnregisterBundle(bundle.ID); err != nil {
+		t.Fatalf("UnregisterBundle: %v", err)
+	}
+	if _, err := bundles.GetByID(bundle.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("expected record not found after unregister, got %v", err)
+	}
+}
+
+func TestOkfService_UnregisterBundle_NotFound(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if err := svc.UnregisterBundle(999); !errors.Is(err, ErrOkfBundleNotFound) {
+		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
+	}
+}
+
+// stubVisibility is a hand-rolled okfVisibility for the ACL tests. It returns
+// a fixed map of which public directories the caller can see.
+type stubVisibility struct {
+	visible map[uint64]bool
+	err     error
+}
+
+func (s stubVisibility) VisiblePublicDirIDs(_, _ string) (map[uint64]bool, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.visible, nil
+}
+
+// newOkfSvcWithVisibility wires an OkfService against the fake repos and a
+// stub visibility checker. The caller controls which public directory IDs the
+// caller is allowed to see.
+func newOkfSvcWithVisibility(t *testing.T, visible map[uint64]bool) *OkfService {
+	t.Helper()
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	svc.SetVisibility(stubVisibility{visible: visible})
+	return svc
+}
+
+func TestOkfService_ReaderACL_RejectsCrossUser(t *testing.T) {
+	// Bundle 1 → public directory 7. Caller "alice" has NO grant on PD 7.
+	svc := newOkfSvcWithVisibility(t, map[uint64]bool{}) // nothing visible
+	// Seed bundle pointing at PD 7 directly (bypass RegisterBundle so we don't
+	// have to materialize index.md for this ACL test).
+	bundle := &model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"}
+	if err := svc.bundles.Create(bundle); err != nil {
+		t.Fatalf("seed bundle: %v", err)
+	}
+	// Seed one node so the not-found path is not the failure mode.
+	_ = svc.nodes.Upsert(nil, &model.OkfNode{BundleID: 1, RelPath: "a.md", Type: "concept"})
+
+	// GetBundle rejects.
+	if _, err := svc.GetBundle(1, "alice", "eng"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("GetBundle: expected ErrOkfForbidden, got %v", err)
+	}
+	// ListNodesByType rejects.
+	if _, err := svc.ListNodesByType(1, "", "", "alice", "eng"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("ListNodesByType: expected ErrOkfForbidden, got %v", err)
+	}
+	// AggregateByType rejects.
+	if _, err := svc.AggregateByType(1, "alice", "eng"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("AggregateByType: expected ErrOkfForbidden, got %v", err)
+	}
+	// ListBundles filters the bundle out.
+	got, err := svc.ListBundles("alice", "eng")
+	if err != nil {
+		t.Fatalf("ListBundles: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ListBundles cross-user: got %d bundles, want 0", len(got))
+	}
+}
+
+func TestOkfService_ReaderACL_AllowsGrantedUser(t *testing.T) {
+	// Bundle 1 → PD 7. Caller "alice" has a grant on PD 7.
+	svc := newOkfSvcWithVisibility(t, map[uint64]bool{7: true})
+	bundle := &model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"}
+	if err := svc.bundles.Create(bundle); err != nil {
+		t.Fatalf("seed bundle: %v", err)
+	}
+	_ = svc.nodes.Upsert(nil, &model.OkfNode{BundleID: 1, RelPath: "a.md", Type: "concept"})
+
+	if _, err := svc.GetBundle(1, "alice", "eng"); err != nil {
+		t.Errorf("GetBundle granted: %v", err)
+	}
+	if _, err := svc.ListNodesByType(1, "", "", "alice", "eng"); err != nil {
+		t.Errorf("ListNodesByType granted: %v", err)
+	}
+	if _, err := svc.AggregateByType(1, "alice", "eng"); err != nil {
+		t.Errorf("AggregateByType granted: %v", err)
+	}
+	got, err := svc.ListBundles("alice", "eng")
+	if err != nil {
+		t.Fatalf("ListBundles: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("ListBundles granted: got %d bundles, want 1", len(got))
+	}
+}
+
+func TestOkfService_ReaderACL_VisibilityErrorPropagates(t *testing.T) {
+	// When the visibility check itself errors (e.g. grant repo down), the
+	// reader must surface the wrapped error rather than accidentally allowing
+	// or hiding data via the not-found branch.
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+	svc.SetVisibility(stubVisibility{err: errors.New("grant repo down")})
+	bundle := &model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"}
+	_ = bundles.Create(bundle)
+
+	if _, err := svc.GetBundle(1, "alice", "eng"); err == nil {
+		t.Error("GetBundle: expected visibility error, got nil")
+	}
+}
+
+func TestOkfService_ReaderACL_APIAKeySystemUserSeesAll(t *testing.T) {
+	// The HybridAuth middleware sets userId=__system_public__ + department from
+	// the API key. ListVisible treats __system_public__ as a system caller and
+	// returns every active public directory, so the OKF reader ACL should let
+	// API-keyed callers see every bundle. We simulate that by setting visible
+	// to the full set the production pdVisibility would produce.
+	svc := newOkfSvcWithVisibility(t, map[uint64]bool{7: true, 8: true})
+	_ = svc.bundles.Create(&model.OkfBundle{ID: 1, PublicDirectoryID: 7, OkfVersion: "0.1"})
+	_ = svc.bundles.Create(&model.OkfBundle{ID: 2, PublicDirectoryID: 8, OkfVersion: "0.1"})
+
+	got, err := svc.ListBundles("__system_public__", "")
+	if err != nil {
+		t.Fatalf("ListBundles: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("ListBundles system user: got %d, want 2 (all bundles)", len(got))
+	}
+}
+
+func TestOkfService_NormalizeRelPath(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"index.md", "index.md"},
+		{"./index.md", "index.md"},
+		{"/a/b.md", "a/b.md"},
+		{"a/b/../c.md", "a/c.md"},
+		{"a\\b.md", "a/b.md"},
+		{"", ""},
+		{"../escape.md", "escape.md"},
+		{"a/../../x.md", "x.md"},
+	}
+	for _, tc := range cases {
+		got := normalizeRelPath(tc.in)
+		if got != tc.want {
+			t.Errorf("normalizeRelPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestOkfService_WriteMarkdown_RejectsNonMarkdown(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	_, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "notes.txt",
+		Content:           []byte("x"),
+	})
+	if err == nil {
+		t.Error("expected error for non-markdown relPath")
+	}
+}
+
+func TestOkfService_WriteMarkdown_MissingPublicDirectory(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(nil) // nil ⇒ GetPublicDirectory errors
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	_, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 999,
+		RelPath:           "x.md",
+		Content:           mustTypedMD("t", ""),
+	})
+	if err == nil {
+		t.Error("expected error for missing public directory")
+	}
+}
+
+func TestOkfService_ValidateFrontmatterForPath(t *testing.T) {
+	svc := &OkfService{}
+	cases := []struct {
+		name    string
+		rel     string
+		typeF   string
+		okfVer  string
+		wantErr bool
+	}{
+		{"plain file with type", "x.md", "concept", "", false},
+		{"plain file no type", "x.md", "", "", true},
+		{"index with okf_version", "index.md", "bundle", "0.1", false},
+		{"index missing okf_version", "index.md", "bundle", "", true},
+		{"index missing type", "index.md", "", "0.1", true},
+		{"log with no frontmatter", "log.md", "", "", false},
+		{"log with type", "log.md", "changelog", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			front := okf.Frontmatter{Type: tc.typeF, OkfVersion: tc.okfVer}
+			err := svc.validateFrontmatterForPath(tc.rel, front)
+			if tc.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestOkfService_GetBundle_NotFoundBranch(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 1, FolderID: 10, FixedPath: "/public/a"})
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.AggregateByType(999, "", ""); !errors.Is(err, ErrOkfBundleNotFound) {
+		t.Errorf("AggregateByType: expected ErrOkfBundleNotFound, got %v", err)
+	}
+	if _, err := svc.ListNodesByType(999, "", "", "", ""); !errors.Is(err, ErrOkfBundleNotFound) {
+		t.Errorf("ListNodesByType: expected ErrOkfBundleNotFound, got %v", err)
+	}
+	if _, err := svc.RefreshBundle(context.Background(), 999); !errors.Is(err, ErrOkfBundleNotFound) {
+		t.Errorf("RefreshBundle: expected ErrOkfBundleNotFound, got %v", err)
+	}
+}
+
+func TestOkfService_RefreshBundle_StubPDNoOps(t *testing.T) {
+	// When pdSvc is a stub (not *PublicDirectoryService), walkAndMaterialize
+	// returns nil immediately and RefreshBundle succeeds with zero nodes.
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	// First refresh clears nodes (the index.md materialization) and the stub
+	// walk cannot re-materialize, so NodeCount drops to 0.
+	refreshed, err := svc.RefreshBundle(context.Background(), bundle.ID)
+	if err != nil {
+		t.Fatalf("RefreshBundle: %v", err)
+	}
+	if refreshed.NodeCount != 0 {
+		t.Errorf("NodeCount = %d, want 0 (stub walk is a no-op)", refreshed.NodeCount)
+	}
+}
+
+func TestOkfService_WriteMarkdown_RapidRewrite(t *testing.T) {
+	// Re-writing the same relPath must upsert rather than duplicate the node.
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	first, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "note.md",
+		Content:           mustTypedMD("concept", "v1"),
+	})
+	if err != nil {
+		t.Fatalf("first WriteMarkdown: %v", err)
+	}
+	second, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "note.md",
+		Content:           mustTypedMD("concept", "v2"),
+	})
+	if err != nil {
+		t.Fatalf("second WriteMarkdown: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Errorf("upsert should preserve node ID: first=%d second=%d", first.ID, second.ID)
+	}
+	if second.Title != "v2" {
+		t.Errorf("title = %q, want v2", second.Title)
+	}
+	// Bundle still has index.md + note.md = 2 nodes; second write must upsert
+	// in place rather than adding a third.
+	count, _ := nodes.CountByBundle(nil, first.BundleID)
+	if count != 2 {
+		t.Errorf("node count = %d, want 2 (upsert should not duplicate)", count)
+	}
+}
+
+func TestOkfService_DefaultStr(t *testing.T) {
+	if got := defaultStr("x", "y"); got != "x" {
+		t.Errorf("defaultStr(x,y) = %q, want x", got)
+	}
+	if got := defaultStr("  ", "y"); got != "y" {
+		t.Errorf("defaultStr(blank,y) = %q, want y", got)
+	}
+}
+
+func TestOkfService_IsNotFound(t *testing.T) {
+	if isNotFound(nil) {
+		t.Error("nil should not be not-found")
+	}
+	if !isNotFound(ErrOkfBundleNotFound) {
+		t.Error("ErrOkfBundleNotFound should be not-found")
+	}
+	if !isNotFound(gorm.ErrRecordNotFound) {
+		t.Error("gorm.ErrRecordNotFound should be not-found")
+	}
+	// Wrapped sentinel must still be detected (public directory service wraps
+	// its repo errors with fmt.Errorf).
+	wrapped := fmt.Errorf("lookup failed: %w", gorm.ErrRecordNotFound)
+	if !isNotFound(wrapped) {
+		t.Error("wrapped gorm.ErrRecordNotFound should be not-found")
+	}
+	// Unrelated errors must not be treated as not-found.
+	if isNotFound(errors.New("disk full")) {
+		t.Error("unrelated error should not be not-found")
+	}
+	if isNotFound(errors.New("record not found")) {
+		t.Error("literal string match must not be treated as not-found (use errors.Is)")
+	}
+}
+
+func TestOkfService_RegisterBundle_ReadContentFailure(t *testing.T) {
+	// index.md exists but its content read fails; RegisterBundle surfaces that
+	// as a wrapped error rather than ErrOkfNotBundleRoot.
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	pub.readFailureOn = "index.md"
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.RegisterBundle(context.Background(), 7); err == nil {
+		t.Error("expected error when reading index.md fails")
+	}
+}
+
+func TestOkfService_WriteMarkdown_UploadFailure(t *testing.T) {
+	// Upload fails: WriteMarkdown must surface the error and not auto-register.
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.uploadErr = errors.New("oss unavailable")
+	svc := NewOkfServiceFromRepo(bundles, nodes, pub, "sqlite")
+
+	if _, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "index.md",
+		Content:           mustIndexMD(t, "0.1", "x"),
+	}); err == nil {
+		t.Error("expected upload error to surface")
+	}
+}
+
+func TestOkfService_WriteMarkdown_BundleLookupNonNotFound(t *testing.T) {
+	// Drive WriteMarkdown through the generic bundle-lookup error branch by
+	// using a bundle repo whose GetByPublicDirectoryID fails with a non-not-found
+	// error after a successful upload.
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	svc := NewOkfServiceFromRepo(&flakyBundleRepo{base: bundles, failOnPD: 7}, nodes, pub, "sqlite")
+
+	if _, err := svc.WriteMarkdown(context.Background(), WriteMarkdownRequest{
+		PublicDirectoryID: 7,
+		RelPath:           "note.md",
+		Content:           mustTypedMD("concept", "x"),
+	}); err == nil {
+		t.Error("expected lookup error to surface")
+	}
+}
+
+// flakyBundleRepo wraps fakeOkfBundleRepo and forces a non-not-found error on
+// GetByPublicDirectoryID for the given PD. Used to exercise the generic-error
+// branch in WriteMarkdown.
+type flakyBundleRepo struct {
+	base     *fakeOkfBundleRepo
+	failOnPD uint64
+}
+
+func (r *flakyBundleRepo) Create(b *model.OkfBundle) error             { return r.base.Create(b) }
+func (r *flakyBundleRepo) GetByID(id uint64) (*model.OkfBundle, error) { return r.base.GetByID(id) }
+func (r *flakyBundleRepo) List(s string, l, o int) ([]model.OkfBundle, error) {
+	return r.base.List(s, l, o)
+}
+func (r *flakyBundleRepo) Update(b *model.OkfBundle) error { return r.base.Update(b) }
+func (r *flakyBundleRepo) Delete(id uint64) error          { return r.base.Delete(id) }
+func (r *flakyBundleRepo) GetByPublicDirectoryID(pdID uint64) (*model.OkfBundle, error) {
+	if pdID == r.failOnPD {
+		return nil, errors.New("connection refused")
+	}
+	return r.base.GetByPublicDirectoryID(pdID)
+}
+
+// ── In-memory storage for RefreshBundle integration tests ──
+
+// memStorage is a minimal storage.Storage backed by a map. It is enough to
+// drive the real PublicDirectoryService through UploadFileAt + ReadFileContent
+// so the RefreshBundle walk path is exercised end-to-end without OSS.
+type memStorage struct {
+	objects map[string][]byte
+}
+
+func newMemStorage() *memStorage {
+	return &memStorage{objects: map[string][]byte{}}
+}
+
+func (m *memStorage) Upload(_ context.Context, key string, reader io.Reader, _ int64, _ string) error {
+	b, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	m.objects[key] = b
+	return nil
+}
+
+func (m *memStorage) Download(_ context.Context, key string) (io.ReadCloser, error) {
+	b, ok := m.objects[key]
+	if !ok {
+		return nil, errors.New("object not found")
+	}
+	return io.NopCloser(bytes.NewReader(b)), nil
+}
+
+func (m *memStorage) Delete(_ context.Context, key string) error {
+	delete(m.objects, key)
+	return nil
+}
+
+func (m *memStorage) Copy(_ context.Context, srcKey, dstKey string) error {
+	b, ok := m.objects[srcKey]
+	if !ok {
+		return errors.New("source not found")
+	}
+	cp := make([]byte, len(b))
+	copy(cp, b)
+	m.objects[dstKey] = cp
+	return nil
+}
+
+func (m *memStorage) PresignedGetURL(_ context.Context, _ string, _ time.Duration) (string, error) {
+	return "http://localhost/mock", nil
+}
+
+func (m *memStorage) PresignedDownloadURL(_ context.Context, _ string, _ time.Duration, _ string) (string, error) {
+	return "http://localhost/mock", nil
+}
+
+func (m *memStorage) EnsureBucket(_ context.Context) error { return nil }
+
+var _ storage.Storage = (*memStorage)(nil)
+
+// fullFileRepo is a fileDataRepo backed by in-memory maps. It supports every
+// method PublicDirectoryService.UploadFileAt / ReadFileContent needs.
+type fullFileRepo struct {
+	files  map[uint64]*model.DiskFile
+	byKey  map[string]uint64 // folderID:name -> file ID
+	nextID uint64
+}
+
+func newFullFileRepo() *fullFileRepo {
+	return &fullFileRepo{files: map[uint64]*model.DiskFile{}, byKey: map[string]uint64{}, nextID: 1}
+}
+
+func (r *fullFileRepo) Create(f *model.DiskFile) error {
+	f.ID = r.nextID
+	r.nextID++
+	r.files[f.ID] = f
+	r.byKey[fullFileKey(f.FolderID, f.FileName)] = f.ID
+	return nil
+}
+
+func (r *fullFileRepo) GetByID(id uint64) (*model.DiskFile, error) {
+	if f, ok := r.files[id]; ok {
+		return f, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fullFileRepo) GetByFolderAndName(folderID uint64, name string) (*model.DiskFile, error) {
+	if id, ok := r.byKey[fullFileKey(folderID, name)]; ok {
+		return r.files[id], nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fullFileRepo) ListByFolder(userID string, folderID uint64) ([]model.DiskFile, error) {
+	var out []model.DiskFile
+	for _, f := range r.files {
+		if f.UserID == userID && f.FolderID == folderID && !f.IsDeleted {
+			out = append(out, *f)
+		}
+	}
+	return out, nil
+}
+
+func (r *fullFileRepo) UpdateOSSKey(id uint64, ossKey string) error {
+	if f, ok := r.files[id]; ok {
+		f.OSSKey = ossKey
+	}
+	return nil
+}
+
+func (r *fullFileRepo) UpdateVersion(id uint64, size int64, version int, ossKey, md5 string) error {
+	if f, ok := r.files[id]; ok {
+		f.FileSize = size
+		f.Version = version
+		f.OSSKey = ossKey
+		f.MD5 = md5
+	}
+	return nil
+}
+
+func (r *fullFileRepo) SoftDelete(id uint64) error {
+	if f, ok := r.files[id]; ok {
+		f.IsDeleted = true
+	}
+	return nil
+}
+
+func fullFileKey(folderID uint64, name string) string {
+	return uintToStr(folderID) + ":" + name
+}
+
+// newOkfServiceWithRealPD builds an OkfService wired to a fully-functional
+// PublicDirectoryService (in-memory storage + mock repos). Used by the
+// RefreshBundle integration test to walk the folder tree.
+func newOkfServiceWithRealPD(t *testing.T) (*OkfService, *PublicDirectoryService, *model.DiskPublicDirectory) {
+	t.Helper()
+	pdRepo := newMockPublicDirRepo()
+	folderRepo := newMockFolderCreator()
+	fileRepo := newFullFileRepo()
+	store := newMemStorage()
+
+	pdSvc := &PublicDirectoryService{
+		pdRepo:     pdRepo,
+		folderRepo: folderRepo,
+		fileRepo:   fileRepo,
+		storage:    store,
+	}
+	// Create the public directory + its root folder so UploadFileAt works.
+	pd, err := pdSvc.CreatePublicDirectory("kb", ScopeGlobal, "", "admin")
+	if err != nil {
+		t.Fatalf("CreatePublicDirectory: %v", err)
+	}
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	svc := &OkfService{bundles: bundles, nodes: nodes, pdSvc: pdSvc, dbDriver: "sqlite"}
+	return svc, pdSvc, pd
+}
+
+func TestOkfService_RefreshBundle_WalksTree(t *testing.T) {
+	svc, pdSvc, pd := newOkfServiceWithRealPD(t)
+
+	// Seed index.md + two nested typed files via the real writer path so the
+	// folder tree and OSS objects exist.
+	ctx := context.Background()
+	files := []struct {
+		rel     string
+		content []byte
+	}{
+		{"index.md", mustIndexMD(t, "0.1", "Bundle")},
+		{"concepts/gemma.md", mustTypedMD("concept", "Gemma")},
+		{"guides/quickstart.md", mustTypedMD("guide", "Quickstart")},
+	}
+	for _, f := range files {
+		if _, err := pdSvc.UploadFileAt(ctx, pd.ID, f.rel, "text/markdown", f.content); err != nil {
+			t.Fatalf("UploadFileAt %s: %v", f.rel, err)
+		}
+	}
+
+	bundle, err := svc.RegisterBundle(ctx, pd.ID)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	// RegisterBundle materializes index.md only; the other two files are
+	// outside the writer path and must be picked up by RefreshBundle.
+	if bundle.NodeCount != 1 {
+		t.Errorf("after register: nodeCount = %d, want 1", bundle.NodeCount)
+	}
+
+	refreshed, err := svc.RefreshBundle(ctx, bundle.ID)
+	if err != nil {
+		t.Fatalf("RefreshBundle: %v", err)
+	}
+	if refreshed.NodeCount != 3 {
+		t.Errorf("after refresh: nodeCount = %d, want 3 (index + 2 typed)", refreshed.NodeCount)
+	}
+
+	// The walk must descend both nested folders.
+	agg, err := svc.AggregateByType(bundle.ID, "", "")
+	if err != nil {
+		t.Fatalf("AggregateByType: %v", err)
+	}
+	gotTypes := map[string]uint32{}
+	for _, a := range agg {
+		gotTypes[a.Type] = a.Count
+	}
+	wantTypes := map[string]uint32{"bundle": 1, "concept": 1, "guide": 1}
+	for k, v := range wantTypes {
+		if gotTypes[k] != v {
+			t.Errorf("type[%s] = %d, want %d", k, gotTypes[k], v)
+		}
+	}
+}
+
+func TestOkfService_RefreshBundle_WalkFailsOnMissingPD(t *testing.T) {
+	// Walk path whose public directory lookup fails. We register against one
+	// PD then delete it so the in-walk GetPublicDirectory errors.
+	svc, _, pd := newOkfServiceWithRealPD(t)
+	ctx := context.Background()
+
+	if _, err := svc.pdSvc.(*PublicDirectoryService).UploadFileAt(ctx, pd.ID, "index.md", "text/markdown", mustIndexMD(t, "0.1", "x")); err != nil {
+		t.Fatalf("UploadFileAt: %v", err)
+	}
+	bundle, err := svc.RegisterBundle(ctx, pd.ID)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	// Force the walk's GetPublicDirectory to fail by swapping the pdSvc for a
+	// stub whose GetPublicDirectory errors but Upload/Read still work via the
+	// real one. The simplest way is to delete the directory from the repo.
+	realPD := svc.pdSvc.(*PublicDirectoryService)
+	_ = realPD.pdRepo.Delete(pd.ID)
+
+	if _, err := svc.RefreshBundle(ctx, bundle.ID); err == nil {
+		t.Error("expected RefreshBundle to fail when public directory is missing")
+	}
+}

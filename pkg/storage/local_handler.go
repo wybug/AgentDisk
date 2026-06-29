@@ -55,7 +55,7 @@ func (h *LocalStorageHandler) ServeFile(c *gin.Context) {
 	}
 
 	if filename := c.Query("filename"); filename != "" {
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
 	}
 
 	c.File(fullPath)

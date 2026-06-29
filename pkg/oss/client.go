@@ -84,7 +84,7 @@ func (c *Client) PresignedGetURL(ctx context.Context, key string, expires time.D
 // PresignedDownloadURL returns a presigned URL with Content-Disposition: attachment.
 func (c *Client) PresignedDownloadURL(ctx context.Context, key string, expires time.Duration, filename string) (string, error) {
 	reqParams := make(url.Values)
-	reqParams.Set("response-content-disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	reqParams.Set("response-content-disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
 	u, err := c.mc.PresignedGetObject(ctx, c.bucket, key, expires, reqParams)
 	if err != nil {
 		return "", err

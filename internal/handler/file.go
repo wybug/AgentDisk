@@ -223,8 +223,8 @@ func (h *FileHandler) DownloadByToken(c *gin.Context) {
 	}
 
 	if acceptsJSON(c) {
-		file, url, err := h.svc.GetFile(c.Request.Context(), userID, fileID)
-		if err != nil {
+		file, url, gErr := h.svc.GetFile(c.Request.Context(), userID, fileID)
+		if gErr != nil {
 			response.Forbidden(c, "file not found or no permission")
 			return
 		}
