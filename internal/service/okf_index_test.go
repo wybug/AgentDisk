@@ -11,7 +11,7 @@ import (
 // types and asserts the rendered markdown groups them under "## Type:"
 // headings, in alphabetical order, with bundle-relative links.
 func TestGenerateIndexMarkdown_GroupsByType(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", "My KB"))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -65,7 +65,7 @@ func TestGenerateIndexMarkdown_GroupsByType(t *testing.T) {
 // TestGenerateIndexMarkdown_EmptyBundle verifies the renderer emits a
 // non-empty placeholder body when the bundle has zero typed nodes.
 func TestGenerateIndexMarkdown_EmptyBundle(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", "Empty"))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -86,7 +86,7 @@ func TestGenerateIndexMarkdown_EmptyBundle(t *testing.T) {
 // TestGenerateIndexMarkdown_CJKTitle verifies the title is rendered verbatim
 // even when it contains multibyte characters.
 func TestGenerateIndexMarkdown_CJKTitle(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", "知识库"))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -104,7 +104,7 @@ func TestGenerateIndexMarkdown_CJKTitle(t *testing.T) {
 // is appended after an em-dash on the index bullet, collapsed to a single
 // line.
 func TestGenerateIndexMarkdown_DescriptionTrailer(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", "Desc"))
 	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
 		t.Fatalf("RegisterBundle: %v", err)
@@ -127,7 +127,7 @@ func TestGenerateIndexMarkdown_DescriptionTrailer(t *testing.T) {
 
 // TestGenerateIndexMarkdown_NotFound covers the missing-bundle path.
 func TestGenerateIndexMarkdown_NotFound(t *testing.T) {
-	_, _, _, svc := okfTestHarness(t)
+	_, _, _, _, svc := okfTestHarness(t)
 	_, err := svc.GenerateIndexMarkdown(context.Background(), 999)
 	if !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
@@ -137,7 +137,7 @@ func TestGenerateIndexMarkdown_NotFound(t *testing.T) {
 // TestAppendLogEntry_CreatesAndAppends writes two entries against a fresh
 // bundle and verifies both rows land in log.md, in order, tab-separated.
 func TestAppendLogEntry_CreatesAndAppends(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	bundle, err := svc.RegisterBundle(context.Background(), 7)
 	if err != nil {
@@ -191,7 +191,7 @@ func TestAppendLogEntry_CreatesAndAppends(t *testing.T) {
 // TestAppendLogEntry_BundleNotFound verifies the helper short-circuits when
 // the bundle is gone.
 func TestAppendLogEntry_BundleNotFound(t *testing.T) {
-	_, _, _, svc := okfTestHarness(t)
+	_, _, _, _, svc := okfTestHarness(t)
 	err := svc.AppendLogEntry(context.Background(), 999, LogActionCreate, "x.md", "u1")
 	if !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
@@ -202,7 +202,7 @@ func TestAppendLogEntry_BundleNotFound(t *testing.T) {
 // does not start with a YAML frontmatter delimiter — OKF §reserved names
 // forbids it.
 func TestAppendLogEntry_NoFrontmatter(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	bundle, _ := svc.RegisterBundle(context.Background(), 7)
 	if err := svc.AppendLogEntry(context.Background(), bundle.ID, LogActionCreate, "a.md", "u1"); err != nil {
@@ -218,7 +218,7 @@ func TestAppendLogEntry_NoFrontmatter(t *testing.T) {
 // TestRegenerateIndex_ReturnsVersion verifies RegenerateIndex writes the
 // bundle root index.md and returns its file version + timestamp.
 func TestRegenerateIndex_ReturnsVersion(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", "Original"))
 	bundle, err := svc.RegisterBundle(context.Background(), 7)
 	if err != nil {
@@ -247,7 +247,7 @@ func TestRegenerateIndex_ReturnsVersion(t *testing.T) {
 
 // TestRegenerateIndex_NotFound covers the missing-bundle path.
 func TestRegenerateIndex_NotFound(t *testing.T) {
-	_, _, _, svc := okfTestHarness(t)
+	_, _, _, _, svc := okfTestHarness(t)
 	_, _, err := svc.RegenerateIndex(context.Background(), 999, "user001", "eng")
 	if !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
@@ -259,7 +259,7 @@ func TestRegenerateIndex_NotFound(t *testing.T) {
 // ErrOkfForbidden rather than overwriting the bundle's index. Without this
 // check any authenticated user could clobber another department's index.md.
 func TestRegenerateIndex_Forbidden(t *testing.T) {
-	_, _, pub, svc := okfTestHarness(t)
+	_, _, _, pub, svc := okfTestHarness(t)
 	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
 	bundle, err := svc.RegisterBundle(context.Background(), 7)
 	if err != nil {
