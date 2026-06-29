@@ -336,9 +336,20 @@ func (s *OkfService) updateNodeBrokenFlag(n *model.OkfNode, broken bool) error {
 }
 
 // ScanBundleLinksForHandler is the convenience wrapper used by the HTTP layer.
-// It returns the report directly so the handler can shape the JSON response
-// without re-walking the bundle.
-func (s *OkfService) ScanBundleLinksForHandler(ctx context.Context, bundleID uint64) (*ScanReport, error) {
+// It enforces reader ACL on the bundle (mirroring GetBundle) before walking
+// nodes, since the scan writes has_broken_link back to disk_okf_node and so
+// must not be triggerable by users who cannot even see the bundle.
+func (s *OkfService) ScanBundleLinksForHandler(ctx context.Context, bundleID uint64, userID, department string) (*ScanReport, error) {
+	bundle, err := s.bundles.GetByID(bundleID)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, ErrOkfBundleNotFound
+		}
+		return nil, fmt.Errorf("lookup bundle: %w", err)
+	}
+	if vErr := s.requireBundleVisible(bundle, userID, department); vErr != nil {
+		return nil, vErr
+	}
 	return s.ScanBundleLinks(ctx, bundleID)
 }
 

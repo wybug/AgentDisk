@@ -342,6 +342,32 @@ func TestListBrokenLinks_NotFound(t *testing.T) {
 	}
 }
 
+// TestScanBundleLinksForHandler_Forbidden covers the reader ACL on the
+// HTTP-layer scan wrapper: a caller whose visibility set excludes the bundle
+// must get ErrOkfForbidden rather than a scan running over data they cannot
+// otherwise read. The handler maps this to 403.
+func TestScanBundleLinksForHandler_Forbidden(t *testing.T) {
+	_, _, pub, svc := okfTestHarness(t)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	svc.SetVisibility(stubVisibility{visible: map[uint64]bool{}})
+	if _, err := svc.ScanBundleLinksForHandler(context.Background(), bundle.ID, "user-x", "dept-y"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("expected ErrOkfForbidden, got %v", err)
+	}
+}
+
+// TestScanBundleLinksForHandler_NotFound covers the missing-bundle path so
+// the wrapper surfaces the same sentinel as the underlying scan.
+func TestScanBundleLinksForHandler_NotFound(t *testing.T) {
+	_, _, _, svc := okfTestHarness(t)
+	if _, err := svc.ScanBundleLinksForHandler(context.Background(), 999, "user-x", "dept-y"); !errors.Is(err, ErrOkfBundleNotFound) {
+		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
+	}
+}
+
 // okfTestHarness wires a fresh OkfService against in-memory fakes. Returns
 // the bundle repo, node repo, public dir stub, and service so individual
 // tests can drive whichever layer they need.

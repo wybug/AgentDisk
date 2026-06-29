@@ -15,9 +15,9 @@ import (
 // Declared as an interface so handler tests can swap in a stub without
 // spinning up the full service + OSS stack.
 type okfScanHandlerService interface {
-	ScanBundleLinksForHandler(ctx context.Context, bundleID uint64) (*service.ScanReport, error)
+	ScanBundleLinksForHandler(ctx context.Context, bundleID uint64, userID, department string) (*service.ScanReport, error)
 	ListBrokenLinks(ctx context.Context, bundleID uint64, userID, department string, cursor uint64, limit int) ([]service.BrokenLink, uint64, error)
-	RegenerateIndex(ctx context.Context, bundleID uint64) (indexVersion uint32, regeneratedAt time.Time, err error)
+	RegenerateIndex(ctx context.Context, bundleID uint64, userID, department string) (indexVersion uint32, regeneratedAt time.Time, err error)
 }
 
 // OkfScanHandler exposes the P2 maintenance endpoints: dead-link scan, broken
@@ -44,7 +44,8 @@ func (h *OkfScanHandler) ScanBundle(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	report, err := h.svc.ScanBundleLinksForHandler(c.Request.Context(), id)
+	userID, department := readUserContext(c)
+	report, err := h.svc.ScanBundleLinksForHandler(c.Request.Context(), id, userID, department)
 	if err != nil {
 		h.respondOkfScanError(c, err)
 		return
@@ -102,7 +103,8 @@ func (h *OkfScanHandler) RegenerateIndex(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	version, at, err := h.svc.RegenerateIndex(c.Request.Context(), id)
+	userID, department := readUserContext(c)
+	version, at, err := h.svc.RegenerateIndex(c.Request.Context(), id, userID, department)
 	if err != nil {
 		h.respondOkfScanError(c, err)
 		return

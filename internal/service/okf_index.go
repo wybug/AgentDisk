@@ -227,8 +227,11 @@ func appendLogRow(body []byte, row string) []byte {
 // index. It renders the index markdown and writes it to OSS via the same
 // UploadFileAt path as the writer, then returns the new content version
 // identifier (the OSS object version, approximated by the file row's
-// Version) and the regeneration timestamp.
-func (s *OkfService) RegenerateIndex(ctx context.Context, bundleID uint64) (indexVersion uint32, regeneratedAt time.Time, err error) {
+// Version) and the regeneration timestamp. Reader ACL is enforced because
+// regeneration overwrites the bundle's root index.md in OSS — letting a
+// user who cannot even see the bundle overwrite its index would be a
+// privilege escalation.
+func (s *OkfService) RegenerateIndex(ctx context.Context, bundleID uint64, userID, department string) (indexVersion uint32, regeneratedAt time.Time, err error) {
 	bundle, err := s.bundles.GetByID(bundleID)
 	if err != nil {
 		if isNotFound(err) {
@@ -236,7 +239,18 @@ func (s *OkfService) RegenerateIndex(ctx context.Context, bundleID uint64) (inde
 		}
 		return 0, time.Time{}, fmt.Errorf("lookup bundle: %w", err)
 	}
-	body, err := s.GenerateIndexMarkdown(ctx, bundleID)
+	if vErr := s.requireBundleVisible(bundle, userID, department); vErr != nil {
+		return 0, time.Time{}, vErr
+	}
+	return s.regenerateIndexInternal(ctx, bundle)
+}
+
+// regenerateIndexInternal is the ACL-free inner path used by callers that have
+// already proven their right to touch the bundle (e.g. the async post-write
+// index regen triggered by WriteMarkdown, which already passed the writer's
+// own ACL at the public-directory layer).
+func (s *OkfService) regenerateIndexInternal(ctx context.Context, bundle *model.OkfBundle) (indexVersion uint32, regeneratedAt time.Time, err error) {
+	body, err := s.GenerateIndexMarkdown(ctx, bundle.ID)
 	if err != nil {
 		return 0, time.Time{}, err
 	}

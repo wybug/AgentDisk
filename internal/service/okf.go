@@ -469,7 +469,11 @@ func (s *OkfService) scheduleIndexRegen(_ context.Context, bundleID uint64) {
 	go func() { //nolint:gosec // G118: intentional — async regen outlives the request
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		_, _, _ = s.RegenerateIndex(ctx, bundleID)
+		bundle, err := s.bundles.GetByID(bundleID)
+		if err != nil {
+			return
+		}
+		_, _, _ = s.regenerateIndexInternal(ctx, bundle)
 	}()
 }
 

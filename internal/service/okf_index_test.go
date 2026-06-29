@@ -225,7 +225,7 @@ func TestRegenerateIndex_ReturnsVersion(t *testing.T) {
 		t.Fatalf("RegisterBundle: %v", err)
 	}
 
-	version, at, err := svc.RegenerateIndex(context.Background(), bundle.ID)
+	version, at, err := svc.RegenerateIndex(context.Background(), bundle.ID, "user001", "eng")
 	if err != nil {
 		t.Fatalf("RegenerateIndex: %v", err)
 	}
@@ -248,8 +248,25 @@ func TestRegenerateIndex_ReturnsVersion(t *testing.T) {
 // TestRegenerateIndex_NotFound covers the missing-bundle path.
 func TestRegenerateIndex_NotFound(t *testing.T) {
 	_, _, _, svc := okfTestHarness(t)
-	_, _, err := svc.RegenerateIndex(context.Background(), 999)
+	_, _, err := svc.RegenerateIndex(context.Background(), 999, "user001", "eng")
 	if !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("expected ErrOkfBundleNotFound, got %v", err)
+	}
+}
+
+// TestRegenerateIndex_Forbidden covers the reader ACL on the regenerate-index
+// endpoint: a caller whose visibility set excludes the bundle must get
+// ErrOkfForbidden rather than overwriting the bundle's index. Without this
+// check any authenticated user could clobber another department's index.md.
+func TestRegenerateIndex_Forbidden(t *testing.T) {
+	_, _, pub, svc := okfTestHarness(t)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	svc.SetVisibility(stubVisibility{visible: map[uint64]bool{}})
+	if _, _, err := svc.RegenerateIndex(context.Background(), bundle.ID, "user-x", "dept-y"); !errors.Is(err, ErrOkfForbidden) {
+		t.Errorf("expected ErrOkfForbidden, got %v", err)
 	}
 }

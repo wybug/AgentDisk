@@ -17,16 +17,16 @@ import (
 // leave the rest nil. A nil function returns a zero/error value so
 // unconfigured paths fail loudly.
 type stubOkfScanSvc struct {
-	scanBundleLinksForHandler func(ctx context.Context, bundleID uint64) (*service.ScanReport, error)
+	scanBundleLinksForHandler func(ctx context.Context, bundleID uint64, userID, department string) (*service.ScanReport, error)
 	listBrokenLinks           func(ctx context.Context, bundleID uint64, userID, department string, cursor uint64, limit int) ([]service.BrokenLink, uint64, error)
-	regenerateIndex           func(ctx context.Context, bundleID uint64) (uint32, time.Time, error)
+	regenerateIndex           func(ctx context.Context, bundleID uint64, userID, department string) (uint32, time.Time, error)
 }
 
-func (s *stubOkfScanSvc) ScanBundleLinksForHandler(ctx context.Context, bundleID uint64) (*service.ScanReport, error) {
+func (s *stubOkfScanSvc) ScanBundleLinksForHandler(ctx context.Context, bundleID uint64, userID, department string) (*service.ScanReport, error) {
 	if s.scanBundleLinksForHandler == nil {
 		return nil, errors.New("not stubbed")
 	}
-	return s.scanBundleLinksForHandler(ctx, bundleID)
+	return s.scanBundleLinksForHandler(ctx, bundleID, userID, department)
 }
 
 func (s *stubOkfScanSvc) ListBrokenLinks(ctx context.Context, bundleID uint64, userID, department string, cursor uint64, limit int) ([]service.BrokenLink, uint64, error) {
@@ -36,11 +36,11 @@ func (s *stubOkfScanSvc) ListBrokenLinks(ctx context.Context, bundleID uint64, u
 	return s.listBrokenLinks(ctx, bundleID, userID, department, cursor, limit)
 }
 
-func (s *stubOkfScanSvc) RegenerateIndex(ctx context.Context, bundleID uint64) (uint32, time.Time, error) {
+func (s *stubOkfScanSvc) RegenerateIndex(ctx context.Context, bundleID uint64, userID, department string) (uint32, time.Time, error) {
 	if s.regenerateIndex == nil {
 		return 0, time.Time{}, errors.New("not stubbed")
 	}
-	return s.regenerateIndex(ctx, bundleID)
+	return s.regenerateIndex(ctx, bundleID, userID, department)
 }
 
 // okfScanHandlerWithStub builds a gin engine with the P2 maintenance routes
@@ -62,9 +62,12 @@ func okfScanHandlerWithStub(t *testing.T, stub *stubOkfScanSvc) *gin.Engine {
 // scanned-node count + broken-link count from the service report.
 func TestOkfScanHandler_ScanBundle_Success(t *testing.T) {
 	stub := &stubOkfScanSvc{
-		scanBundleLinksForHandler: func(_ context.Context, bundleID uint64) (*service.ScanReport, error) {
+		scanBundleLinksForHandler: func(_ context.Context, bundleID uint64, userID, _ string) (*service.ScanReport, error) {
 			if bundleID != 7 {
 				t.Errorf("bundleID = %d, want 7", bundleID)
+			}
+			if userID != "user001" {
+				t.Errorf("userID = %q, want user001", userID)
 			}
 			return &service.ScanReport{
 				ScannedNodes: 4,
@@ -95,7 +98,7 @@ func TestOkfScanHandler_ScanBundle_Success(t *testing.T) {
 // handler must surface 404, not a 500.
 func TestOkfScanHandler_ScanBundle_NotFound(t *testing.T) {
 	stub := &stubOkfScanSvc{
-		scanBundleLinksForHandler: func(_ context.Context, _ uint64) (*service.ScanReport, error) {
+		scanBundleLinksForHandler: func(_ context.Context, _ uint64, _, _ string) (*service.ScanReport, error) {
 			return nil, service.ErrOkfBundleNotFound
 		},
 	}
@@ -206,9 +209,12 @@ func TestOkfScanHandler_ListBrokenLinks_Forbidden(t *testing.T) {
 // both indexVersion and regeneratedAt.
 func TestOkfScanHandler_RegenerateIndex_Success(t *testing.T) {
 	stub := &stubOkfScanSvc{
-		regenerateIndex: func(_ context.Context, bundleID uint64) (uint32, time.Time, error) {
+		regenerateIndex: func(_ context.Context, bundleID uint64, userID, _ string) (uint32, time.Time, error) {
 			if bundleID != 7 {
 				t.Errorf("bundleID = %d, want 7", bundleID)
+			}
+			if userID != "user001" {
+				t.Errorf("userID = %q, want user001", userID)
 			}
 			return 3, time.Date(2026, 6, 27, 10, 0, 0, 0, time.UTC), nil
 		},
@@ -232,7 +238,7 @@ func TestOkfScanHandler_RegenerateIndex_Success(t *testing.T) {
 // TestOkfScanHandler_RegenerateIndex_NotFound covers the missing-bundle path.
 func TestOkfScanHandler_RegenerateIndex_NotFound(t *testing.T) {
 	stub := &stubOkfScanSvc{
-		regenerateIndex: func(_ context.Context, _ uint64) (uint32, time.Time, error) {
+		regenerateIndex: func(_ context.Context, _ uint64, _, _ string) (uint32, time.Time, error) {
 			return 0, time.Time{}, service.ErrOkfBundleNotFound
 		},
 	}
@@ -241,6 +247,41 @@ func TestOkfScanHandler_RegenerateIndex_NotFound(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != 404 {
 		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+// TestOkfScanHandler_ScanBundle_Forbidden covers the cross-user visibility-denied
+// path. The service returns ErrOkfForbidden when the caller is not in the
+// bundle's department — the handler must surface 403, never 500, so the
+// privilege boundary stays legible to clients.
+func TestOkfScanHandler_ScanBundle_Forbidden(t *testing.T) {
+	stub := &stubOkfScanSvc{
+		scanBundleLinksForHandler: func(_ context.Context, _ uint64, _, _ string) (*service.ScanReport, error) {
+			return nil, service.ErrOkfForbidden
+		},
+	}
+	r := okfScanHandlerWithStub(t, stub)
+	req, w := doJSON(t, "POST", "/v1/disk/okf/bundles/7/scan", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 403 {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
+// TestOkfScanHandler_RegenerateIndex_Forbidden mirrors the scan forbidden test
+// on the regenerate-index endpoint. ACL denial must map to 403, not the 500
+// path that would leak the underlying error.
+func TestOkfScanHandler_RegenerateIndex_Forbidden(t *testing.T) {
+	stub := &stubOkfScanSvc{
+		regenerateIndex: func(_ context.Context, _ uint64, _, _ string) (uint32, time.Time, error) {
+			return 0, time.Time{}, service.ErrOkfForbidden
+		},
+	}
+	r := okfScanHandlerWithStub(t, stub)
+	req, w := doJSON(t, "POST", "/v1/disk/okf/bundles/7/regenerate-index", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 403 {
+		t.Errorf("status = %d, want 403", w.Code)
 	}
 }
 
