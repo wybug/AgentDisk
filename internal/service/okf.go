@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/repository"
@@ -93,6 +94,19 @@ type OkfService struct {
 	// transaction. It is nil in unit tests that swap in fake repos; in that case
 	// runTx falls back to executing the body without a real transaction.
 	db *gorm.DB
+	// lock serializes writers per bundle. Defaults to NoOpBundleLock when the
+	// process is not configured with Redis; tests inject a Redis lock when
+	// they want to exercise the contention path.
+	lock BundleLock
+	// autoIndexUpdate toggles the asynchronous index.md regeneration after a
+	// write. Defaults to true. When false, writes still append log.md and
+	// recompute has_broken_link, but skip the index regen — useful for
+	// batch imports that want to rebuild the index once at the end.
+	autoIndexUpdate bool
+	// logUserID is the fallback user identifier written to log.md when the
+	// caller does not supply one (e.g. system-initiated refresh). Empty is
+	// allowed; log.md rows tolerate a blank user column.
+	logUserID string
 }
 
 // pdVisibility adapts PublicDirectoryService.ListVisible onto the
@@ -124,12 +138,14 @@ func (v pdVisibility) VisiblePublicDirIDs(department, userID string) (map[uint64
 // the same *gorm.DB the repos use.
 func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeRepo, pdSvc *PublicDirectoryService, dbDriver string, db *gorm.DB) *OkfService {
 	return &OkfService{
-		bundles:  bundles,
-		nodes:    nodes,
-		pdSvc:    pdSvc,
-		vis:      pdVisibility{pd: pdSvc},
-		dbDriver: dbDriver,
-		db:       db,
+		bundles:         bundles,
+		nodes:           nodes,
+		pdSvc:           pdSvc,
+		vis:             pdVisibility{pd: pdSvc},
+		dbDriver:        dbDriver,
+		db:              db,
+		lock:            NoOpBundleLock{},
+		autoIndexUpdate: true,
 	}
 }
 
@@ -140,10 +156,12 @@ func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeR
 // SetVisibility to inject a stub; otherwise readers see every bundle.
 func NewOkfServiceFromRepo(bundles okfBundleRepo, nodes okfNodeRepo, pdSvc okfPublicDir, dbDriver string) *OkfService {
 	return &OkfService{
-		bundles:  bundles,
-		nodes:    nodes,
-		pdSvc:    pdSvc,
-		dbDriver: dbDriver,
+		bundles:         bundles,
+		nodes:           nodes,
+		pdSvc:           pdSvc,
+		dbDriver:        dbDriver,
+		lock:            NoOpBundleLock{},
+		autoIndexUpdate: true,
 	}
 }
 
@@ -151,6 +169,24 @@ func NewOkfServiceFromRepo(bundles okfBundleRepo, nodes okfNodeRepo, pdSvc okfPu
 // that swap in fake repos and want to drive the ACL path without the full
 // public directory service.
 func (s *OkfService) SetVisibility(v okfVisibility) { s.vis = v }
+
+// SetBundleLock overrides the writer serialization lock. Router wires a Redis
+// lock when the deployment runs Redis; tests inject a NoOp or a fake lock to
+// exercise the contention path without a real Redis.
+func (s *OkfService) SetBundleLock(l BundleLock) {
+	if l == nil {
+		l = NoOpBundleLock{}
+	}
+	s.lock = l
+}
+
+// SetAutoIndexUpdate toggles asynchronous index.md regeneration after each
+// write. Defaults to true. Router sets this from config.OkfConfig.AutoIndexUpdate.
+func (s *OkfService) SetAutoIndexUpdate(v bool) { s.autoIndexUpdate = v }
+
+// SetLogUserID sets the fallback user identifier written to log.md rows when
+// a writer call does not supply one. Router injects the API key / JWT user.
+func (s *OkfService) SetLogUserID(uid string) { s.logUserID = uid }
 
 // RegisterBundle registers a public directory as an OKF bundle. The directory
 // must contain an index.md whose frontmatter declares okf_version; otherwise
@@ -196,6 +232,9 @@ func (s *OkfService) RegisterBundle(ctx context.Context, publicDirectoryID uint6
 		_ = mErr
 	}
 	bundle.NodeCount, _ = s.nodes.CountByBundle(nil, bundle.ID)
+	// Best-effort log entry. A failure here is non-fatal: the bundle is
+	// registered, and a missing log row is preferable to a rollback.
+	_ = s.AppendLogEntry(ctx, bundle.ID, LogActionRegister, model.OkfReservedRootRelPath, s.logUserID)
 	return bundle, nil
 }
 
@@ -259,6 +298,16 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 		contentType = "text/markdown; charset=utf-8"
 	}
 
+	// Acquire the per-bundle writer lock so two concurrent writers cannot
+	// interleave their materialize-and-count transactions. The release fn is
+	// invoked on return; if Acquire returns ErrOkfLockHeld the caller surfaces
+	// it as a 409 Conflict.
+	release, err := s.acquireBundleLock(ctx, req.PublicDirectoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	file, err := s.pdSvc.UploadFileAt(ctx, req.PublicDirectoryID, relPath, contentType, req.Content)
 	if err != nil {
 		return nil, fmt.Errorf("upload markdown: %w", err)
@@ -279,6 +328,13 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 			return nil, err
 		}
 	}
+
+	// Detect whether this is a create or an update so the log entry is honest.
+	// We look up by (bundle_id, rel_path) before materialization; a miss means
+	// create, a hit means update. The lookup is best-effort — a concurrent
+	// writer could insert between this check and the upsert, but the lock
+	// above makes that rare and the worst case is a mislabeled log row.
+	_, existedBefore := s.lookupNodeForLog(bundle.ID, relPath)
 
 	// If this write is index.md, refresh bundle root metadata so titles /
 	// descriptions stay in sync with the latest content. This runs before the
@@ -314,7 +370,136 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 	}); err != nil {
 		return nil, err
 	}
+
+	// Synchronous post-write hooks: log the action and recompute the node's
+	// broken-link flag from the just-written body. Both are best-effort and
+	// never fail the write — the OSS bytes + node row are already durable.
+	s.postWriteSyncHooks(ctx, bundle, node, relPath, req.Content, existedBefore)
+
+	// Asynchronous index.md regeneration. Skipped when AutoIndexUpdate is
+	// off (batch-import mode). The goroutine has its own timeout so a slow
+	// regeneration cannot pin a goroutine forever.
+	if s.autoIndexUpdate {
+		s.scheduleIndexRegen(ctx, bundle.ID)
+	}
+
 	return node, nil
+}
+
+// acquireBundleLock resolves the bundle ID for a public directory and acquires
+// the per-bundle writer lock. The release fn is always non-nil when err is
+// nil so callers can `defer release()` unconditionally.
+func (s *OkfService) acquireBundleLock(ctx context.Context, publicDirectoryID uint64) (func(), error) {
+	bundle, err := s.bundles.GetByPublicDirectoryID(publicDirectoryID)
+	if err != nil {
+		// Bundle not yet registered: no lock to take. The writer will
+		// auto-register it inside the critical section; until then there is
+		// nothing to protect. We swallow the lookup error deliberately — a
+		// gorm.ErrRecordNotFound here means "first write to this PD", not a
+		// real failure, and surfacing it would force every cold-start write
+		// to handle the not-found path.
+		return func() {}, nil //nolint:nilerr // intentional: not-found is the "no bundle yet" path
+	}
+	release, err := s.lock.Acquire(ctx, bundle.ID)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		release = func() {}
+	}
+	return release, nil
+}
+
+// lookupNodeForLog returns (node, true) when the (bundle_id, rel_path) row
+// already exists. Used by WriteMarkdown to decide whether the log row is
+// "create" or "update". Errors are mapped to (nil, false) so a transient
+// lookup failure degrades to "create" rather than failing the write.
+func (s *OkfService) lookupNodeForLog(bundleID uint64, relPath string) (*model.OkfNode, bool) {
+	n, err := s.nodes.GetByBundleAndRelPath(bundleID, relPath)
+	if err != nil || n == nil {
+		return nil, false
+	}
+	return n, true
+}
+
+// postWriteSyncHooks runs the synchronous post-write side-effects:
+//   - AppendLogEntry: records "create" / "update" so log.md stays in sync.
+//   - broken-link scan for this single node: cheaper than a full scan, and
+//     keeps has_broken_link fresh per write.
+//
+// Both are best-effort; failures are swallowed to keep the write durable.
+func (s *OkfService) postWriteSyncHooks(ctx context.Context, _ *model.OkfBundle, node *model.OkfNode, relPath string, body []byte, existedBefore bool) {
+	if node == nil {
+		return
+	}
+	action := LogActionCreate
+	if existedBefore {
+		action = LogActionUpdate
+	}
+	_ = s.AppendLogEntry(ctx, node.BundleID, action, relPath, s.logUserID)
+
+	broken := s.nodeHasBrokenLink(node.BundleID, relPath, body)
+	_ = s.updateNodeBrokenFlag(node, broken)
+}
+
+// nodeHasBrokenLink reports whether any bundle-relative link in body fails to
+// resolve to an existing node. External / anchor links are never broken.
+func (s *OkfService) nodeHasBrokenLink(bundleID uint64, relPath string, body []byte) bool {
+	links := ExtractLinks(body, relPath)
+	for _, li := range links {
+		if li.LinkKind != LinkKindBundle {
+			continue
+		}
+		if _, err := s.nodes.GetByBundleAndRelPath(bundleID, li.DstRelPath); err != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// scheduleIndexRegen launches a goroutine that regenerates index.md. The
+// goroutine uses a fresh context with a 30s timeout so the request handler
+// can return immediately while the regen runs in the background. A failure
+// is silent: the index will be rebuilt on the next write or by an explicit
+// /regenerate-index call.
+//
+// The request-scoped context is intentionally not propagated: the regen must
+// outlive the HTTP request that triggered it.
+func (s *OkfService) scheduleIndexRegen(_ context.Context, bundleID uint64) {
+	go func() { //nolint:gosec // G118: intentional — async regen outlives the request
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		bundle, err := s.bundles.GetByID(bundleID)
+		if err != nil {
+			return
+		}
+		_, _, _ = s.regenerateIndexInternal(ctx, bundle)
+	}()
+}
+
+// OnFileDeleted is the post-delete hook called by the public-directory writer
+// path when a bundle file is removed. It re-runs the broken-link scan (so
+// surviving nodes that linked to the deleted file get their has_broken_link
+// flag flipped), appends a "delete" log row, and asynchronously regenerates
+// index.md.
+//
+// The hook is best-effort: failures are swallowed because the underlying file
+// deletion has already succeeded by the time this runs. Callers that want
+// strict consistency should issue a RefreshBundle + RegenerateIndex pair.
+func (s *OkfService) OnFileDeleted(ctx context.Context, publicDirectoryID uint64, relPath string) {
+	bundle, err := s.bundles.GetByPublicDirectoryID(publicDirectoryID)
+	if err != nil {
+		// Not a registered bundle: nothing for OKF to do.
+		return
+	}
+	// Best-effort log + full broken-link rescan. The rescan is O(N) in the
+	// node count, which is acceptable because deletes are rare relative to
+	// writes.
+	_ = s.AppendLogEntry(ctx, bundle.ID, LogActionDelete, relPath, s.logUserID)
+	_, _ = s.ScanBundleLinks(ctx, bundle.ID)
+	if s.autoIndexUpdate {
+		s.scheduleIndexRegen(ctx, bundle.ID)
+	}
 }
 
 // validateFrontmatterForPath applies OKF strict-mode checks that depend on the
@@ -377,7 +562,7 @@ func (s *OkfService) materializeNode(_ context.Context, tx *gorm.DB, bundle *mod
 		Title:         fm.Title,
 		Description:   fm.Description,
 		Timestamp:     fm.Timestamp,
-		HasBrokenLink: detectBrokenLink(bundle, relPath, body),
+		HasBrokenLink: s.nodeHasBrokenLink(bundle.ID, relPath, body),
 		ContentHash:   contentHash,
 	}
 	if err := node.SetTags(fm.Tags); err != nil {
@@ -391,16 +576,6 @@ func (s *OkfService) materializeNode(_ context.Context, tx *gorm.DB, bundle *mod
 		return nil, fmt.Errorf("upsert node: %w", err)
 	}
 	return node, nil
-}
-
-// detectBrokenLink is a placeholder for future link-graph validation. It
-// always returns false in this iteration; OKF §9 says broken links are
-// tolerated and flagged rather than rejected, so the column is populated but
-// the validation itself will be added in a follow-up. The bundle is accepted
-// as an argument so the future implementation can walk the node set without a
-// signature change.
-func detectBrokenLink(_ *model.OkfBundle, _ string, _ []byte) bool {
-	return false
 }
 
 // ListBundles returns every registered bundle visible to the caller. userID +
@@ -548,6 +723,9 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 	}); err != nil {
 		return nil, err
 	}
+	// Best-effort log entry marking a refresh-as-scan. Non-fatal: a missing
+	// row does not undo the refresh.
+	_ = s.AppendLogEntry(ctx, bundle.ID, LogActionScan, "", s.logUserID)
 	return bundle, nil
 }
 
@@ -596,6 +774,13 @@ func (s *OkfService) materializeFolderTree(ctx context.Context, tx *gorm.DB, bun
 		if relPrefix != "" {
 			rel = relPrefix + "/" + f.FileName
 		}
+		// log.md is the auto-generated append-only changelog and must not be
+		// materialized as a typed node. OKF mandates it stay frontmatter-free,
+		// so the upsert below would otherwise create a degenerate Type=""
+		// node. Skip it here so NodeCount reflects only the meaningful index.
+		if rel == model.OkfReservedLogRelPath {
+			continue
+		}
 		body, rErr := pdSvc.ReadFileContent(ctx, f.ID)
 		if rErr != nil {
 			continue
@@ -635,6 +820,10 @@ func (s *OkfService) UnregisterBundle(id uint64) error {
 		}
 		return err
 	}
+	// Best-effort log entry before the bundle row goes away. After unregister
+	// the bundle row no longer exists, so AppendLogEntry cannot run after.
+	// Use context.Background() since this entry point has no request context.
+	_ = s.AppendLogEntry(context.Background(), id, LogActionUnregister, "", s.logUserID)
 	if err := s.nodes.DeleteByBundle(nil, id); err != nil {
 		return fmt.Errorf("clear nodes: %w", err)
 	}
