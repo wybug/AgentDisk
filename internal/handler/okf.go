@@ -26,6 +26,11 @@ type okfHandlerService interface {
 	UnregisterBundle(id uint64) error
 	WriteMarkdown(ctx context.Context, req service.WriteMarkdownRequest) (*model.OkfNode, error)
 	Search(ctx context.Context, req service.SearchRequest) (*service.SearchResponse, error)
+	Neighbors(ctx context.Context, req service.NeighborsRequest) (*service.NeighborsResponse, error)
+	Reachable(ctx context.Context, req service.ReachableRequest) (*service.ReachableResponse, error)
+	ShortestPath(ctx context.Context, req service.ShortestPathRequest) (*service.ShortestPathResponse, error)
+	Subgraph(ctx context.Context, req service.SubgraphRequest) (*service.SubgraphResponse, error)
+	Stats(ctx context.Context, req service.StatsRequest) (*service.StatsResponse, error)
 }
 
 // OkfHandler exposes OKF v0.1 bundle reader/writer endpoints. All routes are

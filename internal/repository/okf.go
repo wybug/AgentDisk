@@ -114,6 +114,36 @@ func (r *OkfNodeRepo) GetByBundleAndRelPath(bundleID uint64, relPath string) (*m
 	return &n, nil
 }
 
+// GetByID returns the node for a primary key. P3b graph queries take a nodeID
+// from the URL path and need to resolve it back to its bundle for the ACL
+// check, so this is the entry point for every reader.
+func (r *OkfNodeRepo) GetByID(id uint64) (*model.OkfNode, error) {
+	var n model.OkfNode
+	if err := r.db.First(&n, id).Error; err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+// ListByIDs returns nodes for a set of primary keys, in the order the caller
+// passes. P3b graph queries resolve BFS-reachable sets back to node rows for
+// the response payload; a batched lookup avoids one query per node.
+//
+// The returned slice preserves the input order. Missing IDs are silently
+// dropped — the BFS layer has already established the IDs exist via the edge
+// table, so a miss here would indicate a racing delete and the node simply
+// disappears from the response rather than crashing the query.
+func (r *OkfNodeRepo) ListByIDs(ids []uint64) ([]model.OkfNode, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var out []model.OkfNode
+	if err := r.db.Where("id IN ?", ids).Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NodeListFilter narrows ListByBundle results by type and/or tag (JSON
 // contains). Empty fields mean "no filter on this dimension".
 type NodeListFilter struct {

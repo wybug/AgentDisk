@@ -227,6 +227,14 @@ func Setup(cfg *config.Config) *gin.Engine {
 		adminAPI.GET("/oauth2", oauth2ConfigH.Get)
 		adminAPI.PUT("/oauth2", oauth2ConfigH.Update)
 		adminAPI.POST("/oauth2/test", oauth2ConfigH.Test)
+
+		// P3b admin-only OKF graph rebuild. Mounts under adminAPI so the
+		// AdminAuth + AdminOnly middleware gate it; the OKF reader group
+		// cannot reach it. RefreshBundle does the heavy lift — it walks the
+		// folder tree and re-materializes every node + edge in one tx.
+		if cfg.Okf.Enabled {
+			adminAPI.POST("/okf/bundles/:id/rebuild-graph", okfH.RebuildGraph)
+		}
 	}
 
 	// API v1 group with hybrid auth
@@ -328,6 +336,19 @@ func Setup(cfg *config.Config) *gin.Engine {
 		// chain as the rest of the group; the service layer filters by the
 		// caller's visibility set before issuing the MATCH query.
 		okfGroup.POST("/search", okfH.Search)
+		// P3b graph query routes: neighbors, reachable, shortest path,
+		// subgraph, and stats. All five reuse the HybridAuth + ACL chain so
+		// the service-layer visibility check is enforced uniformly.
+		okfGroup.GET("/nodes/:id/neighbors", okfH.Neighbors)
+		okfGroup.POST("/nodes/:id/reachable", okfH.Reachable)
+		okfGroup.POST("/paths/shortest", okfH.ShortestPath)
+		okfGroup.POST("/subgraph", okfH.Subgraph)
+		okfGroup.GET("/bundles/:id/stats", okfH.Stats)
+		// P3b admin-only full rebuild of the bundle's node + edge index.
+		// Mounted under the admin group below so AdminAuth + AdminOnly gate
+		// it; the OKF reader group cannot reach it. The handler delegates to
+		// RefreshBundle, which already walks the folder tree and re-derives
+		// every node body + edge set in one transaction.
 	}
 
 	// Public directory grants — API Key only
