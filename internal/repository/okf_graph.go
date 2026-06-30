@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/agentdisk/agent-disk/internal/model"
 	"gorm.io/gorm"
@@ -83,6 +84,106 @@ func (r *OkfEdgeRepo) ListByDst(publicDirID, dstNodeID uint64, limit int) ([]mod
 		return nil, err
 	}
 	return out, nil
+}
+
+// ListOutBySrcBatch returns every live outgoing edge for a set of source
+// nodes in a single query. P3b BFS expands a frontier of N nodes per hop;
+// without this method the expansion would issue one query per frontier node
+// (10 ms each at the index, 50 nodes = 500 ms per hop).
+//
+// Edges with dst_exists=false are excluded — the BFS layer treats a dead
+// link as a leaf, so returning them would only inflate the response.
+//
+// limit caps each source node's contribution. Pass 0 for "no per-source
+// cap"; production callers usually pass 0 because the per-node fan-out is
+// naturally bounded by the markdown body's link count.
+func (r *OkfEdgeRepo) ListOutBySrcBatch(publicDirID uint64, srcIDs []uint64, limit int) ([]model.OkfEdge, error) {
+	if len(srcIDs) == 0 {
+		return nil, nil
+	}
+	q := r.db.Where("public_dir_id = ? AND src_node_id IN ? AND dst_exists = ?", publicDirID, srcIDs, true).
+		Order("src_node_id ASC, src_line ASC")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	var out []model.OkfEdge
+	if err := q.Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListInByDstBatch is the reverse-direction counterpart of ListOutBySrcBatch
+// — every live incoming edge for a set of dst nodes. Used by the "in" and
+// "both" BFS directions and by bidirectional shortest-path.
+func (r *OkfEdgeRepo) ListInByDstBatch(publicDirID uint64, dstIDs []uint64, limit int) ([]model.OkfEdge, error) {
+	if len(dstIDs) == 0 {
+		return nil, nil
+	}
+	q := r.db.Where("public_dir_id = ? AND dst_node_id IN ? AND dst_exists = ?", publicDirID, dstIDs, true).
+		Order("dst_node_id ASC, src_node_id ASC")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	var out []model.OkfEdge
+	if err := q.Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// EdgeStats summarizes a bundle's edge table for the stats endpoint.
+// Live + Broken sum to Total. The Live count is what the BFS layer can walk
+// because broken edges are excluded from ListOutBySrcBatch.
+type EdgeStats struct {
+	Total  uint32
+	Live   uint32
+	Broken uint32
+}
+
+// StatsByBundle returns total / live / broken edge counts for a bundle in
+// one round-trip via a GROUP BY on dst_exists. The bundleID arg is unused
+// but kept for symmetry with the rest of the bundle-scoped API.
+func (r *OkfEdgeRepo) StatsByBundle(_, publicDirID uint64) (EdgeStats, error) {
+	type row struct {
+		DstExists bool
+		N         int64
+	}
+	var rows []row
+	if err := r.db.Model(&model.OkfEdge{}).
+		Select("dst_exists, count(*) as n").
+		Where("public_dir_id = ?", publicDirID).
+		Group("dst_exists").
+		Scan(&rows).Error; err != nil {
+		return EdgeStats{}, err
+	}
+	var stats EdgeStats
+	for _, r := range rows {
+		// Edge counts are bounded by the table size; clamping into uint32
+		// keeps the cast well-defined even if a future migration raised the
+		// column type. Realistic bundles are < 1M edges, far below MaxUint32.
+		n := clampCountToUint32(r.N)
+		stats.Total += n
+		if r.DstExists {
+			stats.Live += n
+		} else {
+			stats.Broken += n
+		}
+	}
+	return stats, nil
+}
+
+// clampCountToUint32 keeps an int64 count inside the uint32 range so the
+// caller can sum without a cast. Negative counts come from a misbehaving
+// aggregate and are treated as zero.
+func clampCountToUint32(n int64) uint32 {
+	if n < 0 {
+		return 0
+	}
+	if n > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(n)
 }
 
 // ListBrokenByBundle returns the dead-link edges of a bundle (dst_exists=0)

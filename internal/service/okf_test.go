@@ -146,6 +146,27 @@ func (r *fakeOkfNodeRepo) GetByBundleAndRelPath(bundleID uint64, rel string) (*m
 	return nil, gorm.ErrRecordNotFound
 }
 
+func (r *fakeOkfNodeRepo) GetByID(id uint64) (*model.OkfNode, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if n, ok := r.nodes[id]; ok {
+		return n, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeOkfNodeRepo) ListByIDs(ids []uint64) ([]model.OkfNode, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]model.OkfNode, 0, len(ids))
+	for _, id := range ids {
+		if n, ok := r.nodes[id]; ok {
+			out = append(out, *n)
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeOkfNodeRepo) ListByBundle(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error) {
 	return r.filterNodes(bundleID, filter), nil
 }
@@ -336,6 +357,62 @@ func (r *fakeOkfEdgeRepo) ListByDst(_, dstNodeID uint64, _ int) ([]model.OkfEdge
 		}
 	}
 	return out, nil
+}
+
+func (r *fakeOkfEdgeRepo) ListOutBySrcBatch(_ uint64, srcIDs []uint64, _ int) ([]model.OkfEdge, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	want := map[uint64]bool{}
+	for _, id := range srcIDs {
+		want[id] = true
+	}
+	var out []model.OkfEdge
+	for srcID, group := range r.edges {
+		if !want[srcID] {
+			continue
+		}
+		for _, e := range group {
+			if e.DstExists {
+				out = append(out, e)
+			}
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeOkfEdgeRepo) ListInByDstBatch(_ uint64, dstIDs []uint64, _ int) ([]model.OkfEdge, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	want := map[uint64]bool{}
+	for _, id := range dstIDs {
+		want[id] = true
+	}
+	var out []model.OkfEdge
+	for _, group := range r.edges {
+		for _, e := range group {
+			if e.DstExists && want[e.DstNodeID] {
+				out = append(out, e)
+			}
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeOkfEdgeRepo) StatsByBundle(_, _ uint64) (repository.EdgeStats, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var stats repository.EdgeStats
+	for _, group := range r.edges {
+		for _, e := range group {
+			stats.Total++
+			if e.DstExists {
+				stats.Live++
+			} else {
+				stats.Broken++
+			}
+		}
+	}
+	return stats, nil
 }
 
 func (r *fakeOkfEdgeRepo) ListBrokenByBundle(_ uint64, _ uint64, _ int) ([]model.OkfEdge, uint64, error) {

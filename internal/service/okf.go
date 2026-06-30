@@ -50,9 +50,11 @@ type okfBundleRepo interface {
 // okfNodeRepo is the storage interface for OKF materialized nodes.
 type okfNodeRepo interface {
 	Upsert(tx *gorm.DB, n *model.OkfNode) error
+	GetByID(id uint64) (*model.OkfNode, error)
 	GetByBundleAndRelPath(bundleID uint64, relPath string) (*model.OkfNode, error)
 	ListByBundle(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
 	ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
+	ListByIDs(ids []uint64) ([]model.OkfNode, error)
 	AggregateByType(bundleID uint64) ([]repository.TypeCount, error)
 	DeleteByBundle(tx *gorm.DB, bundleID uint64) error
 	CountByBundle(tx *gorm.DB, bundleID uint64) (uint32, error)
@@ -66,8 +68,11 @@ type okfEdgeRepo interface {
 	ReplaceForSrc(tx *gorm.DB, publicDirID, srcNodeID uint64, edges []model.OkfEdge) error
 	ListBySrc(publicDirID, srcNodeID uint64, limit int) ([]model.OkfEdge, error)
 	ListByDst(publicDirID, dstNodeID uint64, limit int) ([]model.OkfEdge, error)
+	ListOutBySrcBatch(publicDirID uint64, srcIDs []uint64, limit int) ([]model.OkfEdge, error)
+	ListInByDstBatch(publicDirID uint64, dstIDs []uint64, limit int) ([]model.OkfEdge, error)
 	ListBrokenByBundle(publicDirID uint64, cursor uint64, limit int) ([]model.OkfEdge, uint64, error)
 	CountByBundle(tx *gorm.DB, bundleID, publicDirID uint64) (uint32, error)
+	StatsByBundle(bundleID, publicDirID uint64) (repository.EdgeStats, error)
 	DeleteByBundle(tx *gorm.DB, publicDirID uint64) error
 	AdjustBacklinks(tx *gorm.DB, increment, decrement []uint64) error
 }
@@ -113,6 +118,10 @@ type OkfService struct {
 	// process is not configured with Redis; tests inject a Redis lock when
 	// they want to exercise the contention path.
 	lock BundleLock
+	// cache stores per-node adjacency lists so P3b BFS expansions skip the
+	// edge table on warm paths. Defaults to NoOpGraphCache; the router wires
+	// a Redis-backed cache when cfg.Okf.RedisAddr is set, alongside the lock.
+	cache GraphCache
 	// autoIndexUpdate toggles the asynchronous index.md regeneration after a
 	// write. Defaults to true. When false, writes still append log.md and
 	// recompute has_broken_link, but skip the index regen — useful for
@@ -161,6 +170,7 @@ func NewOkfService(bundles *repository.OkfBundleRepo, nodes *repository.OkfNodeR
 		dbDriver:        dbDriver,
 		db:              db,
 		lock:            NoOpBundleLock{},
+		cache:           NoOpGraphCache{},
 		autoIndexUpdate: true,
 	}
 }
@@ -178,6 +188,7 @@ func NewOkfServiceFromRepo(bundles okfBundleRepo, nodes okfNodeRepo, edges okfEd
 		pdSvc:           pdSvc,
 		dbDriver:        dbDriver,
 		lock:            NoOpBundleLock{},
+		cache:           NoOpGraphCache{},
 		autoIndexUpdate: true,
 	}
 }
@@ -195,6 +206,17 @@ func (s *OkfService) SetBundleLock(l BundleLock) {
 		l = NoOpBundleLock{}
 	}
 	s.lock = l
+}
+
+// SetGraphCache overrides the BFS adjacency cache. Router wires a Redis cache
+// when the deployment runs Redis alongside the bundle lock; tests inject a
+// NoOp (the default) to keep unit tests Redis-free. Passing nil is treated
+// as NoOp so a misconfiguration cannot nil-deref the BFS path.
+func (s *OkfService) SetGraphCache(c GraphCache) {
+	if c == nil {
+		c = NoOpGraphCache{}
+	}
+	s.cache = c
 }
 
 // SetAutoIndexUpdate toggles asynchronous index.md regeneration after each
@@ -387,6 +409,14 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 	// broken-link flag from the just-written body. Both are best-effort and
 	// never fail the write — the OSS bytes + node row are already durable.
 	s.postWriteSyncHooks(ctx, bundle, node, relPath, req.Content, existedBefore)
+
+	// Drop the source node's cached adjacency. materializeEdges just rewrote
+	// its outgoing edges; without this invalidate a BFS could serve the old
+	// neighbor list for up to adjTTL. Best-effort — a Redis blip means the
+	// entry ages out via TTL, which is the bounded-staleness contract.
+	if s.cache != nil && node != nil {
+		_ = s.cache.Invalidate(ctx, bundle.ID, []uint64{node.ID})
+	}
 
 	// Asynchronous index.md regeneration. Skipped when AutoIndexUpdate is
 	// off (batch-import mode). The goroutine has its own timeout so a slow

@@ -30,6 +30,11 @@ type stubOkfSvc struct {
 	unregisterBundle func(id uint64) error
 	writeMarkdown    func(ctx context.Context, req service.WriteMarkdownRequest) (*model.OkfNode, error)
 	search           func(ctx context.Context, req service.SearchRequest) (*service.SearchResponse, error)
+	neighbors        func(ctx context.Context, req service.NeighborsRequest) (*service.NeighborsResponse, error)
+	reachable        func(ctx context.Context, req service.ReachableRequest) (*service.ReachableResponse, error)
+	shortestPath     func(ctx context.Context, req service.ShortestPathRequest) (*service.ShortestPathResponse, error)
+	subgraph         func(ctx context.Context, req service.SubgraphRequest) (*service.SubgraphResponse, error)
+	stats            func(ctx context.Context, req service.StatsRequest) (*service.StatsResponse, error)
 }
 
 func (s *stubOkfSvc) RegisterBundle(ctx context.Context, pdID uint64) (*model.OkfBundle, error) {
@@ -95,6 +100,41 @@ func (s *stubOkfSvc) Search(ctx context.Context, req service.SearchRequest) (*se
 	return s.search(ctx, req)
 }
 
+func (s *stubOkfSvc) Neighbors(ctx context.Context, req service.NeighborsRequest) (*service.NeighborsResponse, error) {
+	if s.neighbors == nil {
+		return nil, errors.New("not stubbed")
+	}
+	return s.neighbors(ctx, req)
+}
+
+func (s *stubOkfSvc) Reachable(ctx context.Context, req service.ReachableRequest) (*service.ReachableResponse, error) {
+	if s.reachable == nil {
+		return nil, errors.New("not stubbed")
+	}
+	return s.reachable(ctx, req)
+}
+
+func (s *stubOkfSvc) ShortestPath(ctx context.Context, req service.ShortestPathRequest) (*service.ShortestPathResponse, error) {
+	if s.shortestPath == nil {
+		return nil, errors.New("not stubbed")
+	}
+	return s.shortestPath(ctx, req)
+}
+
+func (s *stubOkfSvc) Subgraph(ctx context.Context, req service.SubgraphRequest) (*service.SubgraphResponse, error) {
+	if s.subgraph == nil {
+		return nil, errors.New("not stubbed")
+	}
+	return s.subgraph(ctx, req)
+}
+
+func (s *stubOkfSvc) Stats(ctx context.Context, req service.StatsRequest) (*service.StatsResponse, error) {
+	if s.stats == nil {
+		return nil, errors.New("not stubbed")
+	}
+	return s.stats(ctx, req)
+}
+
 // okfHandlerWithStub builds a gin engine with the OKF routes wired to a stub
 // service. Routes mirror the production router so URL/path-param behavior is
 // exercised end-to-end.
@@ -113,6 +153,12 @@ func okfHandlerWithStub(t *testing.T, stub *stubOkfSvc) *gin.Engine {
 	v1.POST("/bundles/:id/refresh", h.RefreshBundle)
 	v1.DELETE("/bundles/:id", h.UnregisterBundle)
 	v1.POST("/search", h.Search)
+	// P3b graph routes. Mirrors the production router registration.
+	v1.GET("/nodes/:id/neighbors", h.Neighbors)
+	v1.POST("/nodes/:id/reachable", h.Reachable)
+	v1.POST("/paths/shortest", h.ShortestPath)
+	v1.POST("/subgraph", h.Subgraph)
+	v1.GET("/bundles/:id/stats", h.Stats)
 	return r
 }
 
