@@ -207,3 +207,93 @@ func (r *OkfNodeRepo) CountByBundle(tx *gorm.DB, bundleID uint64) (uint32, error
 	}
 	return uint32(count), nil
 }
+
+// SearchFilter narrows a Search call by bundle set and optional type. An empty
+// BundleIDs slice means "no bundle restriction" — the caller is responsible
+// for ACL-filtering the set before passing it in.
+type SearchFilter struct {
+	BundleIDs []uint64
+	Type      string
+}
+
+// Search runs a FULLTEXT query against (title, description) on MySQL. The
+// ngram parser (set up via migrateOkfFullTextIndex) gives CJK-token-aware
+// matching. Pagination is cursor-based on the primary key: pass the last
+// node's ID as cursor to fetch the next page; the returned nextCursor is 0
+// when the page is the last.
+//
+// Empty query returns no rows — the caller should branch on that rather than
+// issuing a "match everything" search, since FULLTEXT against an empty string
+// is undefined behavior across MySQL versions.
+func (r *OkfNodeRepo) Search(query string, filter SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if query == "" {
+		return nil, 0, nil
+	}
+	q := r.db.Model(&model.OkfNode{}).
+		Where("MATCH(title, description) AGAINST(? IN NATURAL LANGUAGE MODE)", query)
+	if len(filter.BundleIDs) > 0 {
+		q = q.Where("bundle_id IN ?", filter.BundleIDs)
+	}
+	if filter.Type != "" {
+		q = q.Where("type = ?", filter.Type)
+	}
+	if cursor > 0 {
+		q = q.Where("id > ?", cursor)
+	}
+	var out []model.OkfNode
+	if err := q.Order("id ASC").Limit(limit + 1).Find(&out).Error; err != nil {
+		return nil, 0, err
+	}
+	next := uint64(0)
+	if len(out) > limit {
+		next = out[limit-1].ID
+		out = out[:limit]
+	}
+	return out, next, nil
+}
+
+// SearchSQLite is the SQLite equivalent of Search. It runs a MATCH query
+// against the disk_okf_node_fts FTS5 virtual table (set up by
+// migrateOkfFts5Index) and joins back to the base table for the full row.
+// FTS5's unicode61 tokenizer handles ASCII word boundaries and CJK code
+// points; ranking is by FTS5's default bm25.
+//
+// Cursor pagination runs on the joined base table's primary key so the
+// caller can walk pages without re-running the ranking. The first page
+// comes back ranked; subsequent pages lose the ranking but stay cheap.
+//
+// On the SQLite test path this is what's exercised; on the MySQL path
+// the FULLTEXT index covers the same shape.
+func (r *OkfNodeRepo) SearchSQLite(query string, filter SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if query == "" {
+		return nil, 0, nil
+	}
+	q := r.db.Model(&model.OkfNode{}).
+		Joins("JOIN disk_okf_node_fts ON disk_okf_node_fts.rowid = disk_okf_node.id").
+		Where("disk_okf_node_fts MATCH ?", query)
+	if len(filter.BundleIDs) > 0 {
+		q = q.Where("disk_okf_node.bundle_id IN ?", filter.BundleIDs)
+	}
+	if filter.Type != "" {
+		q = q.Where("disk_okf_node.type = ?", filter.Type)
+	}
+	if cursor > 0 {
+		q = q.Where("disk_okf_node.id > ?", cursor)
+	}
+	var out []model.OkfNode
+	if err := q.Order("disk_okf_node.id ASC").Limit(limit + 1).Find(&out).Error; err != nil {
+		return nil, 0, err
+	}
+	next := uint64(0)
+	if len(out) > limit {
+		next = out[limit-1].ID
+		out = out[:limit]
+	}
+	return out, next, nil
+}

@@ -49,7 +49,11 @@ CREATE TABLE IF NOT EXISTS `disk_okf_node` (
     UNIQUE KEY `uk_bundle_rel_path` (`bundle_id`, `rel_path`(255)),
     KEY `idx_bundle_type` (`bundle_id`, `type`),
     KEY `idx_bundle_file` (`bundle_id`, `file_id`),
-    KEY `idx_content_hash` (`content_hash`)
+    KEY `idx_content_hash` (`content_hash`),
+    -- P3c: FULLTEXT index for /okf/search. The ngram parser gives CJK-aware
+    -- tokenization (bigrams by default); without it MySQL's whitespace
+    -- tokenizer gives near-zero recall on Chinese/Japanese/Korean text.
+    FULLTEXT KEY `idx_okf_node_search` (`title`, `description`) WITH PARSER ngram
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='OKF materialized node index';
 
 -- disk_okf_edge: one row per directed link between two OKF nodes. Written

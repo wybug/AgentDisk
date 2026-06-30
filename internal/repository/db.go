@@ -35,12 +35,20 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 		if mkErr := os.MkdirAll(filepath.Dir(path), 0o750); mkErr != nil {
 			return nil, fmt.Errorf("create db directory: %w", mkErr)
 		}
-		db, err = gorm.Open(sqlite.Open(path), &gorm.Config{})
+		// DSN params are applied per-connection by mattn/go-sqlite3, which
+		// matters once SetMaxOpenConns > 1 — the previous PRAGMA approach
+		// only configured whichever connection happened to run the exec.
+		//   - _journal_mode=WAL: readers don't block the writer; concurrent
+		//     search traffic can flow while WriteMarkdown persists.
+		//   - _busy_timeout=5000: serialize waiters for 5s instead of
+		//     surfacing "database is locked" the moment a second writer shows
+		//     up. Required for pool > 1 to behave under mixed load.
+		//   - _foreign_keys=on: enforce FK constraints app-wide.
+		dsn := fmt.Sprintf("file:%s?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on", path)
+		db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to open sqlite: %w", err)
 		}
-		db.Exec("PRAGMA journal_mode=WAL")
-		db.Exec("PRAGMA foreign_keys=ON")
 	default:
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 			cfg.Database.User, cfg.Database.Password,
@@ -56,7 +64,12 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
 	if driver == "sqlite" {
-		sqlDB.SetMaxOpenConns(1)
+		// WAL + busy_timeout make a small pool safe — readers don't block the
+		// writer and lock waiters park up to 5s before erroring. The previous
+		// pool of 1 serialized every search behind whatever the writer was
+		// doing, which made /okf/search unusable under any concurrent load.
+		sqlDB.SetMaxOpenConns(10)
+		sqlDB.SetMaxIdleConns(5)
 	} else {
 		sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
 		sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
@@ -71,7 +84,7 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migratePermissionIndex(db); err != nil {
 		return fmt.Errorf("permission index migration: %w", err)
 	}
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&model.UserDisk{},
 		&model.DiskFolder{},
 		&model.DiskFile{},
@@ -92,7 +105,90 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.OkfBundle{},
 		&model.OkfNode{},
 		&model.OkfEdge{},
-	)
+	); err != nil {
+		return err
+	}
+	if err := migrateOkfFullTextIndex(db); err != nil {
+		return fmt.Errorf("okf fulltext index migration: %w", err)
+	}
+	if err := migrateOkfFts5Index(db); err != nil {
+		return fmt.Errorf("okf fts5 migration: %w", err)
+	}
+	return nil
+}
+
+// migrateOkfFullTextIndex creates the FULLTEXT index on disk_okf_node(title,
+// description) with the ngram parser so CJK queries match by bigram. Only
+// MySQL supports FULLTEXT indices; SQLite gets an FTS5 virtual table in
+// migrateOkfFts5Index instead. The parser is set via a raw INDEX OPTIONS
+// clause because GORM's tag-driven indexes don't surface it.
+//
+// Idempotent: if the index already exists (name match), the CREATE is
+// skipped. The parser choice is mandatory on this index — without it MySQL
+// uses the default whitespace tokenizer which gives terrible recall on
+// Chinese / Japanese / Korean text.
+func migrateOkfFullTextIndex(db *gorm.DB) error {
+	if db.Name() != "mysql" {
+		return nil
+	}
+	var exists int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'disk_okf_node' AND index_name = 'idx_okf_node_search'").Scan(&exists).Error; err != nil {
+		return fmt.Errorf("check fulltext index: %w", err)
+	}
+	if exists > 0 {
+		return nil
+	}
+	return db.Exec("CREATE FULLTEXT INDEX idx_okf_node_search ON disk_okf_node (title, description) WITH PARSER ngram").Error
+}
+
+// migrateOkfFts5Index builds the SQLite FTS5 virtual table that mirrors
+// disk_okf_node(title, description) plus triggers that keep it in sync. The
+// tokenizer is unicode61 (FTS5's default Unicode-aware tokenizer) — it
+// handles ASCII word boundaries and CJK characters by code point, which is
+// a noticeable recall improvement over a LIKE substring scan.
+//
+// Why FTS5 over LIKE:
+//   - MATCH is a real tokenized query: ranking, prefix, boolean operators.
+//   - LIKE scans every row; FTS5 walks a reverse index. At 10k+ nodes the
+//     gap is seconds vs. milliseconds.
+//   - WAL mode (set in InitDB) lets FTS5 reads run concurrently with the
+//     WriteMarkdown writer, which is the actual reason this exists — the
+//     previous LIKE path serialized behind the single writer connection.
+//
+// Idempotent: skips creation when the virtual table already exists. The
+// triggers use INSERT INTO ... VALUES('delete', ...) which is FTS5's
+// documented "external content" sync pattern.
+func migrateOkfFts5Index(db *gorm.DB) error {
+	if db.Name() != "sqlite" {
+		return nil
+	}
+	var exists int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='disk_okf_node_fts'").Scan(&exists).Error; err != nil {
+		return fmt.Errorf("check fts5 table: %w", err)
+	}
+	if exists > 0 {
+		return nil
+	}
+	stmts := []string{
+		`CREATE VIRTUAL TABLE disk_okf_node_fts USING fts5(title, description, content='disk_okf_node', content_rowid='id', tokenize='unicode61')`,
+		`INSERT INTO disk_okf_node_fts(rowid, title, description) SELECT id, title, description FROM disk_okf_node`,
+		`CREATE TRIGGER disk_okf_node_ai AFTER INSERT ON disk_okf_node BEGIN
+			INSERT INTO disk_okf_node_fts(rowid, title, description) VALUES (new.id, new.title, new.description);
+		END`,
+		`CREATE TRIGGER disk_okf_node_ad AFTER DELETE ON disk_okf_node BEGIN
+			INSERT INTO disk_okf_node_fts(disk_okf_node_fts, rowid, title, description) VALUES ('delete', old.id, old.title, old.description);
+		END`,
+		`CREATE TRIGGER disk_okf_node_au AFTER UPDATE ON disk_okf_node BEGIN
+			INSERT INTO disk_okf_node_fts(disk_okf_node_fts, rowid, title, description) VALUES ('delete', old.id, old.title, old.description);
+			INSERT INTO disk_okf_node_fts(rowid, title, description) VALUES (new.id, new.title, new.description);
+		END`,
+	}
+	for _, s := range stmts {
+		if err := db.Exec(s).Error; err != nil {
+			return fmt.Errorf("apply fts5 statement: %w (stmt=%s)", err, s)
+		}
+	}
+	return nil
 }
 
 // migratePermissionIndex drops the old uk_agent_resource unique index and creates

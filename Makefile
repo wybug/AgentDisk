@@ -4,17 +4,24 @@ GOLANGCI_LINT_VERSION := v1.64.8
 
 APP_NAME := agentdisk
 
+# FTS5_TAGS turns on the SQLite FTS5 extension for mattn/go-sqlite3. Required
+# so /okf/search has a real tokenized index in SQLite mode; without it the
+# virtual table CREATE fails at migration and search falls back to no-op.
+# The tag must be present on every go build / go test invocation that touches
+# the OKF search path.
+FTS5_TAGS := fts5
+
 build:
-	CGO_ENABLED=1 go build -o bin/$(APP_NAME) .
+	CGO_ENABLED=1 go build -tags "$(FTS5_TAGS)" -o bin/$(APP_NAME) .
 
 run:
-	go run main.go --config config.yaml
+	go run -tags "$(FTS5_TAGS)" main.go --config config.yaml
 
 test:
-	go test -v -cover ./...
+	go test -tags "$(FTS5_TAGS)" -v -cover ./...
 
 cover:
-	go test -coverprofile=coverage.txt ./...
+	go test -tags "$(FTS5_TAGS)" -coverprofile=coverage.txt ./...
 	go tool cover -html=coverage.txt -o coverage.html
 
 clean:

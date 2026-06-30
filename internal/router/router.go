@@ -324,6 +324,10 @@ func Setup(cfg *config.Config) *gin.Engine {
 		okfGroup.POST("/bundles/:id/scan", okfScanH.ScanBundle)
 		okfGroup.GET("/bundles/:id/broken-links", okfScanH.ListBrokenLinks)
 		okfGroup.POST("/bundles/:id/regenerate-index", okfScanH.RegenerateIndex)
+		// P3c full-text search across visible bundles. Same HybridAuth + ACL
+		// chain as the rest of the group; the service layer filters by the
+		// caller's visibility set before issuing the MATCH query.
+		okfGroup.POST("/search", okfH.Search)
 	}
 
 	// Public directory grants — API Key only
