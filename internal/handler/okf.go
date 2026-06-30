@@ -25,6 +25,7 @@ type okfHandlerService interface {
 	RefreshBundle(ctx context.Context, id uint64) (*model.OkfBundle, error)
 	UnregisterBundle(id uint64) error
 	WriteMarkdown(ctx context.Context, req service.WriteMarkdownRequest) (*model.OkfNode, error)
+	Search(ctx context.Context, req service.SearchRequest) (*service.SearchResponse, error)
 }
 
 // OkfHandler exposes OKF v0.1 bundle reader/writer endpoints. All routes are

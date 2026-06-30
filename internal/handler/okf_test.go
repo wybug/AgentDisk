@@ -29,6 +29,7 @@ type stubOkfSvc struct {
 	refreshBundle    func(ctx context.Context, id uint64) (*model.OkfBundle, error)
 	unregisterBundle func(id uint64) error
 	writeMarkdown    func(ctx context.Context, req service.WriteMarkdownRequest) (*model.OkfNode, error)
+	search           func(ctx context.Context, req service.SearchRequest) (*service.SearchResponse, error)
 }
 
 func (s *stubOkfSvc) RegisterBundle(ctx context.Context, pdID uint64) (*model.OkfBundle, error) {
@@ -87,6 +88,13 @@ func (s *stubOkfSvc) WriteMarkdown(ctx context.Context, req service.WriteMarkdow
 	return s.writeMarkdown(ctx, req)
 }
 
+func (s *stubOkfSvc) Search(ctx context.Context, req service.SearchRequest) (*service.SearchResponse, error) {
+	if s.search == nil {
+		return nil, errors.New("not stubbed")
+	}
+	return s.search(ctx, req)
+}
+
 // okfHandlerWithStub builds a gin engine with the OKF routes wired to a stub
 // service. Routes mirror the production router so URL/path-param behavior is
 // exercised end-to-end.
@@ -104,6 +112,7 @@ func okfHandlerWithStub(t *testing.T, stub *stubOkfSvc) *gin.Engine {
 	v1.GET("/types", h.AggregateTypes)
 	v1.POST("/bundles/:id/refresh", h.RefreshBundle)
 	v1.DELETE("/bundles/:id", h.UnregisterBundle)
+	v1.POST("/search", h.Search)
 	return r
 }
 

@@ -229,6 +229,64 @@ func (r *fakeOkfNodeRepo) CountByBundle(_ *gorm.DB, bundleID uint64) (uint32, er
 	return count, nil
 }
 
+// Search is the fake equivalent of OkfNodeRepo.Search. It mirrors the
+// MySQL FULLTEXT behavior — case-insensitive substring match on title or
+// description — so service-layer ACL filtering can be exercised without
+// standing up a real DB. Both Search and SearchSQLite share the body since
+// the fake doesn't have a real tokenizer.
+func (r *fakeOkfNodeRepo) Search(query string, filter repository.SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error) {
+	return r.searchFake(query, filter, limit, cursor)
+}
+
+// SearchSQLite mirrors Search on the fake; the real impls diverge (FULLTEXT
+// vs. FTS5) but the fake's substring scan is dialect-agnostic.
+func (r *fakeOkfNodeRepo) SearchSQLite(query string, filter repository.SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error) {
+	return r.searchFake(query, filter, limit, cursor)
+}
+
+func (r *fakeOkfNodeRepo) searchFake(query string, filter repository.SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if query == "" {
+		return nil, 0, nil
+	}
+	needle := strings.ToLower(query)
+	bundleSet := map[uint64]bool{}
+	for _, id := range filter.BundleIDs {
+		bundleSet[id] = true
+	}
+	var ids []uint64
+	for _, n := range r.nodes {
+		if cursor > 0 && n.ID <= cursor {
+			continue
+		}
+		if len(bundleSet) > 0 && !bundleSet[n.BundleID] {
+			continue
+		}
+		if filter.Type != "" && n.Type != filter.Type {
+			continue
+		}
+		if strings.Contains(strings.ToLower(n.Title), needle) ||
+			strings.Contains(strings.ToLower(n.Description), needle) {
+			ids = append(ids, n.ID)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	next := uint64(0)
+	if len(ids) > limit {
+		next = ids[limit-1]
+		ids = ids[:limit]
+	}
+	out := make([]model.OkfNode, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, *r.nodes[id])
+	}
+	return out, next, nil
+}
+
 // fakeOkfEdgeRepo is an in-memory okfEdgeRepo for service-layer tests. The
 // state is keyed by (publicDirID, srcNodeID) → slice of edges, mirroring the
 // real repo's clustering. Backlink bumps are applied straight onto the

@@ -56,6 +56,8 @@ type okfNodeRepo interface {
 	AggregateByType(bundleID uint64) ([]repository.TypeCount, error)
 	DeleteByBundle(tx *gorm.DB, bundleID uint64) error
 	CountByBundle(tx *gorm.DB, bundleID uint64) (uint32, error)
+	Search(query string, filter repository.SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error)
+	SearchSQLite(query string, filter repository.SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error)
 }
 
 // okfEdgeRepo is the storage interface for the OKF edge graph. Implementations
