@@ -6,6 +6,7 @@ import {
   TagsOutlined,
   SafetyOutlined,
   GlobalOutlined,
+  ClusterOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -13,6 +14,7 @@ const menuItems = [
   { key: '/explorer', icon: <FolderOutlined />, label: '全部文件' },
   { type: 'divider' as const },
   { key: '/public', icon: <GlobalOutlined />, label: '公共文件' },
+  { key: '/okf', icon: <ClusterOutlined />, label: 'OKF 知识库' },
   { type: 'divider' as const },
   { key: '/recycle', icon: <DeleteOutlined />, label: '回收站' },
   { key: '/shares', icon: <ShareAltOutlined />, label: '我的分享' },

@@ -26,22 +26,28 @@ export default function PublicDirectoriesPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setLoading(true);
-    if (id) {
-      Promise.all([
-        publicDirectoryApi.get(Number(id)).catch(() => ({ data: null })),
-        publicDirectoryApi.listSubFolders(Number(id)).catch(() => ({ data: [] })),
-      ]).then(([dirRes, folderRes]) => {
-        setDirDetail(dirRes.data);
-        setFolders(folderRes.data || []);
-        setLoading(false);
-      });
-    } else {
-      publicDirectoryApi.listVisible()
-        .then((res) => setDirs(res.data || []))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }
+    // Defer setLoading(true) past the synchronous effect body to avoid
+    // cascading renders (react-hooks/set-state-in-effect).
+    const run = () => {
+      setLoading(true);
+      if (id) {
+        Promise.all([
+          publicDirectoryApi.get(Number(id)).catch(() => ({ data: null })),
+          publicDirectoryApi.listSubFolders(Number(id)).catch(() => ({ data: [] })),
+        ]).then(([dirRes, folderRes]) => {
+          setDirDetail(dirRes.data);
+          setFolders(folderRes.data || []);
+          setLoading(false);
+        });
+      } else {
+        publicDirectoryApi.listVisible()
+          .then((res) => setDirs(res.data || []))
+          .catch(() => {})
+          .finally(() => setLoading(false));
+      }
+    };
+    const t = setTimeout(run, 0);
+    return () => clearTimeout(t);
   }, [id]);
 
   if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
