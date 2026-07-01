@@ -17,6 +17,7 @@ from .api import (
     _AsyncSpaceAPI,
     _AsyncTagAPI,
     _AsyncVersionAPI,
+    _AsyncWikiAPI,
 )
 
 if TYPE_CHECKING:
@@ -30,6 +31,19 @@ if TYPE_CHECKING:
     from .models.share import DiskShare
     from .models.space import UserDisk
     from .models.version import DiskFileVersion
+    from .models.wiki import (
+        BrokenLinksPage,
+        BundleStats,
+        IndexRegenResult,
+        NeighborsResult,
+        OkfBundle,
+        OkfNode,
+        ScanReport,
+        SearchPage,
+        ShortestPathResult,
+        SubgraphResult,
+        TypeCount,
+    )
 
 
 class AsyncAgentDiskClient:
@@ -66,6 +80,7 @@ class AsyncAgentDiskClient:
         self._shares = _AsyncShareAPI(self._http, token=token, api_key=api_key)
         self._space = _AsyncSpaceAPI(self._http, token=token, api_key=api_key)
         self._public_dirs = _AsyncPublicDirectoryAPI(self._http, token=token, api_key=api_key)
+        self._wiki = _AsyncWikiAPI(self._http, token=token, api_key=api_key)
         self._resolver = _AsyncPathResolver(
             self._folders, self._files, cache_ttl=cache_ttl, public_dirs=self._public_dirs
         )
@@ -323,6 +338,121 @@ class AsyncAgentDiskClient:
 
     async def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
         return await self._public_dirs.list_visible()
+
+    # --- OKF wiki operations (reader + writer) ---
+
+    async def register_bundle(self, public_dir_id: int) -> OkfBundle:
+        return await self._wiki.register_bundle(public_dir_id)
+
+    async def list_bundles(self) -> builtins.list[OkfBundle]:
+        return await self._wiki.list_bundles()
+
+    async def get_bundle(self, bundle_id: int) -> OkfBundle:
+        return await self._wiki.get_bundle(bundle_id)
+
+    async def refresh_bundle(self, bundle_id: int) -> OkfBundle:
+        return await self._wiki.refresh_bundle(bundle_id)
+
+    async def unregister_bundle(self, bundle_id: int) -> None:
+        await self._wiki.unregister_bundle(bundle_id)
+
+    async def list_okf_nodes(
+        self,
+        bundle_id: int,
+        type_filter: str = "",
+        tag: str = "",
+    ) -> builtins.list[OkfNode]:
+        return await self._wiki.list_nodes(bundle_id, type_filter=type_filter, tag=tag)
+
+    async def aggregate_okf_types(self) -> builtins.list[TypeCount]:
+        return await self._wiki.aggregate_types()
+
+    async def search_okf(
+        self,
+        query: str,
+        bundle_id: int = 0,
+        type_filter: str = "",
+        limit: int = 0,
+        cursor: int = 0,
+    ) -> SearchPage:
+        return await self._wiki.search(
+            query,
+            bundle_id=bundle_id,
+            type_filter=type_filter,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    async def neighbors(
+        self,
+        node_id: int,
+        direction: str = "out",
+        type_filter: str = "",
+    ) -> NeighborsResult:
+        return await self._wiki.neighbors(node_id, direction=direction, type_filter=type_filter)
+
+    async def reachable(
+        self,
+        node_id: int,
+        depth: int,
+        types: builtins.list[str] | None = None,
+        max_nodes: int = 0,
+        direction: str = "",
+    ) -> builtins.list[OkfNode]:
+        return await self._wiki.reachable(
+            node_id,
+            depth,
+            types=types,
+            max_nodes=max_nodes,
+            direction=direction,
+        )
+
+    async def shortest_path(
+        self,
+        src: int,
+        dst: int,
+        max_depth: int = 0,
+    ) -> ShortestPathResult:
+        return await self._wiki.shortest_path(src, dst, max_depth=max_depth)
+
+    async def subgraph(
+        self,
+        bundle_id: int,
+        types: builtins.list[str] | None = None,
+        max_nodes: int = 0,
+    ) -> SubgraphResult:
+        return await self._wiki.subgraph(bundle_id, types=types, max_nodes=max_nodes)
+
+    async def bundle_stats(self, bundle_id: int) -> BundleStats:
+        return await self._wiki.stats(bundle_id)
+
+    async def scan_bundle(self, bundle_id: int) -> ScanReport:
+        return await self._wiki.scan_bundle(bundle_id)
+
+    async def list_broken_links(
+        self,
+        bundle_id: int,
+        cursor: int = 0,
+        limit: int = 50,
+    ) -> BrokenLinksPage:
+        return await self._wiki.list_broken_links(bundle_id, cursor=cursor, limit=limit)
+
+    async def regenerate_index(self, bundle_id: int) -> IndexRegenResult:
+        return await self._wiki.regenerate_index(bundle_id)
+
+    async def write_markdown(
+        self,
+        public_dir_id: int,
+        rel_path: str,
+        content: str,
+        content_type: str = "",
+    ) -> OkfNode:
+        return await self._wiki.write_markdown(
+            public_dir_id,
+            rel_path,
+            content,
+            content_type=content_type,
+        )
 
     # --- Cache management ---
 

@@ -10,6 +10,7 @@ from .share import _AsyncShareAPI, _ShareAPI
 from .space import _AsyncSpaceAPI, _SpaceAPI
 from .tag import _AsyncTagAPI, _TagAPI
 from .version import _AsyncVersionAPI, _VersionAPI
+from .wiki import _AsyncWikiAPI, _WikiAPI
 
 __all__ = [
     "_AsyncFileAPI",
@@ -22,6 +23,7 @@ __all__ = [
     "_AsyncSpaceAPI",
     "_AsyncTagAPI",
     "_AsyncVersionAPI",
+    "_AsyncWikiAPI",
     "_FileAPI",
     "_FolderAPI",
     "_PermissionAPI",
@@ -32,4 +34,5 @@ __all__ = [
     "_SpaceAPI",
     "_TagAPI",
     "_VersionAPI",
+    "_WikiAPI",
 ]

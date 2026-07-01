@@ -17,6 +17,7 @@ from .api import (
     _SpaceAPI,
     _TagAPI,
     _VersionAPI,
+    _WikiAPI,
 )
 
 if TYPE_CHECKING:
@@ -30,6 +31,19 @@ if TYPE_CHECKING:
     from .models.share import DiskShare
     from .models.space import UserDisk
     from .models.version import DiskFileVersion
+    from .models.wiki import (
+        BrokenLinksPage,
+        BundleStats,
+        IndexRegenResult,
+        NeighborsResult,
+        OkfBundle,
+        OkfNode,
+        ScanReport,
+        SearchPage,
+        ShortestPathResult,
+        SubgraphResult,
+        TypeCount,
+    )
 
 
 class AgentDiskClient:
@@ -67,6 +81,7 @@ class AgentDiskClient:
         self._shares = _ShareAPI(self._http, token=token, api_key=api_key)
         self._space = _SpaceAPI(self._http, token=token, api_key=api_key)
         self._public_dirs = _PublicDirectoryAPI(self._http, token=token, api_key=api_key)
+        self._wiki = _WikiAPI(self._http, token=token, api_key=api_key)
         self._resolver = _PathResolver(self._folders, self._files, cache_ttl=cache_ttl, public_dirs=self._public_dirs)
 
     def _get_public_dir(self, path: str) -> DiskPublicDirectory | None:
@@ -361,6 +376,121 @@ class AgentDiskClient:
 
     def list_public_directories(self) -> builtins.list[DiskPublicDirectory]:
         return self._public_dirs.list_visible()
+
+    # --- OKF wiki operations (reader + writer) ---
+
+    def register_bundle(self, public_dir_id: int) -> OkfBundle:
+        return self._wiki.register_bundle(public_dir_id)
+
+    def list_bundles(self) -> builtins.list[OkfBundle]:
+        return self._wiki.list_bundles()
+
+    def get_bundle(self, bundle_id: int) -> OkfBundle:
+        return self._wiki.get_bundle(bundle_id)
+
+    def refresh_bundle(self, bundle_id: int) -> OkfBundle:
+        return self._wiki.refresh_bundle(bundle_id)
+
+    def unregister_bundle(self, bundle_id: int) -> None:
+        self._wiki.unregister_bundle(bundle_id)
+
+    def list_okf_nodes(
+        self,
+        bundle_id: int,
+        type_filter: str = "",
+        tag: str = "",
+    ) -> builtins.list[OkfNode]:
+        return self._wiki.list_nodes(bundle_id, type_filter=type_filter, tag=tag)
+
+    def aggregate_okf_types(self) -> builtins.list[TypeCount]:
+        return self._wiki.aggregate_types()
+
+    def search_okf(
+        self,
+        query: str,
+        bundle_id: int = 0,
+        type_filter: str = "",
+        limit: int = 0,
+        cursor: int = 0,
+    ) -> SearchPage:
+        return self._wiki.search(
+            query,
+            bundle_id=bundle_id,
+            type_filter=type_filter,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    def neighbors(
+        self,
+        node_id: int,
+        direction: str = "out",
+        type_filter: str = "",
+    ) -> NeighborsResult:
+        return self._wiki.neighbors(node_id, direction=direction, type_filter=type_filter)
+
+    def reachable(
+        self,
+        node_id: int,
+        depth: int,
+        types: builtins.list[str] | None = None,
+        max_nodes: int = 0,
+        direction: str = "",
+    ) -> builtins.list[OkfNode]:
+        return self._wiki.reachable(
+            node_id,
+            depth,
+            types=types,
+            max_nodes=max_nodes,
+            direction=direction,
+        )
+
+    def shortest_path(
+        self,
+        src: int,
+        dst: int,
+        max_depth: int = 0,
+    ) -> ShortestPathResult:
+        return self._wiki.shortest_path(src, dst, max_depth=max_depth)
+
+    def subgraph(
+        self,
+        bundle_id: int,
+        types: builtins.list[str] | None = None,
+        max_nodes: int = 0,
+    ) -> SubgraphResult:
+        return self._wiki.subgraph(bundle_id, types=types, max_nodes=max_nodes)
+
+    def bundle_stats(self, bundle_id: int) -> BundleStats:
+        return self._wiki.stats(bundle_id)
+
+    def scan_bundle(self, bundle_id: int) -> ScanReport:
+        return self._wiki.scan_bundle(bundle_id)
+
+    def list_broken_links(
+        self,
+        bundle_id: int,
+        cursor: int = 0,
+        limit: int = 50,
+    ) -> BrokenLinksPage:
+        return self._wiki.list_broken_links(bundle_id, cursor=cursor, limit=limit)
+
+    def regenerate_index(self, bundle_id: int) -> IndexRegenResult:
+        return self._wiki.regenerate_index(bundle_id)
+
+    def write_markdown(
+        self,
+        public_dir_id: int,
+        rel_path: str,
+        content: str,
+        content_type: str = "",
+    ) -> OkfNode:
+        return self._wiki.write_markdown(
+            public_dir_id,
+            rel_path,
+            content,
+            content_type=content_type,
+        )
 
     # --- Cache management ---
 
