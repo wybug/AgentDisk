@@ -484,6 +484,10 @@ func (s *OkfService) materializeNodeTx(ctx context.Context, tx *gorm.DB, bundle 
 // refreshBundleCounts recomputes node_count (always) and edge_count (when an
 // edge repo is wired) and persists the bundle row. Called inside the
 // WriteMarkdown transaction so the counts commit atomically with the node.
+// The Save runs on tx — going through s.bundles.Update here would re-acquire
+// the write lock on a different pool connection and deadlock against the
+// already-open transaction, surfacing as "database is locked" after the
+// busy_timeout expires.
 func (s *OkfService) refreshBundleCounts(tx *gorm.DB, bundle *model.OkfBundle) error {
 	count, err := s.nodes.CountByBundle(tx, bundle.ID)
 	if err != nil {
@@ -497,7 +501,13 @@ func (s *OkfService) refreshBundleCounts(tx *gorm.DB, bundle *model.OkfBundle) e
 		}
 		bundle.EdgeCount = edgeCount
 	}
-	return s.bundles.Update(bundle)
+	// In unit tests s.db is nil and runTx hands us a nil tx; fall back to the
+	// repo's own handle there. In production tx is always non-nil and we must
+	// Save on it to avoid deadlocking against the open transaction.
+	if tx == nil {
+		return s.bundles.Update(bundle)
+	}
+	return tx.Save(bundle).Error
 }
 
 // postWriteSyncHooks runs the synchronous post-write side-effects:
@@ -816,7 +826,13 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 			}
 			bundle.EdgeCount = edgeCount
 		}
-		return s.bundles.Update(bundle)
+		// In unit tests tx is nil; fall back to the repo's own handle there.
+		// In production tx must be used to avoid deadlock against the
+		// transaction's write lock.
+		if tx == nil {
+			return s.bundles.Update(bundle)
+		}
+		return tx.Save(bundle).Error
 	}); err != nil {
 		return nil, err
 	}

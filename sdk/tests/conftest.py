@@ -157,6 +157,16 @@ async def async_client(user_token):
     await c.close()
 
 
+@pytest.fixture
+async def async_api_key_client(api_key):
+    """Async client wired with the API key — needed for endpoints like
+    write_markdown that reject JWT auth ("only API key can perform this
+    action"). Mirrors async_client but swaps the credential."""
+    c = AsyncAgentDiskClient(base_url=BASE_URL, api_key=api_key)
+    yield c
+    await c.close()
+
+
 # --- Public directory test fixtures ---
 
 
