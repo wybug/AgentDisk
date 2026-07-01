@@ -4,6 +4,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'AgentDisk 文档',
   description: '专为多智能体设计的企业级云盘中间件',
+  ignoreDeadLinks: true,
   vite: {
     server: {
       port: 9102,
@@ -59,6 +60,7 @@ export default defineConfig({
             { text: '版本接口', link: '/api/versions' },
             { text: '回收站接口', link: '/api/recycle' },
             { text: '预览接口', link: '/api/preview' },
+            { text: 'OKF Wiki 接口', link: '/api/okf' },
             { text: '管理接口', link: '/api/admin' },
           ],
         },
@@ -81,6 +83,7 @@ export default defineConfig({
           items: [
             { text: '架构概览', link: '/architecture/overview' },
             { text: '公共目录架构', link: '/architecture/public-directory' },
+            { text: 'OKF 架构', link: '/architecture/okf' },
             { text: '安全设计', link: '/architecture/security' },
           ],
         },

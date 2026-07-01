@@ -25,6 +25,9 @@ features:
     details: JWT / OAuth2 / API Key / 下载令牌四合一认证，HybridAuth 中间件自动识别
   - title: Python SDK
     details: 提供同步/异步双模式 Python SDK，链式 API 设计，开箱即用
+  - title: OKF Wiki
+    details: Open Knowledge Format v0.1 —— 把公共目录注册成知识图谱，支持 bundle / node / edge 查询、全文检索、死链扫描、图谱 BFS。
+    link: /architecture/okf/
   - title: 管理后台
     details: 独立管理面板，支持 OAuth2 动态配置、API Key 管理、公共目录管理
 ---
