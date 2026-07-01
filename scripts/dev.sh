@@ -104,9 +104,9 @@ start_all() {
   echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
   echo ""
 
-  # 1. 后端 API
+  # 1. 后端 API (FTS5 tag required for SQLite full-text search since P3c)
   start_service "backend" 9100 \
-    "go run main.go --config config.yaml" \
+    "go run -tags fts5 main.go --config config.yaml" \
     || { error "后端启动失败，终止"; exit 1; }
 
   # 2. 测试网关
