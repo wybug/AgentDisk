@@ -152,6 +152,7 @@ GET /v1/disk/files/download?t=<download-token>
 | 版本管理 | `/v1/disk/versions` | 文件版本列表与回溯 |
 | 回收站 | `/v1/disk/recycle` | 回收站列表、恢复、永久删除 |
 | 文件预览 | `/v1/disk/preview` | 在线预览文件内容 |
+| OKF Wiki | `/v1/disk/okf` | OKF v0.1 bundle / node / edge 知识图谱（详见 [OKF Wiki 接口](/api/okf)） |
 | 管理接口 | `/v1/disk/admin` | 管理员登录、用户管理、配置管理 |
 
 ## 频率限制

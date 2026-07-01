@@ -878,12 +878,715 @@ paths:
                       data:
                         $ref: "#/components/schemas/PreviewResult"
 
+  # ──────────────────────────────── OKF v0.1 ────────────────────────────────
+
+  /v1/disk/okf/bundles/register:
+    post:
+      summary: Register a public directory as an OKF bundle
+      operationId: registerOkfBundle
+      tags: [OKF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OkfRegisterBundleRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfBundle"
+        "400":
+          description: Missing publicDirectoryId or directory has no index.md / okf_version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/bundles:
+    get:
+      summary: List OKF bundles visible to the caller
+      operationId: listOkfBundles
+      tags: [OKF]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OkfBundle"
+
+  /v1/disk/okf/bundles/{id}:
+    get:
+      summary: Get OKF bundle details
+      operationId: getOkfBundle
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfBundle"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Unregister an OKF bundle
+      operationId: unregisterOkfBundle
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseBase"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/bundles/{id}/refresh:
+    post:
+      summary: Re-scan a bundle and rebuild its materialized node index
+      operationId: refreshOkfBundle
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfBundle"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/bundles/{id}/nodes:
+    get:
+      summary: List nodes in a bundle
+      operationId: listOkfNodes
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by OKF type (exact match).
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Filter by tag (node must include this tag).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          nodes:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/OkfNode"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/types:
+    get:
+      summary: Global per-type node rollup across visible bundles
+      operationId: aggregateOkfTypes
+      tags: [OKF]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OkfTypeCount"
+
+  /v1/disk/okf/search:
+    post:
+      summary: Full-text search across nodes
+      operationId: searchOkf
+      tags: [OKF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OkfSearchRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfSearchPage"
+        "400":
+          description: query is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/nodes/{id}/neighbors:
+    get:
+      summary: 1-hop neighbor set of a node
+      operationId: okfNodeNeighbors
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+        - name: dir
+          in: query
+          schema:
+            type: string
+            enum: [out, in, both]
+            default: out
+          description: Edge direction.
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Restrict to a single OKF type.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfNeighborsResult"
+        "400":
+          description: Invalid direction.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Node not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/nodes/{id}/reachable:
+    post:
+      summary: N-hop BFS reachable set from a node
+      operationId: okfReachable
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OkfReachableRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfReachableResult"
+        "404":
+          description: Node not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/paths/shortest:
+    post:
+      summary: Shortest path between two nodes (bidirectional BFS)
+      operationId: okfShortestPath
+      tags: [OKF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OkfShortestPathRequest"
+      responses:
+        "200":
+          description: "OK. Note: a 200 with found=false means no path exists within the depth budget."
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfShortestPathResult"
+        "400":
+          description: Missing src or dst.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/subgraph:
+    post:
+      summary: Slice of a bundle filtered by type
+      operationId: okfSubgraph
+      tags: [OKF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OkfSubgraphRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfSubgraphResult"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/bundles/{id}/stats:
+    get:
+      summary: Per-bundle graph summary
+      operationId: okfBundleStats
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfBundleStats"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/bundles/{id}/scan:
+    post:
+      summary: Trigger a dead-link scan
+      operationId: scanOkfBundle
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfScanReport"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/bundles/{id}/broken-links:
+    get:
+      summary: List dead links recorded for a bundle
+      operationId: listOkfBrokenLinks
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+            format: uint64
+          description: Source node ID of the last item in the previous page.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 50
+          description: Page size.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          brokenLinks:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/OkfBrokenLink"
+                          nextCursor:
+                            type: integer
+                            format: uint64
+                            description: 0 means the bundle has been fully enumerated.
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/okf/bundles/{id}/regenerate-index:
+    post:
+      summary: Regenerate the bundle's root index.md from the current node set
+      operationId: regenerateOkfIndex
+      tags: [OKF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfIndexRegenResult"
+        "403":
+          description: Bundle not visible to caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/admin/okf/bundles/{id}/rebuild-graph:
+    post:
+      summary: Rebuild the bundle's full node + edge graph (admin-only)
+      operationId: rebuildOkfGraph
+      tags: [OKF, Admin]
+      security:
+        - AdminJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      description: |
+        Operator escape hatch: re-derive every node and edge in the bundle from the
+        current contents of the public directory. Mounted under AdminAuth + AdminOnly
+        middleware; not callable by ordinary JWT or API Key callers.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          bundleId:
+                            type: integer
+                            format: uint64
+                          nodeCount:
+                            type: integer
+                          edgeCount:
+                            type: integer
+        "401":
+          description: Admin JWT missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Caller is not an admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Bundle not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/disk/public-directories/{id}/files/content:
+    post:
+      summary: Write a markdown file into a public directory (OKF writer)
+      operationId: writeOkfContent
+      tags: [OKF]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+          description: Public directory ID (must already be registered as a bundle for OKF materialization).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OkfWriteContentRequest"
+      description: |
+        API-Key-only writer endpoint. Writes the markdown body to OSS, auto-creates
+        nested folders, and upserts the corresponding OkfNode + its outgoing edges
+        in the same DB transaction. Returns the materialized node on success.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OkfNode"
+        "400":
+          description: Missing relPath / content, non-markdown contentType, or frontmatter is missing the type field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: X-API-Key header missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Caller is not an API Key (JWT is rejected on this route).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key issued via /v1/disk/admin/api-keys; required for OKF write endpoints and accepted by all HybridAuth endpoints.
+    AdminJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Admin-only JWT obtained from /v1/disk/admin/login; required for admin OKF endpoints such as rebuild-graph.
 
   schemas:
     ResponseBase:
@@ -1210,3 +1913,362 @@ components:
       properties:
         allowed:
           type: boolean
+
+    # ──────────────────────────────── OKF v0.1 ────────────────────────────────
+
+    OkfBundle:
+      type: object
+      description: A registered OKF bundle (1:1 mapping to a public directory).
+      properties:
+        bundleId:
+          type: integer
+          format: uint64
+        publicDirectoryId:
+          type: integer
+          format: uint64
+        okfVersion:
+          type: string
+          description: OKF protocol version recorded in the bundle root index.md (default "0.1").
+        rootIndexFileId:
+          type: integer
+          format: uint64
+          description: File row ID of the bundle's root index.md; 0 until the bundle is first refreshed.
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+          description: "active: bundle is queryable; archived: hidden from default listings (reserved for future use)."
+        nodeCount:
+          type: integer
+          format: uint32
+          description: Denormalized count of materialized nodes in the bundle.
+        edgeCount:
+          type: integer
+          format: uint32
+          description: Denormalized count of materialized edges in the bundle.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    OkfNode:
+      type: object
+      description: One materialized OKF markdown document inside a bundle.
+      properties:
+        nodeId:
+          type: integer
+          format: uint64
+        bundleId:
+          type: integer
+          format: uint64
+        fileId:
+          type: integer
+          format: uint64
+          description: Underlying public-directory file row backing this node.
+        relPath:
+          type: string
+          description: Bundle-relative path (e.g. "index.md", "concepts/gemma.md").
+        type:
+          type: string
+          description: OKF type taken from the file's frontmatter (e.g. "concept", "person", "index").
+        title:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tag list parsed from the file's frontmatter; never null.
+        timestamp:
+          type: string
+          description: Author-supplied timestamp from the frontmatter (free-form string).
+        hasBrokenLink:
+          type: boolean
+          description: True when at least one outgoing link from this node points to a non-existent target.
+        extra:
+          type: object
+          description: Catch-all map for unknown frontmatter fields (OKF §9 forward compatibility).
+          additionalProperties: true
+        contentHash:
+          type: string
+          description: SHA-256 of the file body, used for change detection.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    OkfEdge:
+      type: object
+      description: One directed link between two OkfNodes (or to a missing target when dstExists=false).
+      properties:
+        edgeId:
+          type: integer
+          format: uint64
+        srcNodeId:
+          type: integer
+          format: uint64
+        dstNodeId:
+          type: integer
+          format: uint64
+          description: Target node ID; 0 when dstExists is false.
+        dstRelPath:
+          type: string
+          description: Bundle-relative path the link points at (may not exist).
+        linkText:
+          type: string
+          description: Visible link text from the source markdown.
+        srcLine:
+          type: integer
+          description: 1-based line number of the link in the source file.
+        linkKind:
+          type: string
+          enum: [bundle, external, anchor]
+          description: "bundle: same-bundle link; external: absolute URL; anchor: in-page anchor."
+        dstExists:
+          type: boolean
+          description: False marks dead links (recorded as broken by scan).
+
+    OkfTypeCount:
+      type: object
+      description: Per-type node count for a bundle or rollup view.
+      properties:
+        type:
+          type: string
+        count:
+          type: integer
+          format: uint32
+
+    OkfBrokenLink:
+      type: object
+      description: One dead link recorded against a bundle.
+      properties:
+        srcNodeId:
+          type: integer
+          format: uint64
+        srcRelPath:
+          type: string
+        dstRelPath:
+          type: string
+        srcLine:
+          type: integer
+        linkText:
+          type: string
+        linkKind:
+          type: string
+          enum: [bundle, external, anchor]
+        reason:
+          type: string
+          description: Why the link was flagged broken (e.g. "target missing", "external unreachable").
+
+    OkfScanReport:
+      type: object
+      description: Result of a dead-link scan run.
+      properties:
+        scannedNodes:
+          type: integer
+          description: Number of nodes walked during this scan.
+        brokenCount:
+          type: integer
+          description: Number of broken links recorded.
+        scannedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp at which the scan completed.
+
+    OkfIndexRegenResult:
+      type: object
+      description: Result of regenerating the bundle's root index.md.
+      properties:
+        indexVersion:
+          type: integer
+          format: uint32
+          description: New file row version of the regenerated index.md.
+        regeneratedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp at which the regeneration completed.
+
+    OkfBundleStats:
+      type: object
+      description: Per-bundle graph summary returned by GET /bundles/:id/stats.
+      properties:
+        nodeCount:
+          type: integer
+        edgeTotal:
+          type: integer
+        edgeLive:
+          type: integer
+          description: Edges whose target node exists.
+        edgeBroken:
+          type: integer
+          description: Edges whose target node is missing.
+        types:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfTypeCount"
+
+    OkfNeighborsResult:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfEdge"
+
+    OkfReachableResult:
+      type: object
+      description: N-hop BFS result; the start node is excluded from nodes.
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfNode"
+
+    OkfShortestPathResult:
+      type: object
+      description: Bidirectional BFS result.
+      properties:
+        path:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfNode"
+          description: Ordered node slice from src to dst; empty when found is false.
+        found:
+          type: boolean
+          description: True when a path exists within the depth budget.
+
+    OkfSubgraphResult:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfEdge"
+
+    OkfSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: Full-text query against node title and description.
+        bundleId:
+          type: integer
+          format: uint64
+          description: Restrict the search to a single bundle; omit to search all visible bundles.
+        type:
+          type: string
+          description: Optional OKF type filter.
+        limit:
+          type: integer
+          description: Page size (default 20, max 100).
+        cursor:
+          type: integer
+          format: uint64
+          description: Continuation token from a prior response's nextCursor; 0 starts a new page.
+
+    OkfSearchPage:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OkfNode"
+        nextCursor:
+          type: integer
+          format: uint64
+          description: Pass back as cursor to fetch the next page; 0 means the page is the last.
+
+    OkfReachableRequest:
+      type: object
+      required: [depth]
+      properties:
+        depth:
+          type: integer
+          minimum: 1
+          description: Maximum BFS hops; clamped to service.MaxBFSDepth.
+        types:
+          type: array
+          items:
+            type: string
+          description: Only traverse neighbors whose OKF type is in this list.
+        maxNodes:
+          type: integer
+          description: Cap on the returned node count; 0 means no cap.
+        direction:
+          type: string
+          enum: [out, in, both]
+          default: out
+          description: Edge direction to follow during traversal.
+
+    OkfSubgraphRequest:
+      type: object
+      required: [bundleId]
+      properties:
+        bundleId:
+          type: integer
+          format: uint64
+        types:
+          type: array
+          items:
+            type: string
+          description: OKF type allowlist; omit to include every type.
+        maxNodes:
+          type: integer
+          description: Cap on the returned node count.
+
+    OkfShortestPathRequest:
+      type: object
+      required: [src, dst]
+      properties:
+        src:
+          type: integer
+          format: uint64
+          description: Source node ID.
+        dst:
+          type: integer
+          format: uint64
+          description: Destination node ID.
+        maxDepth:
+          type: integer
+          description: Depth budget; default and ceiling are service.MaxBFSDepth.
+
+    OkfRegisterBundleRequest:
+      type: object
+      required: [publicDirectoryId]
+      properties:
+        publicDirectoryId:
+          type: integer
+          format: uint64
+          description: Public directory to register. Its root must already contain an index.md with an okf_version field.
+
+    OkfWriteContentRequest:
+      type: object
+      required: [relPath, content]
+      properties:
+        relPath:
+          type: string
+          description: Bundle-relative markdown path; must end in ".md".
+        content:
+          type: string
+          description: Raw markdown bytes (UTF-8).
+        contentType:
+          type: string
+          default: text/markdown; charset=utf-8
+          description: Only text/markdown is accepted in this iteration.
