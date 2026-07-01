@@ -21,6 +21,10 @@ const PreviewPage = lazy(() => import('@/pages/PreviewPage'));
 // eslint-disable-next-line react-refresh/only-export-components
 const PublicDirectoriesPage = lazy(() => import('@/pages/PublicDirectoriesPage'));
 // eslint-disable-next-line react-refresh/only-export-components
+const OkfBundlesPage = lazy(() => import('@/pages/OkfBundlesPage'));
+// eslint-disable-next-line react-refresh/only-export-components
+const OkfBundleDetailPage = lazy(() => import('@/pages/OkfBundleDetailPage'));
+// eslint-disable-next-line react-refresh/only-export-components
 const AdminLoginPage = lazy(() => import('@/pages/AdminLoginPage'));
 // eslint-disable-next-line react-refresh/only-export-components
 const AdminSetupPage = lazy(() => import('@/pages/AdminSetupPage'));
@@ -168,6 +172,22 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loading />}>
             <PublicDirectoriesPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'okf',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <OkfBundlesPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'okf/:bundleId',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <OkfBundleDetailPage />
           </Suspense>
         ),
       },
