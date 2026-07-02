@@ -80,13 +80,22 @@ func addEdge(t *testing.T, edges *fakeOkfEdgeRepo, pdID, src, dst uint64, dstRel
 
 func newBFSService(t *testing.T) (*OkfService, *fakeOkfBundleRepo, *fakeOkfNodeRepo, *fakeOkfEdgeRepo, map[string]uint64, uint64) {
 	t.Helper()
+	svc, bundles, nodes, edges := newBFSServiceRepos(t)
+	byLabel, bundleID := seedBFSGraph(t, bundles, nodes, edges, 7)
+	return svc, bundles, nodes, edges, byLabel, bundleID
+}
+
+// newBFSServiceRepos wires an OkfService backed by fake repos without seeding
+// any graph data. Shared by tests (which then call seedBFSGraph) and benches
+// (which call seedScaleGraph to control topology).
+func newBFSServiceRepos(tb testing.TB) (*OkfService, *fakeOkfBundleRepo, *fakeOkfNodeRepo, *fakeOkfEdgeRepo) {
+	tb.Helper()
 	bundles := newFakeOkfBundleRepo()
 	nodes := newFakeOkfNodeRepo()
 	edges := newFakeOkfEdgeRepo(nodes)
 	pub := newFakeOkfPublicDir(&model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"})
 	svc := NewOkfServiceFromRepo(bundles, nodes, edges, pub, "sqlite")
-	byLabel, bundleID := seedBFSGraph(t, bundles, nodes, edges, 7)
-	return svc, bundles, nodes, edges, byLabel, bundleID
+	return svc, bundles, nodes, edges
 }
 
 // TestNeighbors_OutDirection verifies the 1-hop out-edge walk: A's neighbors
