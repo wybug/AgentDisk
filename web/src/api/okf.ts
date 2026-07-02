@@ -14,10 +14,11 @@ import type {
   OkfTypeCount,
 } from './types';
 
-// Unwrap the standard { code, message, data } envelope so callers receive the
-// payload directly. Matches the style of publicDirectory.ts.
-function unwrap<T>(p: Promise<{ data: ApiResponse<T> }>): Promise<T> {
-  return p.then((r) => r.data.data);
+// apiClient's response interceptor already unwraps the axios response — what
+// remains is the ApiResponse<T> envelope ({ code, message, data }). Peel one
+// more layer so callers receive T directly.
+function unwrap<T>(p: Promise<ApiResponse<T>>): Promise<T> {
+  return p.then((r) => r.data);
 }
 
 export const okfApi = {
