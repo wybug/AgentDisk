@@ -92,7 +92,8 @@ export default function ExplorerPage() {
       />
 
       <CreateShareModal
-        file={shareFile}
+        resource={shareFile ? { id: shareFile.id, name: shareFile.fileName } : null}
+        resType="file"
         open={!!shareFile}
         onClose={() => setShareFile(null)}
       />

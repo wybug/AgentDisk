@@ -30,6 +30,11 @@ type folderResourceRepo interface {
 // publicDirGrantChecker checks if a user can access a public directory resource.
 type publicDirGrantChecker interface {
 	IsUserGrantedForFile(fileID uint64, userID string) (bool, error)
+	// IsPublicDirVisibleToUser returns true when the user can see the public
+	// directory through any visibility path (global/department scope or
+	// explicit grant). Mirrors the OKF reader's visibility check so the
+	// share-create gate matches what users see in the UI.
+	IsPublicDirVisibleToUser(publicDirID uint64, userID string) (bool, error)
 }
 
 // ShareService represents a domain type.
@@ -38,6 +43,7 @@ type ShareService struct {
 	fileRepo     fileResourceRepo
 	folderRepo   folderResourceRepo
 	grantChecker publicDirGrantChecker
+	bundleRepo   okfBundleRepo
 }
 
 // NewShareService creates a new ShareService.
@@ -48,6 +54,12 @@ func NewShareService(repo *repository.ShareRepo, fileRepo *repository.FileRepo, 
 // SetGrantChecker injects a public directory grant checker.
 func (s *ShareService) SetGrantChecker(checker publicDirGrantChecker) {
 	s.grantChecker = checker
+}
+
+// SetBundleRepo injects the OKF bundle repo. Required before bundle shares
+// can be created; if unset, "bundle" resType is rejected as unsupported.
+func (s *ShareService) SetBundleRepo(repo okfBundleRepo) {
+	s.bundleRepo = repo
 }
 
 // CreateShare handles the request.
@@ -77,6 +89,21 @@ func (s *ShareService) CreateShare(userID string, resourceID uint64, resType, ex
 		}
 		if f.UserID != userID {
 			return nil, fmt.Errorf("无权分享该文件夹")
+		}
+	case "bundle":
+		if s.bundleRepo == nil {
+			return nil, fmt.Errorf("不支持的资源类型: %s", resType)
+		}
+		b, err := s.bundleRepo.GetByID(resourceID)
+		if err != nil {
+			return nil, fmt.Errorf("bundle 不存在")
+		}
+		if s.grantChecker == nil {
+			return nil, fmt.Errorf("无权分享该 Bundle")
+		}
+		visible, err := s.grantChecker.IsPublicDirVisibleToUser(b.PublicDirectoryID, userID)
+		if err != nil || !visible {
+			return nil, fmt.Errorf("无权分享该 Bundle")
 		}
 	default:
 		return nil, fmt.Errorf("不支持的资源类型: %s", resType)

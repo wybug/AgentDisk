@@ -60,7 +60,7 @@ export interface DiskShare {
   id: number;
   userId: string;
   resourceId: number;
-  resType: 'file' | 'folder';
+  resType: 'file' | 'folder' | 'bundle';
   shareCode: string;
   extractCode: string;
   maxVisit: number;
@@ -108,7 +108,7 @@ export interface CreateFolderRequest {
 
 export interface CreateShareRequest {
   resourceId: number;
-  resType: 'file' | 'folder';
+  resType: 'file' | 'folder' | 'bundle';
   extractCode?: string;
   maxVisit?: number;
   expireHours?: number;

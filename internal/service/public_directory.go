@@ -703,6 +703,24 @@ func (s *PublicDirectoryService) IsUserGranted(publicDirID uint64, userID string
 	return s.grantRepo.Exists(publicDirID, userID)
 }
 
+// IsPublicDirVisibleToUser returns true when the user can see the public
+// directory through any of the visibility paths (global scope, department
+// scope, or explicit grant). Mirrors the OKF reader's visibility check so
+// the share-create gate stays consistent with what users see in the UI.
+// Used by ShareService to gate bundle-share creation.
+func (s *PublicDirectoryService) IsPublicDirVisibleToUser(publicDirID uint64, userID string) (bool, error) {
+	dirs, err := s.ListVisible("", userID)
+	if err != nil {
+		return false, err
+	}
+	for _, d := range dirs {
+		if d.ID == publicDirID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // IsUserGrantedForFile checks if a user can access a file in a public directory.
 func (s *PublicDirectoryService) IsUserGrantedForFile(fileID uint64, userID string) (bool, error) {
 	if s.fileRepo == nil || s.grantRepo == nil || s.pdRepo == nil {

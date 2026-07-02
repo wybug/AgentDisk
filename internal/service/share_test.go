@@ -142,6 +142,70 @@ func newTestShareService() (*ShareService, *mockShareRepo, *mockFileResourceRepo
 	return &ShareService{repo: sr, fileRepo: fr, folderRepo: fdr}, sr, fr, fdr
 }
 
+// mockBundleResourceRepo is the bundle-case stub for ShareService.bundleRepo.
+type mockBundleResourceRepo struct {
+	bundles map[uint64]*model.OkfBundle
+}
+
+func newMockBundleResourceRepo() *mockBundleResourceRepo {
+	return &mockBundleResourceRepo{bundles: make(map[uint64]*model.OkfBundle)}
+}
+
+func (m *mockBundleResourceRepo) addBundle(id, pdID uint64, title string) {
+	m.bundles[id] = &model.OkfBundle{ID: id, PublicDirectoryID: pdID, Title: title}
+}
+
+func (m *mockBundleResourceRepo) GetByID(id uint64) (*model.OkfBundle, error) {
+	b, ok := m.bundles[id]
+	if !ok {
+		return nil, fmt.Errorf("not found")
+	}
+	return b, nil
+}
+
+func (m *mockBundleResourceRepo) GetByPublicDirectoryID(pdID uint64) (*model.OkfBundle, error) {
+	for _, b := range m.bundles {
+		if b.PublicDirectoryID == pdID {
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("not found")
+}
+
+// Implement the rest of okfBundleRepo so mock satisfies the interface even
+// though ShareService only calls GetByID. These are panics-on-use so a test
+// that reaches them fails loudly rather than silently returning zero values.
+func (m *mockBundleResourceRepo) Create(_ *model.OkfBundle) error { panic("unused") }
+func (m *mockBundleResourceRepo) List(_ string, _, _ int) ([]model.OkfBundle, error) {
+	panic("unused")
+}
+
+func (m *mockBundleResourceRepo) Update(_ *model.OkfBundle) error { panic("unused") }
+func (m *mockBundleResourceRepo) Delete(_ uint64) error           { panic("unused") }
+
+// mockBundleGrantChecker stubs the publicDirGrantChecker interface for the
+// bundle path. The two maps let tests branch on (a) explicit grant for the
+// public directory and (b) explicit grant for a file inside it.
+type mockBundleGrantChecker struct {
+	pdGrants   map[uint64]bool
+	fileGrants map[uint64]bool
+}
+
+func newMockBundleGrantChecker() *mockBundleGrantChecker {
+	return &mockBundleGrantChecker{
+		pdGrants:   make(map[uint64]bool),
+		fileGrants: make(map[uint64]bool),
+	}
+}
+
+func (m *mockBundleGrantChecker) IsUserGrantedForFile(fileID uint64, _ string) (bool, error) {
+	return m.fileGrants[fileID], nil
+}
+
+func (m *mockBundleGrantChecker) IsPublicDirVisibleToUser(publicDirID uint64, _ string) (bool, error) {
+	return m.pdGrants[publicDirID], nil
+}
+
 // ── generateShareCode tests ──
 
 func TestGenerateShareCode(t *testing.T) {
@@ -537,5 +601,84 @@ func TestListShares_IncludesRevoked(t *testing.T) {
 	}
 	if len(shares) != 2 {
 		t.Errorf("ListByUser should return all shares including revoked, got %d", len(shares))
+	}
+}
+
+// ── CreateShare bundle tests ──
+
+func TestCreateShare_BundleSuccess(t *testing.T) {
+	svc, _, _, _ := newTestShareService()
+	br := newMockBundleResourceRepo()
+	gc := newMockBundleGrantChecker()
+	br.addBundle(7, 42, "demo bundle")
+	gc.pdGrants[42] = true
+	svc.bundleRepo = br
+	svc.grantChecker = gc
+
+	share, err := svc.CreateShare("user001", 7, "bundle", "", -1, 72)
+	if err != nil {
+		t.Fatalf("CreateShare bundle failed: %v", err)
+	}
+	if share.ResType != "bundle" {
+		t.Errorf("ResType = %q, want bundle", share.ResType)
+	}
+	if share.ResourceID != 7 {
+		t.Errorf("ResourceID = %d, want 7", share.ResourceID)
+	}
+}
+
+func TestCreateShare_BundleNoBundleRepo(t *testing.T) {
+	// Without SetBundleRepo, "bundle" is rejected as unsupported. Guards
+	// against the case where OKF is disabled at runtime but a caller still
+	// tries the endpoint.
+	svc, _, _, _ := newTestShareService()
+	gc := newMockBundleGrantChecker()
+	svc.grantChecker = gc
+
+	_, err := svc.CreateShare("user001", 7, "bundle", "", -1, 72)
+	if err == nil {
+		t.Error("expected error when bundleRepo is nil")
+	}
+}
+
+func TestCreateShare_BundleNotFound(t *testing.T) {
+	svc, _, _, _ := newTestShareService()
+	br := newMockBundleResourceRepo()
+	gc := newMockBundleGrantChecker()
+	svc.bundleRepo = br
+	svc.grantChecker = gc
+
+	_, err := svc.CreateShare("user001", 999, "bundle", "", -1, 72)
+	if err == nil {
+		t.Error("expected error for non-existent bundle")
+	}
+}
+
+func TestCreateShare_BundleNotGranted(t *testing.T) {
+	svc, _, _, _ := newTestShareService()
+	br := newMockBundleResourceRepo()
+	gc := newMockBundleGrantChecker()
+	br.addBundle(7, 42, "demo bundle")
+	// pdGrants[42] intentionally not set
+	svc.bundleRepo = br
+	svc.grantChecker = gc
+
+	_, err := svc.CreateShare("user001", 7, "bundle", "", -1, 72)
+	if err == nil {
+		t.Error("expected error when user lacks grant for bundle's public dir")
+	}
+}
+
+func TestCreateShare_BundleNoGrantChecker(t *testing.T) {
+	// GrantChecker is required for bundle path (it's optional for files
+	// because file ownership falls back to UserID comparison).
+	svc, _, _, _ := newTestShareService()
+	br := newMockBundleResourceRepo()
+	br.addBundle(7, 42, "demo bundle")
+	svc.bundleRepo = br
+
+	_, err := svc.CreateShare("user001", 7, "bundle", "", -1, 72)
+	if err == nil {
+		t.Error("expected error when grantChecker is nil")
 	}
 }
