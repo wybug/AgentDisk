@@ -5,6 +5,7 @@ import { LockOutlined, DownloadOutlined } from '@ant-design/icons';
 import { shareApi } from '@/api/share';
 import { getDownloadUrl } from '@/utils/format';
 import type { DiskShare } from '@/api/types';
+import OkfShareBundleView from '@/components/okf/OkfShareBundleView';
 
 export default function ShareAccessPage() {
   const { code } = useParams<{ code: string }>();
@@ -51,6 +52,19 @@ export default function ShareAccessPage() {
   };
 
   if (accessed && shareInfo) {
+    // Bundle shares render the read-only 2-tab view (节点 + 图谱). File/folder
+    // shares keep the existing download UI.
+    if (shareInfo.resType === 'bundle') {
+      return (
+        <div style={{ maxWidth: 1200, margin: '24px auto', padding: '0 16px' }}>
+          <OkfShareBundleView
+            code={code!}
+            bundleId={shareInfo.resourceId}
+            extractCode={shareInfo.extractCode ? extractCode : undefined}
+          />
+        </div>
+      );
+    }
     return (
       <div style={{ maxWidth: 600, margin: '80px auto', padding: '0 16px' }}>
         <Card>

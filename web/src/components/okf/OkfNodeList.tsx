@@ -12,11 +12,19 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { ReloadOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons';
 import { okfApi } from '@/api/okf';
-import type { OkfNode, OkfTypeCount } from '@/api/types';
+import type { OkfNode, OkfNodesResult, OkfTypeCount } from '@/api/types';
+
+// In the authed path these default to okfApi. The share path passes
+// share-mode fetchers that route through /v1/disk/share/:code/... instead.
+export interface OkfNodeListFetchers {
+  listNodes: (bundleId: number, type?: string, tag?: string) => Promise<OkfNodesResult>;
+  aggregateTypes?: () => Promise<OkfTypeCount[]>;
+}
 
 interface Props {
   bundleId: number;
   onNodeClick: (node: OkfNode) => void;
+  fetchers?: OkfNodeListFetchers;
 }
 
 // OkfNodeList is the "节点" tab on the bundle detail page. It pulls the
@@ -24,7 +32,10 @@ interface Props {
 // type and free-text tag. Server-side filtering is also supported via the
 // listNodes query params, but client-side keeps the UX snappy for the
 // expected < 1000-node range.
-export default function OkfNodeList({ bundleId, onNodeClick }: Props) {
+export default function OkfNodeList({ bundleId, onNodeClick, fetchers }: Props) {
+  const listNodesFn = fetchers?.listNodes ?? okfApi.listNodes;
+  const aggregateTypesFn = fetchers?.aggregateTypes;
+
   const [nodes, setNodes] = useState<OkfNode[]>([]);
   const [types, setTypes] = useState<OkfTypeCount[]>([]);
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
@@ -35,10 +46,11 @@ export default function OkfNodeList({ bundleId, onNodeClick }: Props) {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [nodesRes, typesRes] = await Promise.all([
-        okfApi.listNodes(bundleId),
-        okfApi.aggregateTypes().catch(() => [] as OkfTypeCount[]),
-      ]);
+      const nodesPromise = listNodesFn(bundleId);
+      const typesPromise = aggregateTypesFn
+        ? aggregateTypesFn().catch(() => [] as OkfTypeCount[])
+        : Promise.resolve([] as OkfTypeCount[]);
+      const [nodesRes, typesRes] = await Promise.all([nodesPromise, typesPromise]);
       setNodes(nodesRes.nodes || []);
       setTypes(typesRes);
     } finally {
@@ -55,7 +67,7 @@ export default function OkfNodeList({ bundleId, onNodeClick }: Props) {
     }
     setSearching(true);
     try {
-      const res = await okfApi.listNodes(bundleId, typeFilter, tagFilter.trim() || undefined);
+      const res = await listNodesFn(bundleId, typeFilter, tagFilter.trim() || undefined);
       setNodes(res.nodes || []);
     } finally {
       setSearching(false);
@@ -125,14 +137,16 @@ export default function OkfNodeList({ bundleId, onNodeClick }: Props) {
   return (
     <div>
       <Space style={{ marginBottom: 16 }} wrap>
-        <Select
-          allowClear
-          placeholder="按 type 过滤"
-          style={{ width: 180 }}
-          value={typeFilter}
-          onChange={(v) => setTypeFilter(v)}
-          options={types.map((t) => ({ value: t.type, label: `${t.type} (${t.count})` }))}
-        />
+        {aggregateTypesFn && (
+          <Select
+            allowClear
+            placeholder="按 type 过滤"
+            style={{ width: 180 }}
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v)}
+            options={types.map((t) => ({ value: t.type, label: `${t.type} (${t.count})` }))}
+          />
+        )}
         <Input
           allowClear
           placeholder="按 tag 过滤（精确匹配）"

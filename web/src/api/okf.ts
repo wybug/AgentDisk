@@ -1,3 +1,4 @@
+import axios from 'axios';
 import apiClient from './client';
 import type {
   ApiResponse,
@@ -6,6 +7,7 @@ import type {
   OkfBundleStats,
   OkfGraphResult,
   OkfIndexRegenResult,
+  OkfNode,
   OkfNodesResult,
   OkfScanReport,
   OkfSearchPage,
@@ -18,6 +20,30 @@ import type {
 // remains is the ApiResponse<T> envelope ({ code, message, data }). Peel one
 // more layer so callers receive T directly.
 function unwrap<T>(p: Promise<ApiResponse<T>>): Promise<T> {
+  return p.then((r) => r.data);
+}
+
+// Public (no-auth) client for share-code endpoints. Same envelope-unwrap
+// behavior as apiClient, but no `withCredentials` and no 401 redirect — the
+// share code IS the credential, and a 401 here would be a bug, not a session
+// expiry.
+const publicClient = axios.create({ timeout: 30000 });
+
+publicClient.interceptors.response.use(
+  (response) => {
+    const data = response.data;
+    if (data.code !== undefined && data.code !== 0) {
+      return Promise.reject(new Error(data.message || '请求失败'));
+    }
+    return data;
+  },
+  (error) => {
+    const msg = error.response?.data?.message || error.message;
+    return Promise.reject(new Error(msg));
+  },
+);
+
+function unwrapPublic<T>(p: Promise<ApiResponse<T>>): Promise<T> {
   return p.then((r) => r.data);
 }
 
@@ -80,5 +106,67 @@ export const okfApi = {
   regenerateIndex: (bundleId: number) =>
     unwrap<OkfIndexRegenResult>(
       apiClient.post(`/v1/disk/okf/bundles/${bundleId}/regenerate-index`),
+    ),
+};
+
+// okfShareApi hits the public share-code OKF endpoints (no JWT/API Key).
+// extractCode is passed as a query param so the backend can re-verify per
+// request; the share code lives in the path.
+export const okfShareApi = {
+  getBundle: (code: string, bundleId: number, extractCode?: string) =>
+    unwrapPublic<OkfBundle>(
+      publicClient.get(`/v1/disk/share/${code}/bundle`, {
+        params: { bundleId, extractCode },
+      }),
+    ),
+
+  listNodes: (
+    code: string,
+    bundleId: number,
+    type?: string,
+    tag?: string,
+    extractCode?: string,
+  ) =>
+    unwrapPublic<OkfNodesResult>(
+      publicClient.get(`/v1/disk/share/${code}/nodes`, {
+        params: { bundleId, type, tag, extractCode },
+      }),
+    ),
+
+  subgraph: (
+    code: string,
+    req: { bundleId: number; types?: string[]; maxNodes?: number },
+    extractCode?: string,
+  ) =>
+    unwrapPublic<OkfGraphResult>(
+      publicClient.get(`/v1/disk/share/${code}/subgraph`, {
+        params: {
+          bundleId: req.bundleId,
+          types: req.types?.join(','),
+          maxNodes: req.maxNodes,
+          extractCode,
+        },
+      }),
+    ),
+
+  neighbors: (
+    code: string,
+    nodeId: number,
+    dir: 'out' | 'in' | 'both' = 'out',
+    type?: string,
+    extractCode?: string,
+  ) =>
+    unwrapPublic<OkfGraphResult>(
+      publicClient.get(
+        `/v1/disk/share/${code}/nodes/${nodeId}/neighbors`,
+        { params: { dir, type, extractCode } },
+      ),
+    ),
+
+  getNode: (code: string, nodeId: number, extractCode?: string) =>
+    unwrapPublic<OkfNode & { markdown: string }>(
+      publicClient.get(`/v1/disk/share/${code}/nodes/${nodeId}`, {
+        params: { extractCode },
+      }),
     ),
 };

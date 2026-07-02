@@ -119,6 +119,14 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// disabled at the route layer. db is the same GORM handle the repos use, so
 	// the OKF service can wrap multi-step materialization in a transaction.
 	okfSvc := service.NewOkfService(okfBundleRepo, okfNodeRepo, okfEdgeRepo, publicDirSvc, cfg.Database.Driver, db)
+	// okfShareReaderSvc is the read-only OKF accessor for share-code
+	// endpoints. It reuses the same repos as okfSvc but skips the HybridAuth
+	// visibility check — possession of a valid share code IS the grant.
+	okfShareReaderSvc := service.NewOkfShareReader(okfBundleRepo, okfNodeRepo, okfEdgeRepo, publicDirSvc, cfg.Database.Driver)
+	// Extend ShareService to accept bundle as a shareable resType. The grant
+	// checker is the same publicDirSvc the file-share path uses; we wire the
+	// bundle repo so the bundle case in CreateShare can look up PublicDirectoryID.
+	shareSvc.SetBundleRepo(okfBundleRepo)
 	okfSvc.SetAutoIndexUpdate(cfg.Okf.AutoIndexUpdate)
 	if cfg.Okf.LockTTLSeconds > 0 || cfg.Okf.RedisAddr != "" {
 		// Wire the Redis-backed bundle lock when an address is configured. A
@@ -155,6 +163,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	publicDirH := handler.NewPublicDirectoryHandler(publicDirSvc)
 	publicDirContentH := handler.NewPublicDirectoryContentHandler(okfSvc)
 	okfH := handler.NewOkfHandler(okfSvc)
+	okfShareH := handler.NewOkfShareHandler(okfShareReaderSvc, shareSvc)
 	okfScanH := handler.NewOkfScanHandler(okfSvc)
 	oauth2ConfigH := handler.NewOAuth2ConfigHandler(oauth2ConfigSvc)
 
@@ -363,6 +372,18 @@ func Setup(cfg *config.Config) *gin.Engine {
 	r.POST("/v1/disk/share/access", shareH.AccessShare)
 	r.POST("/v1/disk/share/download", shareH.ShareDownload)
 	r.GET("/v1/disk/files/download", fileH.DownloadByToken)
+
+	// OKF bundle share routes (no auth required). Possession of the share
+	// code is the credential; the handler re-validates the share + extract
+	// code on each call. Mounted only when OKF is enabled so operators
+	// disabling OKF also disable bundle sharing.
+	if cfg.Okf.Enabled {
+		r.GET("/v1/disk/share/:code/bundle", okfShareH.GetShareBundle)
+		r.GET("/v1/disk/share/:code/nodes", okfShareH.ListShareNodes)
+		r.GET("/v1/disk/share/:code/subgraph", okfShareH.GetShareSubgraph)
+		r.GET("/v1/disk/share/:code/nodes/:nodeId/neighbors", okfShareH.GetShareNodeNeighbors)
+		r.GET("/v1/disk/share/:code/nodes/:nodeId", okfShareH.GetShareNode)
+	}
 
 	return r
 }

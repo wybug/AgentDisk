@@ -36,9 +36,22 @@ function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
+// In the authed path these default to okfApi. The share path passes
+// share-mode fetchers that route through /v1/disk/share/:code/... instead.
+export interface OkfGraphViewFetchers {
+  subgraph: (req: {
+    bundleId: number;
+    types?: string[];
+    maxNodes?: number;
+  }) => Promise<{ nodes: OkfNode[]; edges: OkfEdge[] }>;
+  neighbors: (nodeId: number) => Promise<{ nodes: OkfNode[]; edges: OkfEdge[] }>;
+  aggregateTypes?: () => Promise<OkfTypeCount[]>;
+}
+
 interface Props {
   bundleId: number;
   onNodeDoubleClick: (node: OkfNode) => void;
+  fetchers?: OkfGraphViewFetchers;
 }
 
 // OkfGraphView mounts a Cytoscape instance, loads the bundle's subgraph on
@@ -47,7 +60,14 @@ interface Props {
 // page). The component owns the cytoscape instance and tears it down on
 // unmount; the React-side nodes/edges maps are the source of truth that
 // get re-applied whenever we add nodes or edges.
-export default function OkfGraphView({ bundleId, onNodeDoubleClick }: Props) {
+export default function OkfGraphView({ bundleId, onNodeDoubleClick, fetchers }: Props) {
+  const subgraphFn = fetchers?.subgraph ?? okfApi.subgraph;
+  const neighborsFn = async (nodeId: number) => {
+    if (fetchers?.neighbors) return fetchers.neighbors(nodeId);
+    const r = await okfApi.neighbors(nodeId);
+    return { nodes: r.nodes || [], edges: r.edges || [] };
+  };
+  const aggregateTypesFn = fetchers?.aggregateTypes;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
   // Keep OkfNode by id so double-tap can hand the caller the full record.
@@ -120,7 +140,7 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick }: Props) {
     setLoading(true);
     setStatus('加载整图…');
     try {
-      const res = await okfApi.subgraph({
+      const res = await subgraphFn({
         bundleId,
         types: typeFilter,
         maxNodes,
@@ -141,7 +161,7 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick }: Props) {
   const expandNeighbors = async (nodeId: number) => {
     setStatus(`加载邻居 #${nodeId}…`);
     try {
-      const res = await okfApi.neighbors(nodeId);
+      const res = await neighborsFn(nodeId);
       merge(res.nodes || [], res.edges || []);
       setStatus(`邻居已展开：+${res.nodes?.length ?? 0} 节点`);
     } catch {
@@ -218,13 +238,24 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load type list for the filter dropdown once.
+  // Load type list for the filter dropdown once. Skipped in share mode
+  // (no public aggregateTypes endpoint) — the dropdown is hidden instead.
   useEffect(() => {
-    okfApi
-      .aggregateTypes()
-      .then(setTypes)
-      .catch(() => setTypes([]));
-  }, []);
+    if (!aggregateTypesFn) {
+      return;
+    }
+    let cancelled = false;
+    aggregateTypesFn()
+      .then((t) => {
+        if (!cancelled) setTypes(t);
+      })
+      .catch(() => {
+        if (!cancelled) setTypes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aggregateTypesFn]);
 
   // Initial subgraph load.
   useEffect(() => {
@@ -240,15 +271,17 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick }: Props) {
   return (
     <div>
       <Space style={{ marginBottom: 12 }} wrap>
-        <Select
-          mode="multiple"
-          allowClear
-          placeholder="按 type 过滤（留空为全部）"
-          style={{ minWidth: 240 }}
-          value={typeFilter}
-          onChange={(v) => setTypeFilter(v)}
-          options={types.map((t) => ({ value: t.type, label: `${t.type} (${t.count})` }))}
-        />
+        {aggregateTypesFn && (
+          <Select
+            mode="multiple"
+            allowClear
+            placeholder="按 type 过滤（留空为全部）"
+            style={{ minWidth: 240 }}
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v)}
+            options={types.map((t) => ({ value: t.type, label: `${t.type} (${t.count})` }))}
+          />
+        )}
         <Space.Compact>
           <span style={{ alignSelf: 'center', marginRight: 6 }}>maxNodes</span>
           <InputNumber

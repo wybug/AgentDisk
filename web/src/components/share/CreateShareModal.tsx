@@ -1,25 +1,30 @@
 import { useState } from 'react';
 import { Modal, Form, Input, InputNumber, Typography, message } from 'antd';
 import { shareApi } from '@/api/share';
-import type { DiskFile } from '@/api/types';
+
+export type ShareResType = 'file' | 'folder' | 'bundle';
 
 interface Props {
-  file: DiskFile | null;
+  resource: { id: number; name: string } | null;
+  resType: ShareResType;
   open: boolean;
   onClose: () => void;
 }
 
-export default function CreateShareModal({ file, open, onClose }: Props) {
+// CreateShareModal is shared by the file/folder explorer and the OKF bundle
+// detail page. resource is {id, name}; resType picks the backend switch arm.
+// The result stage shows a copyable share link + extract code (if any).
+export default function CreateShareModal({ resource, resType, open, onClose }: Props) {
   const [form] = Form.useForm();
   const [shareResult, setShareResult] = useState<{ shareCode: string; extractCode: string } | null>(null);
 
   const handleOk = async () => {
-    if (!file) return;
+    if (!resource) return;
     const values = await form.validateFields();
     try {
       const share = await shareApi.create({
-        resourceId: file.id,
-        resType: 'file',
+        resourceId: resource.id,
+        resType,
         extractCode: values.extractCode || undefined,
         maxVisit: values.maxVisit,
         expireHours: values.expireHours,
@@ -40,9 +45,11 @@ export default function CreateShareModal({ file, open, onClose }: Props) {
     onClose();
   };
 
+  const resTypeLabel = resType === 'bundle' ? 'Bundle' : resType === 'folder' ? '文件夹' : '文件';
+
   return (
     <Modal
-      title={`分享文件 - ${file?.fileName || ''}`}
+      title={`分享${resTypeLabel} - ${resource?.name || ''}`}
       open={open}
       onOk={shareResult ? undefined : handleOk}
       onCancel={handleClose}

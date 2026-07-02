@@ -5,6 +5,7 @@ import {
   FileSearchOutlined,
   ReloadOutlined,
   ScissorOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +15,7 @@ import OkfGraphView from '@/components/okf/OkfGraphView';
 import OkfStatsPanel from '@/components/okf/OkfStatsPanel';
 import OkfBrokenLinksPanel from '@/components/okf/OkfBrokenLinksPanel';
 import OkfFrontmatterDrawer from '@/components/okf/OkfFrontmatterDrawer';
+import CreateShareModal from '@/components/share/CreateShareModal';
 import type { OkfNode } from '@/api/types';
 
 // OkfBundleDetailPage renders the bundle header (title, counts, maintenance
@@ -28,6 +30,7 @@ export default function OkfBundleDetailPage() {
   const { message, modal } = App.useApp();
   const [activeTab, setActiveTab] = useState('nodes');
   const [selectedNode, setSelectedNode] = useState<OkfNode | null>(null);
+  const [shareTarget, setShareTarget] = useState<{ id: number; name: string } | null>(null);
 
   const { data: bundle, isLoading } = useQuery({
     queryKey: ['okf-bundle', id],
@@ -114,6 +117,14 @@ export default function OkfBundleDetailPage() {
         }
         extra={
           <Space>
+            <Button
+              icon={<ShareAltOutlined />}
+              onClick={() =>
+                setShareTarget({ id: bundle.bundleId, name: bundle.title || `Bundle #${bundle.bundleId}` })
+              }
+            >
+              分享 Bundle
+            </Button>
             <Button icon={<ReloadOutlined />} onClick={handleRefreshBundle}>
               刷新 Bundle
             </Button>
@@ -172,6 +183,13 @@ export default function OkfBundleDetailPage() {
         node={selectedNode}
         onClose={() => setSelectedNode(null)}
         onPreview={handlePreview}
+      />
+
+      <CreateShareModal
+        resource={shareTarget}
+        resType="bundle"
+        open={!!shareTarget}
+        onClose={() => setShareTarget(null)}
       />
     </>
   );
