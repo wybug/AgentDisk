@@ -2,11 +2,13 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/agentdisk/agent-disk/config"
+	"github.com/agentdisk/agent-disk/internal/feature"
 	"github.com/agentdisk/agent-disk/internal/handler"
 	"github.com/agentdisk/agent-disk/internal/middleware"
 	"github.com/agentdisk/agent-disk/internal/repository"
@@ -19,8 +21,15 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Setup handles the operation.
-func Setup(cfg *config.Config) *gin.Engine {
+// Setup builds the gin engine, wires all services, and starts the feature
+// flag hot-reload watcher. cfgPath is the on-disk config.yaml path; the
+// feature registry watches it for external edits and persists admin-initiated
+// toggles back to it. Callers should defer featureReg.Close().
+func Setup(cfg *config.Config, cfgPath string) (*gin.Engine, *feature.Registry, error) {
+	featureReg, err := feature.NewRegistry(cfg, cfgPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("feature registry: %w", err)
+	}
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -166,6 +175,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	okfShareH := handler.NewOkfShareHandler(okfShareReaderSvc, shareSvc)
 	okfScanH := handler.NewOkfScanHandler(okfSvc)
 	oauth2ConfigH := handler.NewOAuth2ConfigHandler(oauth2ConfigSvc)
+	featureH := handler.NewFeatureHandler(featureReg)
 
 	// WebAuthn MFA (optional, enabled via config)
 	var mfaH *handler.AdminMFAHandler
@@ -236,6 +246,12 @@ func Setup(cfg *config.Config) *gin.Engine {
 		adminAPI.GET("/oauth2", oauth2ConfigH.Get)
 		adminAPI.PUT("/oauth2", oauth2ConfigH.Update)
 		adminAPI.POST("/oauth2/test", oauth2ConfigH.Test)
+
+		// P5c.2 runtime feature flags. GET lists all flags + their on/off
+		// state; PATCH flips one and persists to config.yaml so the toggle
+		// survives restart. fsnotify reloads external edits within 200ms.
+		adminAPI.GET("/features", featureH.List)
+		adminAPI.PATCH("/features", featureH.Update)
 
 		// P3b admin-only OKF graph rebuild. Mounts under adminAPI so the
 		// AdminAuth + AdminOnly middleware gate it; the OKF reader group
@@ -322,42 +338,53 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// materializes nodes through the OKF service, so it must stay disabled when
 	// OKF is off — otherwise an API-keyed writer could trigger materialization
 	// even after operators flipped the OKF switch off.
+	//
+	// On top of the boot-time gate, three runtime feature flags control
+	// sub-groups so admins can shed load without a restart:
+	//   - okfReader: reader + maintenance routes
+	//   - okfWriter: writer routes (write_content, register, refresh, etc.)
+	//   - okfGraphBFS: the BFS-heavy routes (reachable, shortest, subgraph,
+	//     neighbors, stats). Disabling these leaves the lighter reader working.
 	if cfg.Okf.Enabled {
-		pdWrite.POST("/:id/files/content", publicDirContentH.WriteContent)
+		// OKF content writer — gated by okfWriter. Lives on pdWrite (which is
+		// already API-Key gated) because materialization must use API-key auth.
+		pdWrite.POST("/:id/files/content",
+			middleware.RequireFeature(featureReg, feature.FlagOkfWriter),
+			publicDirContentH.WriteContent)
 
 		okfGroup := v1.Group("/okf")
 		okfGroup.Use(middleware.HybridAuth(cfg.JWT.Secret, authH, cfg.DownloadToken.Secret, apiKeySvc))
-		okfGroup.POST("/bundles/register", okfH.RegisterBundle)
-		okfGroup.GET("/bundles", okfH.ListBundles)
-		okfGroup.GET("/bundles/:id", okfH.GetBundle)
-		okfGroup.GET("/bundles/:id/nodes", okfH.ListNodes)
-		okfGroup.GET("/types", okfH.AggregateTypes)
-		okfGroup.POST("/bundles/:id/refresh", okfH.RefreshBundle)
-		okfGroup.DELETE("/bundles/:id", okfH.UnregisterBundle)
-		// P2 maintenance routes: dead-link scan, broken-link listing, and
-		// on-demand index.md regeneration. All three reuse the same HybridAuth
-		// + ACL chain as the rest of the OKF group, so access is governed by
-		// the public-directory visibility rules.
-		okfGroup.POST("/bundles/:id/scan", okfScanH.ScanBundle)
-		okfGroup.GET("/bundles/:id/broken-links", okfScanH.ListBrokenLinks)
-		okfGroup.POST("/bundles/:id/regenerate-index", okfScanH.RegenerateIndex)
-		// P3c full-text search across visible bundles. Same HybridAuth + ACL
-		// chain as the rest of the group; the service layer filters by the
-		// caller's visibility set before issuing the MATCH query.
-		okfGroup.POST("/search", okfH.Search)
-		// P3b graph query routes: neighbors, reachable, shortest path,
-		// subgraph, and stats. All five reuse the HybridAuth + ACL chain so
-		// the service-layer visibility check is enforced uniformly.
-		okfGroup.GET("/nodes/:id/neighbors", okfH.Neighbors)
-		okfGroup.POST("/nodes/:id/reachable", okfH.Reachable)
-		okfGroup.POST("/paths/shortest", okfH.ShortestPath)
-		okfGroup.POST("/subgraph", okfH.Subgraph)
-		okfGroup.GET("/bundles/:id/stats", okfH.Stats)
-		// P3b admin-only full rebuild of the bundle's node + edge index.
-		// Mounted under the admin group below so AdminAuth + AdminOnly gate
-		// it; the OKF reader group cannot reach it. The handler delegates to
-		// RefreshBundle, which already walks the folder tree and re-derives
-		// every node body + edge set in one transaction.
+
+		// Reader + maintenance routes — gated by okfReader.
+		okfReader := okfGroup.Group("",
+			middleware.RequireFeature(featureReg, feature.FlagOkfReader))
+		okfReader.GET("/bundles", okfH.ListBundles)
+		okfReader.GET("/bundles/:id", okfH.GetBundle)
+		okfReader.GET("/bundles/:id/nodes", okfH.ListNodes)
+		okfReader.GET("/types", okfH.AggregateTypes)
+		okfReader.POST("/bundles/:id/scan", okfScanH.ScanBundle)
+		okfReader.GET("/bundles/:id/broken-links", okfScanH.ListBrokenLinks)
+		okfReader.POST("/search", okfH.Search)
+
+		// Writer routes — gated by okfWriter (register/refresh/unregister plus
+		// the index regen, which is itself a write).
+		okfWriter := okfGroup.Group("",
+			middleware.RequireFeature(featureReg, feature.FlagOkfWriter))
+		okfWriter.POST("/bundles/register", okfH.RegisterBundle)
+		okfWriter.POST("/bundles/:id/refresh", okfH.RefreshBundle)
+		okfWriter.DELETE("/bundles/:id", okfH.UnregisterBundle)
+		okfWriter.POST("/bundles/:id/regenerate-index", okfScanH.RegenerateIndex)
+
+		// Graph BFS routes — gated by okfGraphBFS. These are the most CPU-
+		// intensive OKF endpoints; an operator shedding load can flip just
+		// this flag and keep the reader working.
+		okfBFS := okfGroup.Group("",
+			middleware.RequireFeature(featureReg, feature.FlagOkfGraphBFS))
+		okfBFS.GET("/nodes/:id/neighbors", okfH.Neighbors)
+		okfBFS.POST("/nodes/:id/reachable", okfH.Reachable)
+		okfBFS.POST("/paths/shortest", okfH.ShortestPath)
+		okfBFS.POST("/subgraph", okfH.Subgraph)
+		okfBFS.GET("/bundles/:id/stats", okfH.Stats)
 	}
 
 	// Public directory grants — API Key only
@@ -385,5 +412,5 @@ func Setup(cfg *config.Config) *gin.Engine {
 		r.GET("/v1/disk/share/:code/nodes/:nodeId", okfShareH.GetShareNode)
 	}
 
-	return r
+	return r, featureReg, nil
 }
