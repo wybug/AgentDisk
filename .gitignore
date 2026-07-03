@@ -66,3 +66,10 @@ gateway/src/data/
 docs/site/.vitepress/dist/
 docs/site/.vitepress/cache/
 test/browser/chrome-profile/
+
+# OKF writer agent eval artifacts (generated at runtime)
+examples/adk_writer_agent/evals/okf_writer_eval_set.concrete.json
+examples/adk_writer_agent/evals/__pycache__/
+examples/adk_writer_agent/adk_writer_agent/.adk/
+examples/adk_writer_agent/agentdisk_writer_agent.egg-info/
+.venv/

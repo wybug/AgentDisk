@@ -1,0 +1,400 @@
+{
+  "eval_set_id": "okf_writer_baseline",
+  "name": "OKF Writer Baseline",
+  "description": "Baseline eval set for the AgentDisk OKF v0.1 maintenance agent. 8 cases cover register/write/list/refresh decisions and error recovery paths. Expected trajectories are based on the INSTRUCTION in adk_writer_agent/agent.py — case failure here means the prompt or tool descriptions need to be clarified, NOT that the LLM is broken. Template placeholders {{PD_ID}} and {{BUNDLE_ID}} are substituted at run time by run_evals.py (the actual values come from env vars + a fresh bundle that reset_data pre-registers before each case).",
+  "creation_timestamp": 0.0,
+  "eval_cases": [
+    {
+      "eval_id": "register_when_missing",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "register_when_missing_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "请注册 OKF bundle（public_directory_id={{PD_ID}}）。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "register_bundle",
+                "args": {"public_directory_id": "{{PD_ID}}"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "register_bundle_called",
+          "rubric_content": {
+            "text_property": "Agent calls register_bundle with the given public_directory_id."
+          },
+          "description": "Verifies the agent knows it must register before listing.",
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "write_concept_with_frontmatter",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "write_concept_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "写一个 type=concept 的 markdown 文件 concepts/gemma.md，标题 Gemma，两个独立的标签 google 和 open-weights。bundle 已经注册好（bundle_id={{BUNDLE_ID}}，public_directory_id={{PD_ID}}），concepts 目录可能不存在，如果不存在请先创建。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "create_folder",
+                "args": {"folder_name": "concepts", "public_directory_id": "{{PD_ID}}"}
+              },
+              {
+                "name": "write_markdown",
+                "args": {
+                  "rel_path": "concepts/gemma.md",
+                  "public_directory_id": "{{PD_ID}}",
+                  "content": "---\ntype: concept\ntitle: Gemma\ntags: [google, open-weights]\n---\n\n# Gemma\n"
+                }
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "frontmatter_has_type",
+          "rubric_content": {
+            "text_property": "write_markdown content begins with YAML frontmatter containing at minimum a type field."
+          },
+          "type": "INSTRUCTION_ADHERENCE"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "refresh_after_writes",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "refresh_after_writes_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "我刚通过直接 HTTP API 写入了 3 个 markdown（没有走 write_markdown 工具），现在想重建索引。bundle_id={{BUNDLE_ID}}。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "refresh_index",
+                "args": {"bundle_id": "{{BUNDLE_ID}}"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "refresh_called",
+          "rubric_content": {
+            "text_property": "Agent calls refresh_index(bundle_id) — no other tools should be invoked for this prompt."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "multi_folder_organization",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "multi_folder_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "在 bundle（bundle_id={{BUNDLE_ID}}，public_directory_id={{PD_ID}}）里写两个 markdown：concepts/llm.md（type=concept）和 playbooks/deploy.md（type=playbook）。如果 concepts/ 或 playbooks/ 不存在请先创建。bundle 已注册，无需重复注册。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "create_folder",
+                "args": {"folder_name": "concepts", "public_directory_id": "{{PD_ID}}"}
+              },
+              {
+                "name": "create_folder",
+                "args": {"folder_name": "playbooks", "public_directory_id": "{{PD_ID}}"}
+              },
+              {
+                "name": "write_markdown",
+                "args": {
+                  "rel_path": "concepts/llm.md",
+                  "public_directory_id": "{{PD_ID}}",
+                  "content": "---\ntype: concept\n---\n"
+                }
+              },
+              {
+                "name": "write_markdown",
+                "args": {
+                  "rel_path": "playbooks/deploy.md",
+                  "public_directory_id": "{{PD_ID}}",
+                  "content": "---\ntype: playbook\n---\n"
+                }
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "both_folders_created",
+          "rubric_content": {
+            "text_property": "Agent creates concepts/ and playbooks/ folders (treat already-exists as success)."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "internal_link_format",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "internal_link_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "写 concepts/gemma3.md（public_directory_id={{PD_ID}}，bundle_id={{BUNDLE_ID}} 已注册）。要求：type=llm，标题 Gemma 3，正文只有一行：用 bundle-relative 链接 [gemma](./gemma.md) 引用本 bundle 内的 gemma.md。concepts 目录可能不存在，如果不存在请先创建。bundle 已注册，无需重复注册。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "create_folder",
+                "args": {"folder_name": "concepts", "public_directory_id": "{{PD_ID}}"}
+              },
+              {
+                "name": "write_markdown",
+                "args": {
+                  "rel_path": "concepts/gemma3.md",
+                  "public_directory_id": "{{PD_ID}}",
+                  "content": "---\ntype: llm\ntitle: Gemma 3\n---\n\n[gemma](./gemma.md)\n"
+                }
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "bundle_relative_link",
+          "rubric_content": {
+            "text_property": "write_markdown content uses bundle-relative link format (./gemma.md or /concepts/gemma.md), not absolute http URL."
+          },
+          "type": "INSTRUCTION_ADHERENCE"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "noop_clarification",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "noop_clarification_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "你好"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "no_tool_called",
+          "rubric_content": {
+            "text_property": "Agent does NOT call any tools for an ambiguous greeting; responds asking what to do."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "list_nodes_with_type_filter",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "list_nodes_filter_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "列出 bundle_id={{BUNDLE_ID}} 中所有 type=concept 的节点。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "list_nodes",
+                "args": {"bundle_id": "{{BUNDLE_ID}}", "type": "concept"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "type_filter_used",
+          "rubric_content": {
+            "text_property": "Agent uses list_nodes type=concept filter, not unfiltered list + post-filter."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "aggregate_for_overview",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "aggregate_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "给我看整个知识库的 type 分布概览。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "aggregate_types",
+                "args": {}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "aggregate_called",
+          "rubric_content": {
+            "text_property": "Agent calls aggregate_types() (no args) — should not loop through individual list_nodes calls."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    }
+  ]
+}
