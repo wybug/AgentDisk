@@ -72,4 +72,5 @@ examples/adk_writer_agent/evals/okf_writer_eval_set.concrete.json
 examples/adk_writer_agent/evals/__pycache__/
 examples/adk_writer_agent/adk_writer_agent/.adk/
 examples/adk_writer_agent/agentdisk_writer_agent.egg-info/
+examples/adk_writer_agent/raw/
 .venv/

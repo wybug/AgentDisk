@@ -170,6 +170,7 @@ def clean_okf_state() -> dict[str, int | None]:
         timeout=15.0,
     ) as client:
         # Resolve path → id lazily, only when the PATH form is in use.
+        pd_id: int | None
         if pd_id_raw:
             try:
                 pd_id = int(pd_id_raw)
@@ -180,13 +181,14 @@ def clean_okf_state() -> dict[str, int | None]:
                 )
                 return {"bundles_deleted": 0, "files_deleted": 0, "bundle_id": None}
         else:
-            pd_id = _resolve_pd_id_by_path(client, pd_path_raw or "")
-            if pd_id is None:
+            resolved = _resolve_pd_id_by_path(client, pd_path_raw or "")
+            if resolved is None:
                 logger.warning(
                     "clean_okf_state: no public directory matches path %r",
                     pd_path_raw,
                 )
                 return {"bundles_deleted": 0, "files_deleted": 0, "bundle_id": None}
+            pd_id = resolved
 
         # Try to reuse the bundle from the previous reset_data call.
         # Without this, every case would get a NEW bundle id and the

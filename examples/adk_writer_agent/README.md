@@ -106,20 +106,99 @@ check between this demo and Worktree B.
 `https://api.deepseek.com/beta`。只有走代理/自建端点时才需要设
 `DEEPSEEK_API_BASE`。
 
+## 从本地 raw 文件建立知识库
+
+agent 内置 2 个本地读取工具（`list_raw_files` + `read_raw_file`），可
+批量扫描本地 raw 目录、推断 OKF frontmatter、按 raw 目录结构透传写入
+bundle，并在节点间建立多版本 / 引用 / 上下位三类链接以支持 P3 图检索。
+
+### 配置
+
+可选环境变量 `AGENTDISK_RAW_ROOT` 指定 raw 根目录；不设时默认指向包内
+`examples/adk_writer_agent/raw/`（已包含 ~96 个金融监管法规文档作为示例）：
+
+```bash
+# 用包内示例（零配置）
+unset AGENTDISK_RAW_ROOT
+
+# 或指向自己的 raw 目录
+export AGENTDISK_RAW_ROOT=/path/to/my/notes
+```
+
+### 扫描规则
+
+- 递归扫描所有子目录
+- 跳过隐藏文件（`.foo`）、`.git/`、`node_modules/`、`__pycache__/`、`dist/`、`build/`、`.venv/`、`venv/`
+- 文件扩展名白名单：`.md / .markdown / .txt / .rst / .org`
+- 总数 > 500 时返回 `truncated=true`，提示缩小范围
+
+### 大文件分块
+
+单文件 > 200 KB 时调用 `read_raw_file(path, chunk=True)`，按 markdown H2
+标题切分（H2 仍超 200 KB 再按段落细分），每个 chunk 写为独立 OKF 节点
+（`<basename>.part1.md` / `.part2.md`），并生成 `<basename>.toc.md`
+索引页（type=toc）。
+
+### 两阶段写入（OKF 严格约束）
+
+OKF 写入路径强制要求 `bundle-relative` 链接的目标节点必须已存在，否则
+HTTP 400。agent 按两个阶段执行：
+
+1. **阶段一**：批量写所有节点，正文不含任何 `./xxx.md` 链接（原文中
+   的链接转义为反引号代码块或纯文本）
+2. **阶段二**：所有节点落库后，调用 `list_nodes` 拿全集，二次写入添加
+   多版本 / 引用 / 上下位 / toc 四类链接（目标已存在，校验通过）
+
+### 示例 prompt
+
+```bash
+adk run . --input "请扫描 RAW_ROOT 下所有 96 个法规文档，按 raw 目录结构初始化 OKF bundle（public_directory_id=$AGENTDISK_PUBLIC_DIRECTORY_ID），并在节点间建立多版本、引用、上下位三类链接以支持图检索。"
+```
+
+### 图检索验证
+
+写入完成后，节点的 bundle-relative 链接会被服务端 WriteMarkdown 自动
+物化到 `disk_okf_edge` 表，P3 图查询 API 直接可用：
+
+```bash
+# 1 跳邻居
+curl "http://localhost:8080/v1/disk/okf/nodes/$NODE_ID/neighbors?dir=both" \
+  -H "X-API-Key: $AGENTDISK_API_KEY"
+
+# N 跳可达
+curl -X POST "http://localhost:8080/v1/disk/okf/nodes/$NODE_ID/reachable" \
+  -H "X-API-Key: $AGENTDISK_API_KEY" \
+  -d '{"depth": 2, "limit": 100}'
+
+# 最短路径
+curl -X POST "http://localhost:8080/v1/disk/okf/paths/shortest" \
+  -H "X-API-Key: $AGENTDISK_API_KEY" \
+  -d '{"src": <反洗钱法 nodeId>, "dst": <数据安全法 nodeId>, "maxDepth": 3}'
+```
+
 ## Project layout
 
 ```
 examples/adk_writer_agent/
-├── pyproject.toml             # build + ruff + mypy config
+├── pyproject.toml             # build + ruff + mypy + pytest config
 ├── .env.example               # config template
 ├── README.md                  # this file
 ├── adk_writer_agent/
 │   ├── __init__.py            # exports root_agent
 │   ├── agent.py               # LlmAgent definition + instruction
-│   ├── tools.py               # 6 FunctionTool wrappers
+│   ├── tools.py               # 8 FunctionTool wrappers
 │   └── agentdisk_client.py    # OKF HTTP client (httpx)
-└── scenarios/
-    └── bootstrap_bundle.py    # end-to-end smoke test
+├── raw/                       # 默认 raw 根目录（金融监管法规示例）
+│   ├── 机构监管/
+│   ├── 业务管理/
+│   └── ...
+├── scenarios/
+│   └── bootstrap_bundle.py    # end-to-end smoke test
+└── tests/                     # pytest unit tests (raw-file tools)
+    ├── conftest.py
+    ├── test_raw_path_safety.py
+    ├── test_list_raw_files.py
+    └── test_read_raw_file.py
 ```
 
 ## Caveats
