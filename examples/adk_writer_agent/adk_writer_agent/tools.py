@@ -5,6 +5,7 @@ Each tool here mirrors one OKF API and is registered on the root LlmAgent in
 validation and persistence live in :mod:`adk_writer_agent.agentdisk_client`,
 while these wrappers translate client errors into ADK-friendly dicts.
 """
+
 from __future__ import annotations
 
 import os
@@ -198,11 +199,52 @@ def refresh_index(bundle_id: int) -> dict[str, Any]:
 
 
 def _default_pd_id() -> int:
-    """Read the default public directory id from the environment."""
-    raw = os.environ.get("AGENTDISK_PUBLIC_DIRECTORY_ID")
-    if raw is None or raw == "":
-        raise RuntimeError("AGENTDISK_PUBLIC_DIRECTORY_ID is not set")
-    return int(raw)
+    """Resolve the default public directory id from the environment.
+
+    Accepts either:
+
+    * ``AGENTDISK_PUBLIC_DIRECTORY_ID`` (preferred when set — direct int)
+    * ``AGENTDISK_PUBLIC_DIRECTORY_PATH`` (fallback — resolved via the
+      ``/v1/disk/public-directories`` listing; the UI surfaces paths, not
+      ids, so this is the friendlier option for ad-hoc eval runs)
+
+    The PATH form pays one HTTP call on first use, then caches the result
+    on the module-level ``_PD_ID_CACHE`` so subsequent tool calls are
+    cheap. Both env vars being unset is a hard error — the agent has no
+    way to operate without a target PD.
+    """
+    raw_id = os.environ.get("AGENTDISK_PUBLIC_DIRECTORY_ID")
+    if raw_id and raw_id.strip():
+        return int(raw_id)
+
+    raw_path = os.environ.get("AGENTDISK_PUBLIC_DIRECTORY_PATH")
+    if not raw_path or not raw_path.strip():
+        raise RuntimeError(
+            "AGENTDISK_PUBLIC_DIRECTORY_ID or AGENTDISK_PUBLIC_DIRECTORY_PATH must be set"
+        )
+
+    cached = _PD_ID_CACHE.get(raw_path.strip())
+    if cached is not None:
+        return cached
+
+    pd = _get_client().find_public_directory_by_path(raw_path.strip())
+    if pd is None:
+        raise RuntimeError(
+            f"no public directory matches path {raw_path!r} "
+            f"(visible PDs can be listed via GET /v1/disk/public-directories)"
+        )
+    for key in ("id", "Id", "ID"):
+        if isinstance(pd.get(key), int):
+            _PD_ID_CACHE[raw_path.strip()] = pd[key]
+            return pd[key]
+    raise RuntimeError(f"public directory for path {raw_path!r} has no usable id: {pd!r}")
+
+
+# Cache for path→id resolution. Keyed by path string so two different
+# paths in the same process don't collide. Lives at module scope so the
+# first tool call in a eval case pays the lookup cost, subsequent calls
+# (and calls in later cases) don't.
+_PD_ID_CACHE: dict[str, int] = {}
 
 
 # ----------------------------------------------------------------------

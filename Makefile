@@ -1,6 +1,6 @@
 GOLANGCI_LINT_VERSION := v1.64.8
 
-.PHONY: build run test clean lint lint-install docker dev-start dev-stop dev-status docs-install docs-dev docs-build
+.PHONY: build run test clean lint lint-install docker dev-start dev-stop dev-status docs-install docs-dev docs-build okf-eval okf-eval-install okf-eval-dry-run okf-eval-probe
 
 APP_NAME := agentdisk
 
@@ -88,3 +88,18 @@ docs-dev:
 
 docs-build:
 	cd docs/site && npm run docs:build
+
+# OKF writer agent (examples/adk_writer_agent) — ADK eval suite. Requires
+# the backend running (make dev-start) and an LLM API key in your .env.
+# See examples/adk_writer_agent/evals/README.md for details.
+okf-eval-install:
+	cd examples/adk_writer_agent && pip install -e ".[eval]"
+
+okf-eval: okf-eval-install
+	cd examples/adk_writer_agent && python evals/run_evals.py
+
+okf-eval-dry-run:
+	cd examples/adk_writer_agent && python evals/run_evals.py --dry-run
+
+okf-eval-probe:
+	cd examples/adk_writer_agent && python evals/probe_llm.py

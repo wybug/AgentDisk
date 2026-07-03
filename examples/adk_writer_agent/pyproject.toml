@@ -24,16 +24,28 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+eval = [
+    # `google-adk[eval]` pulls in the eval framework (pytest, etc.) that
+    # `adk eval` requires. Without the [eval] extra, the CLI exits with
+    # "Eval module is not installed".
+    "google-adk[eval]>=2.0.0",
+    # litellm is REQUIRED for any non-Gemini provider (DeepSeek, Anthropic,
+    # etc). Without it, ADK prints "Provider-style models require the
+    # litellm package" and silently fails — the agent gets an empty
+    # response.
+    "litellm>=1.75.5",
+    "httpx>=0.27.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["adk_writer_agent*"]
-exclude = ["scenarios*"]
+exclude = ["scenarios*", "evals*"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["scenarios"]
+extend-exclude = ["scenarios", "evals"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
@@ -42,4 +54,4 @@ select = ["E", "F", "W", "I", "B", "UP"]
 python_version = "3.10"
 strict = true
 ignore_missing_imports = true
-exclude = ['scenarios/']
+exclude = ['scenarios/', 'evals/']

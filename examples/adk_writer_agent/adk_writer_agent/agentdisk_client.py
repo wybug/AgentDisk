@@ -5,6 +5,7 @@ and the unified ``{code, message, data}`` response envelope. Intentionally
 does NOT depend on the AgentDisk Python SDK: the goal is to prove the OKF API
 is open at the protocol level.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -63,10 +64,14 @@ class AgentDiskClient:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
+        # API key rides via X-API-Key because the backend's HybridAuth
+        # middleware treats `Authorization: Bearer ...` as JWT-only and
+        # falls through to 401 when the JWT parse fails. An API key is
+        # never a valid JWT, so sending it as Bearer never authenticated.
         self._client = httpx.Client(
             base_url=self._base_url,
             headers={
-                "Authorization": f"Bearer {api_key}",
+                "X-API-Key": api_key,
                 "Content-Type": "application/json",
             },
             timeout=timeout,
@@ -243,14 +248,60 @@ class AgentDiskClient:
     def aggregate_types(self) -> dict[str, Any]:
         """GET /v1/disk/okf/types.
 
+        The server returns a list of ``{"type": str, "count": int}`` objects
+        directly (not wrapped in ``{"types": [...]}``) — see
+        ``internal/handler/okf.go:AggregateTypes``. We normalize to the
+        wrapped shape so callers don't have to care which form the server
+        chose.
+
         Returns:
-            Server payload, e.g.
-            ``{"types": [{"type": "concept", "count": 3}, ...]}``.
+            ``{"types": [{"type": str, "count": int}, ...]}``.
         """
         data = self._get("/v1/disk/okf/types")
+        if isinstance(data, list):
+            return {"types": data}
+        if isinstance(data, dict) and "types" not in data:
+            # Server returned a bare rollup map (older form). Wrap it.
+            return {"types": [{"type": k, "count": v} for k, v in data.items()]}
         if not isinstance(data, dict):
-            raise AgentDiskError("aggregate_types: expected object response")
+            raise AgentDiskError(
+                f"aggregate_types: expected list or object, got {type(data).__name__}"
+            )
         return data
+
+    def list_public_directories(self) -> list[dict[str, Any]]:
+        """GET /v1/disk/public-directories — list PDs visible to the caller.
+
+        Used by :meth:`find_public_directory_by_path` to resolve a path
+        (the only thing the UI shows) to a numeric id (what every other OKF
+        endpoint requires).
+        """
+        data = self._get("/v1/disk/public-directories")
+        if isinstance(data, list):
+            return [d for d in data if isinstance(d, dict)]
+        if isinstance(data, dict):
+            items = data.get("items") or data.get("list") or []
+            return [d for d in items if isinstance(d, dict)]
+        return []
+
+    def find_public_directory_by_path(self, path: str) -> dict[str, Any] | None:
+        """Locate a public directory by ``fixedPath`` or ``displayName``.
+
+        The web UI surfaces paths (e.g. ``/public/test``) but the OKF API
+        needs the underlying numeric id. This helper bridges that gap.
+
+        Matches ``fixedPath`` exactly first, then falls back to
+        ``displayName``. Returns ``None`` if no visible PD matches.
+        """
+        target = path.strip().rstrip("/")
+        if not target:
+            return None
+        for pd in self.list_public_directories():
+            fixed = str(pd.get("fixedPath") or "").strip().rstrip("/")
+            display = str(pd.get("displayName") or "").strip()
+            if fixed == target or display == target:
+                return pd
+        return None
 
     def refresh_index(self, bundle_id: int) -> dict[str, Any]:
         """POST /v1/disk/okf/bundles/:id/refresh.

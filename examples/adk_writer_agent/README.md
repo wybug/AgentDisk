@@ -18,7 +18,8 @@ to the AgentDisk Python SDK.
 ## Prerequisites
 
 1. AgentDisk backend running (Worktree B): `bash scripts/dev.sh start`
-2. A **public directory** created in the AgentDisk web UI (note its numeric ID)
+2. A **public directory** created in the AgentDisk web UI — you can identify
+   it by either numeric ID or path (the path is what the UI shows).
 3. An **API key** with `okf-write` scope (created in the admin console)
 
 ## Install
@@ -44,9 +45,16 @@ Required env vars:
 |---|---|
 | `AGENTDISK_BASE_URL` | Backend base URL, e.g. `http://localhost:8080` |
 | `AGENTDISK_API_KEY` | API key with `okf-write` scope |
-| `AGENTDISK_PUBLIC_DIRECTORY_ID` | Numeric ID of the public directory backing the bundle |
-| `WRITER_AGENT_MODEL` | LLM model name (see below) |
-| `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` | Model provider key (pick one matching `WRITER_AGENT_MODEL`) |
+| `AGENTDISK_PUBLIC_DIRECTORY_ID` | Numeric ID of the public directory backing the bundle (preferred) |
+| `AGENTDISK_PUBLIC_DIRECTORY_PATH` | **Alternative to ID** — path of the PD (e.g. `/public/test`), resolved at first use via `GET /v1/disk/public-directories`. Handy when you only have the UI path. |
+| `WRITER_AGENT_MODEL` | LLM model id (see below) |
+| `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | Model provider key (pick one matching `WRITER_AGENT_MODEL`) |
+
+> **ID vs PATH:** either `AGENTDISK_PUBLIC_DIRECTORY_ID` or
+> `AGENTDISK_PUBLIC_DIRECTORY_PATH` must be set. If both are set, ID wins
+> (zero lookup cost). The PATH form pays one extra HTTP call on the first
+> OKF API invocation, then caches the resolved ID for the rest of the
+> process.
 
 ## Run
 
@@ -83,14 +91,20 @@ check between this demo and Worktree B.
 
 ## Switching models
 
-`WRITER_AGENT_MODEL` is read at agent construction time. Supported values:
+`WRITER_AGENT_MODEL` is read at agent construction time. Supported values
+(LiteLLM model-id form):
 
-| Model | Required env |
-|---|---|
-| `gemini-2.5-flash` (default) | `GEMINI_API_KEY` |
-| `claude-sonnet-4` | `ANTHROPIC_API_KEY` |
-| `deepseek-v4` | `DEEPSEEK_API_KEY` |
-| `ollama/llama3` | (none; ensure `OLLAMA_BASE_URL=http://localhost:11434`) |
+| Model id | Required env | Default endpoint |
+|---|---|---|
+| `deepseek/deepseek-chat` (default) | `DEEPSEEK_API_KEY` | `https://api.deepseek.com/beta` (built into LiteLLM — no URL config needed) |
+| `deepseek/deepseek-reasoner` | `DEEPSEEK_API_KEY` | same |
+| `gemini-2.5-flash` | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | Google AI |
+| `claude-sonnet-4` | `ANTHROPIC_API_KEY` | Anthropic API |
+| `ollama/llama3` | (none) | `OLLAMA_BASE_URL` (default `http://localhost:11434`) |
+
+**DeepSeek 不需要设置 URL**：LiteLLM 已经内置了 DeepSeek 官方端点
+`https://api.deepseek.com/beta`。只有走代理/自建端点时才需要设
+`DEEPSEEK_API_BASE`。
 
 ## Project layout
 
