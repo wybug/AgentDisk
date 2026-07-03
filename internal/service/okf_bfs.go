@@ -177,7 +177,7 @@ func (s *OkfService) Reachable(ctx context.Context, req ReachableRequest) (*Reac
 	if req.Direction == "" {
 		req.Direction = BFSOut
 	}
-	if req.Direction != BFSOut && req.Direction != BFSIn {
+	if req.Direction != BFSOut && req.Direction != BFSIn && req.Direction != BFSBoth {
 		return nil, ErrOkfInvalidDirection
 	}
 	if req.Depth <= 0 {
@@ -191,6 +191,14 @@ func (s *OkfService) Reachable(ctx context.Context, req ReachableRequest) (*Reac
 	}
 	if req.MaxNodes > HardBFSMaxNodes {
 		req.MaxNodes = HardBFSMaxNodes
+	}
+
+	// "both" runs two single-direction walks and unions them. This sidesteps
+	// a refactor of batchAdjacency (shared with ShortestPath) and keeps the
+	// cache key single-direction. The cost is 2x BFS, acceptable because
+	// MaxBFSDepth=3 bounds each walk.
+	if req.Direction == BFSBoth {
+		return s.reachableBoth(ctx, req)
 	}
 
 	node, bundle, err := s.loadNodeAndBundle(req.NodeID)
@@ -231,6 +239,57 @@ func (s *OkfService) Reachable(ctx context.Context, req ReachableRequest) (*Reac
 		frontier = next
 	}
 	return s.buildReachableResponse(reachable, typeFilter)
+}
+
+// reachableBoth unions a BFSOut walk and a BFSIn walk from the same start
+// node. Used by Reachable when Direction==BFSBoth. The two walks run
+// sequentially (each is bounded by MaxBFSDepth); the union is dedup'd by
+// node ID and capped at req.MaxNodes.
+//
+// Ordering: out-walk nodes first, then in-walk nodes that weren't already
+// in the out set. This is deterministic but not ranked — callers needing
+// "closest first" semantics should run a single-direction walk instead.
+//
+// The MaxNodes cap is applied per walk AND at the union (worst case the
+// two walks each return MaxNodes and the union has 2×MaxNodes, which the
+// final truncation brings back to req.MaxNodes). This means in well-fed
+// graphs the in-walk may contribute 0 nodes after truncation — an
+// acceptable tradeoff vs. complicating the cache key with a direction
+// suffix.
+func (s *OkfService) reachableBoth(ctx context.Context, req ReachableRequest) (*ReachableResponse, error) {
+	outReq := req
+	outReq.Direction = BFSOut
+	out, err := s.Reachable(ctx, outReq)
+	if err != nil {
+		return nil, err
+	}
+	inReq := req
+	inReq.Direction = BFSIn
+	in, err := s.Reachable(ctx, inReq)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[uint64]bool, len(out.Nodes)+len(in.Nodes))
+	union := make([]model.OkfNode, 0, len(out.Nodes)+len(in.Nodes))
+	for i := range out.Nodes {
+		n := out.Nodes[i]
+		if !seen[n.ID] {
+			seen[n.ID] = true
+			union = append(union, n)
+		}
+	}
+	for i := range in.Nodes {
+		n := in.Nodes[i]
+		if !seen[n.ID] {
+			seen[n.ID] = true
+			union = append(union, n)
+		}
+	}
+	if req.MaxNodes > 0 && len(union) > req.MaxNodes {
+		union = union[:req.MaxNodes]
+	}
+	return &ReachableResponse{Nodes: union}, nil
 }
 
 // ShortestPath runs a bidirectional BFS from src and dst. The walk terminates

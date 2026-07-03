@@ -226,6 +226,57 @@ func TestReachable_MaxNodesCap(t *testing.T) {
 	}
 }
 
+// TestReachable_BothDirection unions out+in walks. From B with depth=2:
+// out-walk reaches {C, D} (B→C, B→D), in-walk reaches {A} (A→B). The
+// union is {A, C, D}. The ghost dead edge must not surface.
+func TestReachable_BothDirection(t *testing.T) {
+	svc, _, _, _, byLabel, _ := newBFSService(t)
+	out, err := svc.Reachable(context.Background(), ReachableRequest{
+		NodeID:    byLabel["B"],
+		Depth:     2,
+		Direction: BFSBoth,
+	})
+	if err != nil {
+		t.Fatalf("Reachable both: %v", err)
+	}
+	got := nodeTitles(out.Nodes)
+	want := map[string]bool{"A": true, "C": true, "D": true}
+	if len(got) != len(want) {
+		t.Fatalf("reachable both = %v, want 3 (A, C, D)", got)
+	}
+	for title := range got {
+		if !want[title] {
+			t.Errorf("unexpected reachable node %q", title)
+		}
+	}
+}
+
+// TestReachable_BothDirectionUnionsCrossing confirms the in-walk adds
+// nodes the out-walk can't see. From D (a sink with no outgoing edges),
+// out-walk returns nothing but in-walk reaches {B, C, A} — the union
+// must surface all three.
+func TestReachable_BothDirectionUnionsCrossing(t *testing.T) {
+	svc, _, _, _, byLabel, _ := newBFSService(t)
+	out, err := svc.Reachable(context.Background(), ReachableRequest{
+		NodeID:    byLabel["D"],
+		Depth:     3,
+		Direction: BFSBoth,
+	})
+	if err != nil {
+		t.Fatalf("Reachable both: %v", err)
+	}
+	got := nodeTitles(out.Nodes)
+	want := map[string]bool{"A": true, "B": true, "C": true}
+	if len(got) != len(want) {
+		t.Fatalf("reachable both from sink = %v, want 3 (A, B, C)", got)
+	}
+	for title := range got {
+		if !want[title] {
+			t.Errorf("unexpected reachable node %q", title)
+		}
+	}
+}
+
 // TestShortestPath_Diamond verifies the bidirectional BFS finds the
 // length-2 path A → B → D (or A → C → D, both are valid).
 func TestShortestPath_Diamond(t *testing.T) {
