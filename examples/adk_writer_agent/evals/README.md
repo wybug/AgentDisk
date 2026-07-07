@@ -7,8 +7,10 @@ improvement opportunities.
 
 ## What gets evaluated
 
-The suite is `okf_writer_eval_set.json` — 8 cases covering the agent's main
-decision points:
+The suite is `okf_writer_eval_set.json` — 14 cases covering the agent's main
+decision points across two clusters:
+
+### Single-step write/list/refresh (original 8)
 
 | Case | Asserts that the agent... |
 |---|---|
@@ -20,6 +22,46 @@ decision points:
 | `noop_clarification` | Doesn't call any tool for an ambiguous "你好" |
 | `list_nodes_with_type_filter` | Uses the `type=` filter rather than unfiltered listing |
 | `aggregate_for_overview` | Calls `aggregate_types()` for a type-distribution overview |
+
+### Raw-import workflow (added in PR 5234649)
+
+These 6 cases cover the `list_raw_files` / `read_raw_file` tools and the
+two-phase write discipline documented in `agent.py:INSTRUCTION`. They were
+added after the bundle-21 bulk import (`scripts/import_raw_phase1.py`)
+exposed real agent bugs that the original 8 cases didn't catch.
+
+| Case | Asserts that the agent... |
+|---|---|
+| `scan_raw_root` | Calls `list_raw_files(dir="")` first when user says "scan raw" |
+| `read_named_raw_file` | Calls `read_raw_file(path=…)` for a specific named file, no chunking |
+| `chunk_large_raw_file` | Passes `chunk=true` when the named file is >200KB |
+| `infer_type_from_filename` | Picks `type=regulation` for a filename containing 「办法」 (rubric-based — title/tags vary) |
+| `bundle_registration_order` | Writes `index.md` *before* `register_bundle` (OKF strict-write rule) |
+| `bundle_id_not_swapped_to_pd` | Doesn't swap `bundle_id` into `public_directory_id` arg of `create_folder` (a real smoke-test bug) |
+
+Raw files live in `examples/adk_writer_agent/raw/` (96 files, gitignored).
+The eval runner does NOT wipe them between cases — only bundle + PD state
+gets reset. If the raw dir is ever emptied, the raw-workflow cases will
+fail with clear "file not found" errors from `list_raw_files` /
+`read_raw_file`. CI doesn't run evals, so this only matters for local dev.
+
+### Known baseline failures (12/14 pass on `deepseek/deepseek-v4-flash`)
+
+Two of the six raw-workflow cases are *expected* to fail trajectory match
+against the minimal seed — the agent's actual behavior is correct, but
+ADK's `tool_trajectory_avg_score` requires exact args dict equality
+(`actual.args == expected.args`), which the LLM's variable output can't
+satisfy. The case-level `rubrics` are what validate the real constraint
+in these two cases:
+
+| Case | Why trajectory fails | What the rubric still asserts |
+|---|---|---|
+| `bundle_registration_order` | `write_markdown.content` differs (LLM picks its own `type:`/`title:` for the root index) | `index.md` is written *before* `register_bundle`; index content has `okf_version: "0.1"` |
+| `infer_type_from_filename` | Agent sensibly calls `read_raw_file` (to see source) + `create_folder` (target dir doesn't exist) before `write_markdown` — eval set only expects `write_markdown` | `write_markdown` content has `type: regulation` (filename contains 「办法」); no bundle-relative links in body |
+
+If you tighten INSTRUCTION and these cases start passing trajectory too,
+that's a bonus — but treat the rubric score, not trajectory, as the
+regression signal for these two.
 
 ## How to run
 
@@ -185,7 +227,7 @@ resolved once on first use and cached.
   required frontmatter keys instead of exact content.
 - **LLM determinism.** Same case may score differently across runs. Re-run a
   flaky case 2-3 times before treating it as a real regression.
-- **Cost.** Each case ≈ 1 LLM call. The full suite is ~8 calls; budget
+- **Cost.** Each case ≈ 1 LLM call. The full suite is ~14 calls; budget
   accordingly. Use `deepseek/deepseek-v4-flash` (or `gemini-2.5-flash`) for
   development iterations, `deepseek/deepseek-v4-pro` (or `gemini-2.5-pro`)
   for the committed baseline.

@@ -1,7 +1,7 @@
 {
   "eval_set_id": "okf_writer_baseline",
   "name": "OKF Writer Baseline",
-  "description": "Baseline eval set for the AgentDisk OKF v0.1 maintenance agent. 8 cases cover register/write/list/refresh decisions and error recovery paths. Expected trajectories are based on the INSTRUCTION in adk_writer_agent/agent.py — case failure here means the prompt or tool descriptions need to be clarified, NOT that the LLM is broken. Template placeholders {{PD_ID}} and {{BUNDLE_ID}} are substituted at run time by run_evals.py (the actual values come from env vars + a fresh bundle that reset_data pre-registers before each case).",
+  "description": "Baseline eval set for the AgentDisk OKF v0.1 maintenance agent. 14 cases cover register/write/list/refresh decisions and error recovery paths (8 original), plus the raw-import workflow added in PR 5234649 — list_raw_files / read_raw_file / chunked reads / filename-based type inference / bundle-registration order / bundle_id-vs-public_directory_id discipline (6 new). Expected trajectories are based on the INSTRUCTION in adk_writer_agent/agent.py — case failure here means the prompt or tool descriptions need to be clarified, NOT that the LLM is broken. Template placeholders {{PD_ID}} and {{BUNDLE_ID}} are substituted at run time by run_evals.py (the actual values come from env vars + a fresh bundle that reset_data pre-registers before each case).",
   "creation_timestamp": 0.0,
   "eval_cases": [
     {
@@ -392,6 +392,308 @@
             "text_property": "Agent calls aggregate_types() (no args) — should not loop through individual list_nodes calls."
           },
           "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "scan_raw_root",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "scan_raw_root_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "我想从本地 raw 目录初始化知识库。请先扫描 RAW_ROOT，列出所有可导入的文件。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "list_raw_files",
+                "args": {"dir": ""}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "list_raw_files_called",
+          "rubric_content": {
+            "text_property": "Agent calls list_raw_files with an empty dir (or no dir argument) to start the raw-import workflow. Should NOT call register_bundle, write_markdown, or any other tool before scanning."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "read_named_raw_file",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "read_named_raw_file_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "请读取 raw 文件 政策依据/推动数字金融高质量发展行动方案.md 的内容（不需要分块），让我看看里面是什么。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "read_raw_file",
+                "args": {"path": "政策依据/推动数字金融高质量发展行动方案.md", "chunk": false}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "read_raw_file_called",
+          "rubric_content": {
+            "text_property": "Agent calls read_raw_file with the exact path the user named, no chunk=true (file is small). Should NOT call write_markdown — user only asked to read."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "chunk_large_raw_file",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "chunk_large_raw_file_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "请读取 行业规范/中国银联/PCI-DSS-v4_0_1-ZH.md 这个 raw 文件。它超过 200KB，需要按 H2 分块返回。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "read_raw_file",
+                "args": {
+                  "path": "行业规范/中国银联/PCI-DSS-v4_0_1-ZH.md",
+                  "chunk": true
+                }
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "chunk_true_passed",
+          "rubric_content": {
+            "text_property": "Agent calls read_raw_file with chunk=true on a >200KB file. Passing chunk=false or omitting chunk would force a 200KB truncation and lose data."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "infer_type_from_filename",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "infer_type_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "把 raw 文件 机构监管/金融机构客户尽职调查和客户身份资料及交易记录保存管理办法_令2025第11号.md 写入已注册的 bundle（bundle_id={{BUNDLE_ID}}，public_directory_id={{PD_ID}}）。文件名含「办法」，按 INSTRUCTION 的文件名→type 推断表，type 应该是 regulation。直接写入即可，不要追问。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "write_markdown",
+                "args": {
+                  "rel_path": "机构监管/金融机构客户尽职调查和客户身份资料及交易记录保存管理办法_令2025第11号.md",
+                  "public_directory_id": "{{PD_ID}}",
+                  "content": "---\ntype: regulation\n---\n"
+                }
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "type_regulation_inferred",
+          "rubric_content": {
+            "text_property": "The agent's write_markdown call(s) include a YAML frontmatter with `type: regulation` (the INSTRUCTION-mandated type when filename contains 「办法」). Other frontmatter fields (title, tags) are not asserted — LLM-inferred titles vary, so the rubric only checks the type field."
+          },
+          "type": "INSTRUCTION_ADHERENCE"
+        },
+        {
+          "rubric_id": "no_bundle_relative_links_in_body",
+          "rubric_content": {
+            "text_property": "The written markdown body does NOT contain bundle-relative links like `./foo.md` or `/foo.md` — phase 1 of the raw-import workflow forbids internal links because the targets don't exist yet. HTTP(S) links are fine."
+          },
+          "type": "INSTRUCTION_ADHERENCE"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "bundle_registration_order",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "bundle_registration_order_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "请初始化 OKF bundle（public_directory_id={{PD_ID}}）。第一步：写入 bundle 根 index.md（必须含 okf_version: \"0.1\" 字段）。第二步：调用 register_bundle。两步顺序不能颠倒——OKF 严格约束要求根 index.md 先存在，register_bundle 才能识别此 PD 为 bundle 根。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "write_markdown",
+                "args": {
+                  "rel_path": "index.md",
+                  "public_directory_id": "{{PD_ID}}",
+                  "content": "---\nokf_version: \"0.1\"\ntype: index\ntitle: Knowledge Base\n---\n\n# Knowledge Base\n"
+                }
+              },
+              {
+                "name": "register_bundle",
+                "args": {"public_directory_id": "{{PD_ID}}"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "index_before_register",
+          "rubric_content": {
+            "text_property": "write_markdown(rel_path=index.md) appears BEFORE register_bundle in the tool trajectory. Reversed order would HTTP 400 because the backend requires a root index.md to exist before it can promote a PD to a bundle root."
+          },
+          "type": "TOOL_USE_QUALITY"
+        },
+        {
+          "rubric_id": "okf_version_present",
+          "rubric_content": {
+            "text_property": "The index.md content contains `okf_version: \"0.1\"` in its YAML frontmatter — this field is REQUIRED on the bundle root index.md and forbidden on any other file."
+          },
+          "type": "INSTRUCTION_ADHERENCE"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "bundle_id_not_swapped_to_pd",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "agentdisk_writer",
+        "user_id": "okf_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "bundle_id_not_swapped_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "bundle 已经注册好（bundle_id={{BUNDLE_ID}}，public_directory_id={{PD_ID}}）。请在 bundle 根目录下 create_folder 名为 concepts 的子目录。"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "create_folder",
+                "args": {
+                  "folder_name": "concepts",
+                  "public_directory_id": "{{PD_ID}}"
+                }
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "pd_id_used_not_bundle_id",
+          "rubric_content": {
+            "text_property": "create_folder is called with public_directory_id (the OSS directory id), NOT bundle_id. Swapping them is a real bug observed during smoke testing — register_bundle / create_folder operate on PD IDs; bundle_id is only valid as an arg to list_nodes / refresh_index / OKF graph queries."
+          },
+          "type": "INSTRUCTION_ADHERENCE"
         }
       ],
       "final_session_state": null
