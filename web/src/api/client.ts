@@ -5,6 +5,8 @@ const apiClient = axios.create({
   timeout: 30000,
 });
 
+let redirecting = false;
+
 apiClient.interceptors.response.use(
   (response) => {
     const data = response.data;
@@ -14,7 +16,8 @@ apiClient.interceptors.response.use(
     return data;
   },
   async (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !redirecting) {
+      redirecting = true;
       try {
         const res = await axios.get('/auth/status');
         if (res.data?.data?.oauth2 === false) {
