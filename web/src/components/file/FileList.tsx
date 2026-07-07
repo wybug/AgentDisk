@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Table, Tag, Button, Space } from 'antd';
+import { Table, Tag, Button, Space, Modal, message } from 'antd';
 import {
   FolderOutlined,
   FileOutlined,
@@ -80,19 +80,22 @@ export default function FileList({ folderId, onPreview, onVersionHistory, onShar
   });
 
   const handleDeleteFolder = (folder: DiskFolder) => {
-    import('antd').then(({ Modal, message }) => {
-      Modal.confirm({
-        title: `确定删除文件夹「${folder.folderName}」？`,
-        content: '文件夹及其内容将移至回收站',
-        okText: '删除',
-        okType: 'danger',
-        cancelText: '取消',
-        onOk: async () => {
+    Modal.confirm({
+      title: `确定删除文件夹「${folder.folderName}」？`,
+      content: '文件夹及其内容将移至回收站',
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
           await folderApi.delete(folder.id);
           queryClient.invalidateQueries({ queryKey: ['folders', folderId] });
           message.success('已删除');
-        },
-      });
+        } catch (err) {
+          message.error('删除失败: ' + (err instanceof Error ? err.message : String(err)));
+          throw err;
+        }
+      },
     });
   };
 
