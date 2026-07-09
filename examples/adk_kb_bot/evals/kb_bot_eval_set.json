@@ -1,0 +1,212 @@
+{
+  "eval_set_id": "kb_bot_baseline",
+  "name": "KB Bot Baseline",
+  "description": "Baseline eval set for the AgentDisk OKF knowledge-base Q&A agent. 4 cases cover the three behaviors that define a trustworthy grounded bot: (1) cite sources when answering from KB, (2) refuse when KB doesn't cover, (3) use search_knowledge as the primary entry point. Rubric-based scoring (response_match is informational) because LLM answers vary in phrasing — what we validate is the structural contract from agent.py:INSTRUCTION. Run AFTER adk_writer_agent has built a bundle with at least one node about 反洗钱 / 客户身份识别 (the writer's bundled sample data covers this).",
+  "creation_timestamp": 0.0,
+  "eval_cases": [
+    {
+      "eval_id": "search_first_for_business_question",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "kb_bot",
+        "user_id": "kb_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "search_first_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "反洗钱法对客户身份识别有什么要求？"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_knowledge",
+                "args": {"query": "反洗钱 客户身份识别"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "calls_search_knowledge_first",
+          "rubric_content": {
+            "text_property": "Agent calls search_knowledge before any other OKF read tool (the INSTRUCTION mandates search-first)."
+          },
+          "description": "Validates the search-first workflow rule.",
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "cite_source_when_answered",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "kb_bot",
+        "user_id": "kb_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "cite_source_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "客户身份识别适用于哪些金融机构？"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_knowledge",
+                "args": {"query": "客户身份识别 金融机构"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "response_includes_nodeid_citation",
+          "rubric_content": {
+            "text_property": "Final response contains at least one citation in the form [nodeId=N, relPath=...]."
+          },
+          "description": "Every factual claim must be grounded in a cited node.",
+          "type": "RESPONSE_MATCH"
+        },
+        {
+          "rubric_id": "no_invented_clause",
+          "rubric_content": {
+            "text_property": "Response does not quote specific article numbers (第X条) unless read_node_content was called to fetch them."
+          },
+          "description": "Forbids the LLM from inventing article text from training memory.",
+          "type": "RESPONSE_MATCH"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "refuse_when_kb_uncovered",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "kb_bot",
+        "user_id": "kb_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "refuse_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "火星殖民的法律规定是什么？"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_knowledge",
+                "args": {"query": "火星殖民"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "explicit_refusal",
+          "rubric_content": {
+            "text_property": "Response explicitly says the knowledge base does not cover the question (e.g. 知识库未覆盖 / 未收录 / 不在知识库范围内)."
+          },
+          "description": "Refusal calibration — the highest-priority constraint.",
+          "type": "RESPONSE_MATCH"
+        },
+        {
+          "rubric_id": "no_hallucinated_law",
+          "rubric_content": {
+            "text_property": "Response does NOT invent any 火星-related regulation or statute."
+          },
+          "description": "Forbids fabrication when KB is silent.",
+          "type": "RESPONSE_MATCH"
+        }
+      ],
+      "final_session_state": null
+    },
+    {
+      "eval_id": "expand_via_neighbors_when_thin",
+      "creation_timestamp": 0.0,
+      "session_input": {
+        "app_name": "kb_bot",
+        "user_id": "kb_eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "expand_1",
+          "creation_timestamp": 0.0,
+          "user_content": {
+            "parts": [
+              {
+                "text": "反洗钱法的下位法有哪些？"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_knowledge",
+                "args": {"query": "反洗钱法"}
+              },
+              {
+                "name": "neighbors",
+                "args": {"node_id": 0, "direction": "out"}
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "final_response": null,
+          "rubrics": null,
+          "app_details": null
+        }
+      ],
+      "rubrics": [
+        {
+          "rubric_id": "uses_neighbors_for_expansion",
+          "rubric_content": {
+            "text_property": "Agent calls neighbors or reachable after search_knowledge to expand the seed result."
+          },
+          "description": "Multi-hop questions must expand via graph traversal tools.",
+          "type": "TOOL_USE_QUALITY"
+        }
+      ],
+      "final_session_state": null
+    }
+  ]
+}

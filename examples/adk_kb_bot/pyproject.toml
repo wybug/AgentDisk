@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentdisk-kb-bot"
+version = "0.1.0"
+description = "Google ADK business-QA agent demo over AgentDisk OKF knowledge base"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "AgentDisk T6" },
+]
+dependencies = [
+    "google-adk>=2.0.0",
+    "agentdisk>=0.3.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pytest>=8.0",
+]
+eval = [
+    "google-adk[eval]>=2.0.0",
+    "litellm>=1.75.5",
+    "httpx>=0.27.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["adk_kb_bot*"]
+exclude = ["scenarios*", "evals*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["scenarios", "evals"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+exclude = ['scenarios/', 'evals/']

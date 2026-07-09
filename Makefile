@@ -1,6 +1,6 @@
 GOLANGCI_LINT_VERSION := v1.64.8
 
-.PHONY: build run test clean lint lint-install docker dev-start dev-stop dev-status docs-install docs-dev docs-build okf-eval okf-eval-install okf-eval-dry-run okf-eval-probe
+.PHONY: build run test clean lint lint-install docker dev-start dev-stop dev-status docs-install docs-dev docs-build okf-eval okf-eval-install okf-eval-dry-run okf-eval-probe kb-bot-eval kb-bot-eval-install kb-bot-eval-dry-run kb-bot-lint
 
 APP_NAME := agentdisk
 
@@ -103,3 +103,20 @@ okf-eval-dry-run:
 
 okf-eval-probe:
 	cd examples/adk_writer_agent && python evals/probe_llm.py
+
+# KB bot agent (examples/adk_kb_bot) — read-only OKF consumer. ADK eval
+# suite mirrors okf-eval; requires a bundle already built (run
+# adk_writer_agent/scenarios/bootstrap_bundle.py first) plus KB_BOT_BUNDLE_ID
+# in your .env. See examples/adk_kb_bot/evals/README.md for details.
+kb-bot-eval-install:
+	cd examples/adk_kb_bot && pip install -e ".[eval]"
+
+kb-bot-eval: kb-bot-eval-install
+	cd examples/adk_kb_bot && python evals/run_evals.py
+
+kb-bot-eval-dry-run:
+	cd examples/adk_kb_bot && python evals/run_evals.py --dry-run
+
+kb-bot-lint:
+	cd examples/adk_kb_bot && ruff check .
+	cd examples/adk_kb_bot && mypy adk_kb_bot
