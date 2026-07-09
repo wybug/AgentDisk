@@ -56,16 +56,27 @@ func (s *stubOkfShareReader) GetNode(share *model.DiskShare, nodeID uint64) (*mo
 }
 
 // stubOkfShareShareSvc stubs the ShareService subset the OKF share handler
-// uses (just code → share lookup).
+// uses (AccessShare). The stub mirrors the real service's classification so
+// tests can drive each error branch (extract code / max visit / unknown).
 type stubOkfShareShareSvc struct {
 	byCode map[string]*model.DiskShare
+	// accessErr, if non-nil, is returned regardless of code lookup. Used to
+	// simulate "max visit limit reached" without modeling VisitCount.
+	accessErr error
 }
 
-func (s *stubOkfShareShareSvc) GetShareByCode(code string) (*model.DiskShare, error) {
-	if sh, ok := s.byCode[code]; ok {
-		return sh, nil
+func (s *stubOkfShareShareSvc) AccessShare(code, extractCode, _, _ string) (*model.DiskShare, error) {
+	if s.accessErr != nil {
+		return nil, s.accessErr
 	}
-	return nil, errors.New("share not found")
+	sh, ok := s.byCode[code]
+	if !ok {
+		return nil, errors.New("share not found")
+	}
+	if sh.ExtractCode != "" && sh.ExtractCode != extractCode {
+		return nil, errors.New("invalid extract code")
+	}
+	return sh, nil
 }
 
 // okfShareHandlerWithStub wires the public OKF share routes to a stub reader
@@ -318,5 +329,26 @@ func TestOkfShareHandler_InvalidNodeId(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != 400 {
 		t.Errorf("status = %d, want 400 (invalid nodeId)", w.Code)
+	}
+}
+
+// TestOkfShareHandler_MaxVisitReached guards the AccessShare wiring: a share
+// whose MaxVisit is exhausted must be rejected even on the OKF read paths
+// (bundle / nodes / subgraph), which the previous GetShareByCode-based code
+// bypassed.
+func TestOkfShareHandler_MaxVisitReached(t *testing.T) {
+	reader := &stubOkfShareReader{}
+	shares := &stubOkfShareShareSvc{
+		byCode: map[string]*model.DiskShare{
+			"c": newBundleShare("c", 7, ""),
+		},
+		accessErr: errors.New("max visit limit reached"),
+	}
+	r := okfShareHandlerWithStub(t, reader, shares)
+
+	req, w := doJSON(t, "GET", "/v1/disk/share/c/bundle?bundleId=7", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 403 {
+		t.Errorf("status = %d, want 403 (max visit reached); body=%s", w.Code, w.Body.String())
 	}
 }

@@ -23,6 +23,7 @@ Run:
     python scripts/import_raw_phase2.py --summary  # scan + print compact summary
     APPLY=1 python scripts/import_raw_phase2.py    # apply accepted candidates
 """
+
 from __future__ import annotations
 
 import argparse
@@ -49,10 +50,9 @@ from adk_writer_agent.tools import (  # noqa: E402
 # phase-1's output PLUS the new citation links. Diverging here would silently
 # re-introduce formatting differences that pollute diffs.
 from scripts.import_raw_phase1 import (  # noqa: E402
+    _JUNK_LINK_RE,
     SKIP_DIRS,
     TEXT_EXTS,
-    _JUNK_LINK_RE,
-    _LINK_RE,
     _link_text_url,
     build_markdown_content,
     dedupe_same_line_links,
@@ -67,7 +67,9 @@ REVIEW_THRESHOLD = 0.55  # below MATCH_THRESHOLD but worth showing in the review
 # the more specific case before the bare `《XX》` falls through.
 CITATION_RES = [
     # 依据/按照/根据/参照 + optional 《》
-    re.compile(r"(?:依据|按照|根据|参照|参见|执行|贯彻|落实|符合|遵守)\s*[《\[「]([^\]》」]{2,40})[》\]」]"),
+    re.compile(
+        r"(?:依据|按照|根据|参照|参见|执行|贯彻|落实|符合|遵守)\s*[《\[「]([^\]》」]{2,40})[》\]」]"
+    ),
     # 相关法规：/参考资料：/依据： + comma-or-、separated list of titles
     re.compile(r"(?:相关法规|参考资料|依据|参考|引用)\s*[:：]\s*([^\n]{4,200})"),
     # Bare 《XX》 — most common in Chinese legal text
@@ -76,9 +78,7 @@ CITATION_RES = [
 
 # Markdown link forms that point to bundle-relative targets. Used by the
 # broken-link stripper to find residue from phase-1's incomplete cleanup.
-_BUNDLE_LINK_RE = re.compile(
-    r"!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)"
-)
+_BUNDLE_LINK_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)")
 
 # Title normalization: drop common suffixes so "中华人民共和国反洗钱法" matches
 # "反洗钱法" and "中华人民共和国反洗钱法（修订）".
@@ -89,7 +89,9 @@ _TITLE_NOISE = re.compile(
     r"|(实施|试行|暂行|修订|修正)"
     r"|(的|了)"
 )
-_TITLE_SUFFIX = re.compile(r"(法|办法|规定|条例|实施细则|意见|通知|公告|规范|标准|要求|指引|制度|细则)$")
+_TITLE_SUFFIX = re.compile(
+    r"(法|办法|规定|条例|实施细则|意见|通知|公告|规范|标准|要求|指引|制度|细则)$"
+)
 
 
 def _normalize_title(s: str) -> str:
@@ -122,7 +124,9 @@ def build_title_index(nodes: list[dict]) -> dict[str, dict]:
     return index
 
 
-def match_citation(text: str, by_title: dict[str, list[dict]], src_rel_path: str = "") -> list[dict]:
+def match_citation(
+    text: str, by_title: dict[str, list[dict]], src_rel_path: str = ""
+) -> list[dict]:
     """Fuzzy-match citation text against bundle titles. Returns ranked candidates.
 
     Drops self-matches (where the only candidate is the source file itself) —
@@ -134,7 +138,9 @@ def match_citation(text: str, by_title: dict[str, list[dict]], src_rel_path: str
         if score >= REVIEW_THRESHOLD:
             # Best-scoring node wins (in rare cases two nodes share a title)
             best = max(nodes, key=lambda n: len(n.get("relPath", "")))
-            candidates.append({"title": title, "score": round(score, 3), "rel_path": best["relPath"]})
+            candidates.append(
+                {"title": title, "score": round(score, 3), "rel_path": best["relPath"]}
+            )
     candidates.sort(key=lambda c: c["score"], reverse=True)
     # Drop self-matches: a citation whose only candidate is the source file
     # would create a self-loop. Keep other candidates if they exist.
@@ -148,7 +154,9 @@ def match_citation(text: str, by_title: dict[str, list[dict]], src_rel_path: str
 def find_citations(body: str) -> list[dict]:
     """Find citation candidates in a file body. Returns list of {text, line, candidates}."""
     out = []
-    seen = set()  # dedupe (text, line) — same title cited multiple times on the same line is one edge
+    seen = (
+        set()
+    )  # dedupe (text, line) — same title cited multiple times on the same line is one edge
     for line_no, line in enumerate(body.splitlines(), 1):
         for rx in CITATION_RES:
             for m in rx.finditer(line):
@@ -191,13 +199,15 @@ def find_broken_links_in_body(body: str, live_paths: set[str], src_rel_path: str
                 target = str(Path(src_dir) / url)
             target = target.replace("\\", "/")
             if target not in live_paths:
-                out.append({
-                    "line": line_no,
-                    "text": text[:50],
-                    "url": url[:100],
-                    "resolved": target[:120],
-                    "raw": m.group(0),
-                })
+                out.append(
+                    {
+                        "line": line_no,
+                        "text": text[:50],
+                        "url": url[:100],
+                        "resolved": target[:120],
+                        "raw": m.group(0),
+                    }
+                )
     return out
 
 
@@ -226,7 +236,9 @@ def scan(
     by_title = title_index["__by_title__"]  # type: ignore[index]
     files_out = []
 
-    top_dirs = sorted(d.name for d in raw_root.iterdir() if d.is_dir() and not d.name.startswith("."))
+    top_dirs = sorted(
+        d.name for d in raw_root.iterdir() if d.is_dir() and not d.name.startswith(".")
+    )
     for d in top_dirs:
         if d in SKIP_DIRS:
             continue
@@ -248,18 +260,22 @@ def scan(
             for c in citations:
                 c["candidates"] = match_citation(c["text"], by_title, src_rel_path=rel_path)
                 c["decision"] = (
-                    "accept" if c["candidates"] and c["candidates"][0]["score"] >= MATCH_THRESHOLD
-                    else "review" if c["candidates"] and c["candidates"][0]["score"] >= REVIEW_THRESHOLD
+                    "accept"
+                    if c["candidates"] and c["candidates"][0]["score"] >= MATCH_THRESHOLD
+                    else "review"
+                    if c["candidates"] and c["candidates"][0]["score"] >= REVIEW_THRESHOLD
                     else "no_match"
                 )
 
             broken = find_broken_links_in_body(body, live_paths, rel_path)
 
-            files_out.append({
-                "rel_path": rel_path,
-                "citations": citations,
-                "broken_links": broken,
-            })
+            files_out.append(
+                {
+                    "rel_path": rel_path,
+                    "citations": citations,
+                    "broken_links": broken,
+                }
+            )
 
     return {
         "bundle_id": bundle_id,
@@ -287,9 +303,7 @@ def render_markdown(scan_result: dict) -> str:
         1 for f in scan_result["files"] for c in f["citations"] if c["decision"] == "no_match"
     )
     n_broken = sum(len(f["broken_links"]) for f in scan_result["files"])
-    n_files_with_work = sum(
-        1 for f in scan_result["files"] if f["citations"] or f["broken_links"]
-    )
+    n_files_with_work = sum(1 for f in scan_result["files"] if f["citations"] or f["broken_links"])
 
     lines.append("## Summary\n")
     lines.append(f"- files scanned: {len(scan_result['files'])}")
@@ -315,7 +329,10 @@ def render_markdown(scan_result: dict) -> str:
             lines.append("|---|---|---|---|")
             for c in accepts[:10]:
                 top = c["candidates"][0]
-                lines.append(f"| `{c['text'][:30]}` | {top['title']} | {top['score']} | `{top['rel_path']}` |")
+                lines.append(
+                    f"| `{c['text'][:30]}` | {top['title']} | {top['score']} | "
+                    f"`{top['rel_path']}` |"
+                )
             if len(accepts) > 10:
                 lines.append(f"\n_…and {len(accepts) - 10} more_\n")
             lines.append("")
@@ -325,12 +342,17 @@ def render_markdown(scan_result: dict) -> str:
             lines.append("|---|---|---|---|")
             for c in reviews[:10]:
                 top = c["candidates"][0]
-                lines.append(f"| `{c['text'][:30]}` | {top['title']} | {top['score']} | `{top['rel_path']}` |")
+                lines.append(
+                    f"| `{c['text'][:30]}` | {top['title']} | {top['score']} | "
+                    f"`{top['rel_path']}` |"
+                )
             lines.append("")
         if broken:
             lines.append(f"**Broken links to strip ({len(broken)}):**\n")
             for b in broken[:5]:
-                lines.append(f"- L{b['line']}: `[{b['text']}]({b['url']})` → resolves to `{b['resolved']}`")
+                lines.append(
+                    f"- L{b['line']}: `[{b['text']}]({b['url']})` → resolves to `{b['resolved']}`"
+                )
             if len(broken) > 5:
                 lines.append(f"\n_…and {len(broken) - 5} more_\n")
             lines.append("")
@@ -341,7 +363,9 @@ def render_markdown(scan_result: dict) -> str:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--summary", action="store_true", help="print compact summary after scan")
-    p.add_argument("--apply", action="store_true", help="apply accepted candidates (rewrites files)")
+    p.add_argument(
+        "--apply", action="store_true", help="apply accepted candidates (rewrites files)"
+    )
     args = p.parse_args()
 
     raw_root = Path(os.environ["AGENTDISK_RAW_ROOT"])
@@ -354,7 +378,10 @@ def main() -> int:
     nodes = r["data"]["nodes"]
     title_index = build_title_index(nodes)
     live_paths = {n["relPath"] for n in nodes if n.get("relPath")}
-    print(f"[scan] bundle {BUNDLE_ID}: {len(nodes)} nodes, {len(live_paths)} live paths", file=sys.stderr)
+    print(
+        f"[scan] bundle {BUNDLE_ID}: {len(nodes)} nodes, {len(live_paths)} live paths",
+        file=sys.stderr,
+    )
 
     # 2. Scan
     result = scan(BUNDLE_ID, raw_root, live_paths, title_index)
@@ -364,11 +391,17 @@ def main() -> int:
     out_md = Path(__file__).parent / "phase2_scan.md"
     out_json.write_text(json.dumps(result, ensure_ascii=False, indent=2))
     out_md.write_text(render_markdown(result))
-    print(f"[scan] wrote {out_json.relative_to(HERE)} + {out_md.relative_to(HERE)}", file=sys.stderr)
+    print(
+        f"[scan] wrote {out_json.relative_to(HERE)} + {out_md.relative_to(HERE)}", file=sys.stderr
+    )
 
     if args.summary:
-        n_accept = sum(1 for f in result["files"] for c in f["citations"] if c["decision"] == "accept")
-        n_review = sum(1 for f in result["files"] for c in f["citations"] if c["decision"] == "review")
+        n_accept = sum(
+            1 for f in result["files"] for c in f["citations"] if c["decision"] == "accept"
+        )
+        n_review = sum(
+            1 for f in result["files"] for c in f["citations"] if c["decision"] == "review"
+        )
         n_broken = sum(len(f["broken_links"]) for f in result["files"])
         print(f"[summary] auto-apply: {n_accept}  review: {n_review}  broken-links: {n_broken}")
 
@@ -442,11 +475,11 @@ def main() -> int:
                 if pos < 0:
                     break
                 # Look back up to 5 chars for a `[`
-                pre = body[max(0, pos - 5):pos]
+                pre = body[max(0, pos - 5) : pos]
                 if "[" in pre and pre.rindex("[") > pre.rindex("]") if "]" in pre else "[" in pre:
                     idx = pos + len(needle)
                     continue
-                body = body[:pos] + new_md + body[pos + len(needle):]
+                body = body[:pos] + new_md + body[pos + len(needle) :]
                 links_added += 1
                 idx = pos + len(new_md)
                 break  # one link per unique citation text per file

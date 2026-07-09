@@ -22,10 +22,12 @@ type okfShareReader interface {
 	GetNode(share *model.DiskShare, nodeID uint64) (*model.OkfNode, []byte, error)
 }
 
-// okfShareShareSvc is the subset of ShareService the OKF share handler needs
-// (just the share-code lookup). Narrowed to an interface for testability.
+// okfShareShareSvc is the subset of ShareService the OKF share handler needs.
+// AccessShare (not GetShareByCode) is wired so the OKF share path enforces
+// MaxVisit + increments VisitCount + writes the access log on every read —
+// GetShareByCode alone leaves all three unchecked.
 type okfShareShareSvc interface {
-	GetShareByCode(code string) (*model.DiskShare, error)
+	AccessShare(code, extractCode, visitorIP, ua string) (*model.DiskShare, error)
 }
 
 // OkfShareHandler exposes read-only OKF bundle endpoints accessible via
@@ -44,24 +46,34 @@ func NewOkfShareHandler(reader okfShareReader, shares okfShareShareSvc) *OkfShar
 	return &OkfShareHandler{reader: reader, shares: shares}
 }
 
-// resolveShare pulls the :code path param + ?extractCode= query param,
-// validates the share is active + unexpired, and re-checks the extract code
-// when one is set on the share. Returns the share on success; writes a 4xx
-// response and returns a non-nil error otherwise.
+// resolveShare pulls the :code path param + ?extractCode= query param and
+// invokes AccessShare, which checks active + expiry + extract code + MaxVisit
+// and writes the access log atomically. Each OKF share endpoint calls this on
+// every request so a one-shot share cannot be read repeatedly. Returns the
+// share on success; writes a 4xx response and returns a non-nil error
+// otherwise.
 func (h *OkfShareHandler) resolveShare(c *gin.Context) (*model.DiskShare, error) {
 	code := c.Param("code")
 	if code == "" {
 		response.BadRequest(c, "code is required")
 		return nil, errors.New("missing code")
 	}
-	share, err := h.shares.GetShareByCode(code)
+	share, err := h.shares.AccessShare(code, c.Query("extractCode"), c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
-		response.NotFound(c, "share not found or expired")
+		// AccessShare returns fmt.Errorf-wrapped strings (no sentinels yet).
+		// Classify by message so the OKF path returns the same status codes
+		// the regular share path does.
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "extract code"):
+			response.Forbidden(c, "invalid extract code")
+		case strings.Contains(msg, "max visit"):
+			response.Forbidden(c, "max visit limit reached")
+		default:
+			// "share not found" / "share expired or revoked" / wrapped DB error.
+			response.NotFound(c, "share not found or expired")
+		}
 		return nil, err
-	}
-	if share.ExtractCode != "" && share.ExtractCode != c.Query("extractCode") {
-		response.Forbidden(c, "invalid extract code")
-		return nil, errors.New("invalid extract code")
 	}
 	if share.ResType != "bundle" {
 		response.BadRequest(c, "share code is not for a bundle")

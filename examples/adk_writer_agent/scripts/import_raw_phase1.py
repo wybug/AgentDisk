@@ -9,6 +9,7 @@ binary files (.pdf/.docx/.xlsx — list_raw_files reports them as skipped).
 Type/title inference mirrors the agent's INSTRUCTION heuristics so the
 output is consistent with what the agent would have produced.
 """
+
 from __future__ import annotations
 
 import os
@@ -113,9 +114,7 @@ def dedupe_same_line_links(body: str) -> str:
 # navigation bars whose first non-empty line is a logo image, and that raw
 # markdown makes a poor YAML title (square brackets break flow-sequence
 # parsing).
-_MARKDOWN_LINK_ONLY_RE = re.compile(
-    r"^(?:!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\([^)]*\))+$"
-)
+_MARKDOWN_LINK_ONLY_RE = re.compile(r"^(?:!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\([^)]*\))+$")
 
 
 def _clean_title(s: str) -> str:
@@ -178,13 +177,7 @@ def build_markdown_content(body: str, filename: str) -> str:
     """
     title = infer_title(body, filename)
     type_ = infer_type(filename)
-    return (
-        "---\n"
-        f"type: {type_}\n"
-        f"title: {_yaml_double_quoted(title)}\n"
-        "---\n\n"
-        f"{body.strip()}\n"
-    )
+    return f"---\ntype: {type_}\ntitle: {_yaml_double_quoted(title)}\n---\n\n{body.strip()}\n"
 
 
 def process_dir(dir_name: str, stats: dict[str, int]) -> None:
@@ -255,12 +248,13 @@ def main() -> int:
                 stats["write_fail"] += 1
                 print(f"  ✗ write {rel_path}: {str(wrote.get('error', ''))[:120]}")
         print(
-            f"\n=== Retry Summary ===\n"
-            f"  written: {stats['written']}  failed: {stats['write_fail']}"
+            f"\n=== Retry Summary ===\n  written: {stats['written']}  failed: {stats['write_fail']}"
         )
         return 0 if stats["write_fail"] == 0 else 1
 
-    top_dirs = sorted(d.name for d in raw_root.iterdir() if d.is_dir() and not d.name.startswith("."))
+    top_dirs = sorted(
+        d.name for d in raw_root.iterdir() if d.is_dir() and not d.name.startswith(".")
+    )
     for d in top_dirs:
         if d in SKIP_DIRS:
             print(f"\n=== skip {d}/ (already imported) ===")
