@@ -74,3 +74,7 @@ examples/adk_writer_agent/adk_writer_agent/.adk/
 examples/adk_writer_agent/agentdisk_writer_agent.egg-info/
 examples/adk_writer_agent/raw/
 .venv/
+
+# ADK eval artifacts (per-example, regenerated on every run)
+**/.adk/
+*.egg-info/

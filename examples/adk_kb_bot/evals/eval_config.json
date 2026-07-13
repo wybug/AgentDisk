@@ -1,0 +1,34 @@
+{
+  "criteria": {
+    "rubric_based_tool_use_quality_v1": {
+      "threshold": 1.0,
+      "judge_model_options": {
+        "judge_model": "deepseek/deepseek-chat"
+      },
+      "rubrics": [
+        {
+          "rubricId": "_criterion_placeholder_tool_use",
+          "rubricContent": {
+            "text_property": "Placeholder rubric; real rubrics are merged in from the invocation (see local_eval_service._copy_eval_case_rubrics_to_actual_invocations)."
+          },
+          "type": "TOOL_USE_QUALITY"
+        }
+      ]
+    },
+    "rubric_based_final_response_quality_v1": {
+      "threshold": 1.0,
+      "judge_model_options": {
+        "judge_model": "deepseek/deepseek-chat"
+      },
+      "rubrics": [
+        {
+          "rubricId": "_criterion_placeholder_final_response",
+          "rubricContent": {
+            "text_property": "Placeholder rubric; real rubrics are merged in from the invocation."
+          },
+          "type": "FINAL_RESPONSE_QUALITY"
+        }
+      ]
+    }
+  }
+}

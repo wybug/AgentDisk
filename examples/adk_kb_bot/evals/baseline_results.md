@@ -1,18 +1,22 @@
 # KB Bot — Baseline Eval Results
 
-**Generated:** 2026-07-09 17:09:35 CST  
+**Generated:** 2026-07-13 18:41:29 CST  
 **Eval set:** `evals/kb_bot_eval_set.json`  
 **Schema check:** kb_bot_baseline: 4 cases  
 **Model:** `deepseek/deepseek-chat`  
-**Bundle:** id=None nodes=0  
-**Mode:** dry-run (no LLM calls)  
+**Bundle:** id=22 nodes=6  
+**Elapsed:** 56.1s  
 
-## ⚠ Precondition check failed
+## Per-case scores
 
-```
-missing env vars: AGENTDISK_BASE_URL, AGENTDISK_API_KEY, KB_BOT_BUNDLE_ID
-```
+| Case | Rubric score | Rubric count | Status |
+|---|---|---|---|
+| `refuse_when_kb_uncovered` | 1.00 | 1 | PASS |
+| `expand_via_neighbors_when_thin` | 0.67 | 3 | FAIL |
+| `cite_source_when_answered` | 0.75 | 4 | FAIL |
+| `search_first_for_business_question` | 1.00 | 3 | PASS |
 
-Eval results below may be misleading — fix this first.
+**Summary:** 2/4 pass (50%), 2 fail.
 
-_No case results parsed — see schema check + run output above._
+---
+*Regenerated on every `make kb-bot-eval` run.*

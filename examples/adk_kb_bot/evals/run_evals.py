@@ -34,6 +34,7 @@ if str(_PKG_ROOT) not in sys.path:
 
 AGENT_MODULE_DIR = _PKG_ROOT / "adk_kb_bot"
 EVAL_SET_PATH = _PKG_ROOT / "evals" / "kb_bot_eval_set.json"
+EVAL_CONFIG_PATH = _PKG_ROOT / "evals" / "eval_config.json"
 REPORT_PATH = _PKG_ROOT / "evals" / "baseline_results.md"
 EVAL_HISTORY_DIR = AGENT_MODULE_DIR / ".adk" / "eval_history"
 
@@ -86,6 +87,8 @@ def _build_adk_cmd(case_ids: list[str] | None, detailed: bool) -> list[str]:
         "eval",
         str(AGENT_MODULE_DIR),
         target,
+        "--config_file_path",
+        str(EVAL_CONFIG_PATH),
     ]
     if detailed:
         cmd.append("--print_detailed_results")
@@ -100,7 +103,16 @@ def _find_latest_result() -> Path | None:
 
 
 def _parse_result_file(result_path: Path) -> list[dict[str, Any]]:
-    """Extract per-case rubric pass/fail from the EvalSetResult JSON."""
+    """Extract per-case rubric pass/fail from the EvalSetResult JSON.
+
+    ADK 2.x stores rubric results under
+    ``overall_eval_metric_results[].details.rubric_scores`` (a list of
+    ``{rubric_id, score, rationale}``). Each rubric metric emits one entry
+    whose ``metric_name`` starts with ``rubric_based_``. We aggregate across
+    all such metrics; non-rubric metrics (tool_trajectory_avg_score etc.)
+    are ignored because they're strict trajectory matchers, not what this
+    suite validates.
+    """
     raw = result_path.read_text(encoding="utf-8")
     try:
         data = json.loads(raw)
@@ -111,42 +123,40 @@ def _parse_result_file(result_path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for case in case_results:
         eval_id = case.get("evalId") or case.get("eval_id") or "?"
-        # Aggregate rubric scores: each rubric appears under
-        # overallEvalMetricResults. We look for the canonical metric keys
-        # ADK emits; for rubrics the per-rubric result lives in a nested
-        # list. Be defensive — ADK's schema has shifted between versions.
-        rubric_results: list[dict[str, Any]] = (
-            case.get("rubricResults") or case.get("rubric_results") or []
-        )
-        if rubric_results:
+        rubric_scores: list[dict[str, Any]] = []
+        for metric in (
+            case.get("overallEvalMetricResults")
+            or case.get("overall_eval_metric_results")
+            or []
+        ):
+            name = metric.get("metric_name", "")
+            if not name.startswith("rubric_based_"):
+                continue
+            details = metric.get("details") or {}
+            scores = details.get("rubricScores") or details.get("rubric_scores") or []
+            rubric_scores.extend(scores)
+
+        if rubric_scores:
+            # score is None when the auto-rater declined to score (e.g.
+            # rubric wasn't applicable to the trajectory). Count those as
+            # not-passed.
             n_pass = sum(
                 1
-                for r in rubric_results
-                if (r.get("pass") is True or r.get("result") is True)
+                for r in rubric_scores
+                if isinstance(r.get("score"), (int, float)) and float(r["score"]) >= 1.0
             )
-            n_total = len(rubric_results)
+            n_total = len(rubric_scores)
             score = n_pass / n_total if n_total else 0.0
             passed = score >= PASS_THRESHOLD
         else:
-            # Fall back to overall trajectory/response metric.
-            metrics = (
-                case.get("overallEvalMetricResults")
-                or case.get("overall_eval_metric_results")
-                or []
-            )
             score = None
-            for entry in metrics:
-                score_val = entry.get("score")
-                if isinstance(score_val, (int, float)):
-                    score = float(score_val)
-                    break
-            passed = score is not None and score >= PASS_THRESHOLD
+            passed = False
 
         rows.append(
             {
                 "eval_id": eval_id,
                 "score": score,
-                "rubric_count": len(rubric_results),
+                "rubric_count": len(rubric_scores),
                 "passed": passed,
             }
         )

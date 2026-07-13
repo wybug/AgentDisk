@@ -91,7 +91,7 @@
             "text_property": "Final response contains at least one citation in the form [nodeId=N, relPath=...]."
           },
           "description": "Every factual claim must be grounded in a cited node.",
-          "type": "RESPONSE_MATCH"
+          "type": "FINAL_RESPONSE_QUALITY"
         },
         {
           "rubric_id": "no_invented_clause",
@@ -99,7 +99,7 @@
             "text_property": "Response does not quote specific article numbers (第X条) unless read_node_content was called to fetch them."
           },
           "description": "Forbids the LLM from inventing article text from training memory.",
-          "type": "RESPONSE_MATCH"
+          "type": "FINAL_RESPONSE_QUALITY"
         }
       ],
       "final_session_state": null
@@ -145,7 +145,7 @@
             "text_property": "Response explicitly says the knowledge base does not cover the question (e.g. 知识库未覆盖 / 未收录 / 不在知识库范围内)."
           },
           "description": "Refusal calibration — the highest-priority constraint.",
-          "type": "RESPONSE_MATCH"
+          "type": "FINAL_RESPONSE_QUALITY"
         },
         {
           "rubric_id": "no_hallucinated_law",
@@ -153,7 +153,7 @@
             "text_property": "Response does NOT invent any 火星-related regulation or statute."
           },
           "description": "Forbids fabrication when KB is silent.",
-          "type": "RESPONSE_MATCH"
+          "type": "FINAL_RESPONSE_QUALITY"
         }
       ],
       "final_session_state": null
