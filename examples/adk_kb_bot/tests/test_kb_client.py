@@ -105,31 +105,48 @@ def test_read_node_body_builds_path_and_fetches(
     """read_node_body should:
     1. Prefix the rel_path with the public directory name.
     2. Call client.download_file(<pd>/<rel>) on the SDK.
-    3. GET the returned download_url via httpx and return its text.
+    3. GET the returned download_url via the SDK's internal httpx client
+       (which has base_url configured, so relative URLs work).
     """
-    # Fake SDK client: download_file returns an object with .download_url
     fake_client = MagicMock()
     fake_client.download_file.return_value.download_url = "http://cdn/presigned"
-    patch_get_client = patch.object(
-        kb_client, "get_client", return_value=fake_client
-    )
-
-    # Fake httpx.get: returns an object with .text and .raise_for_status()
     fake_resp = MagicMock()
     fake_resp.text = "---\ntype: law\n---\n\n# Body\n"
     fake_resp.raise_for_status.return_value = None
-    patch_httpx = patch.object(kb_client.httpx, "get", return_value=fake_resp)
+    fake_client._http.get.return_value = fake_resp
 
-    with patch_get_client as mock_get_client, patch_httpx as mock_httpx_get:
+    with patch.object(kb_client, "get_client", return_value=fake_client):
         body = kb_client.read_node_body("机构监管/反洗钱法.md")
 
     assert "type: law" in body
-    # SDK was called with the prefixed path.
-    mock_get_client.return_value.download_file.assert_called_once_with(
-        "test/机构监管/反洗钱法.md"
+    fake_client.download_file.assert_called_once_with("test/机构监管/反洗钱法.md")
+    fake_client._http.get.assert_called_once_with(
+        "http://cdn/presigned", timeout=30.0
     )
-    # httpx.get was called with the presigned URL.
-    mock_httpx_get.assert_called_once_with("http://cdn/presigned", timeout=30.0)
+
+
+def test_read_node_body_handles_relative_download_url(
+    configured_env: None,
+) -> None:
+    """SDK may return a relative download_url (e.g. /v1/disk/local-storage/...).
+
+    The SDK's httpx client has base_url configured, so we route the GET
+    through ``client._http`` instead of a bare ``httpx.get`` to handle this.
+    """
+    fake_client = MagicMock()
+    fake_client.download_file.return_value.download_url = "/v1/disk/local-storage/foo?sig=x"
+    fake_resp = MagicMock()
+    fake_resp.text = "body content"
+    fake_resp.raise_for_status.return_value = None
+    fake_client._http.get.return_value = fake_resp
+
+    with patch.object(kb_client, "get_client", return_value=fake_client):
+        body = kb_client.read_node_body("concepts/foo.md")
+
+    assert body == "body content"
+    fake_client._http.get.assert_called_once_with(
+        "/v1/disk/local-storage/foo?sig=x", timeout=30.0
+    )
 
 
 def test_read_node_body_strips_leading_slash(
@@ -141,10 +158,9 @@ def test_read_node_body_strips_leading_slash(
     fake_resp = MagicMock()
     fake_resp.text = "body"
     fake_resp.raise_for_status.return_value = None
+    fake_client._http.get.return_value = fake_resp
 
-    with patch.object(kb_client, "get_client", return_value=fake_client), patch.object(
-        kb_client.httpx, "get", return_value=fake_resp
-    ):
+    with patch.object(kb_client, "get_client", return_value=fake_client):
         kb_client.read_node_body("/concepts/foo.md")
 
     fake_client.download_file.assert_called_once_with("test/concepts/foo.md")

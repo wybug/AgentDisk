@@ -33,6 +33,17 @@ import time
 from pathlib import Path
 from typing import Any
 
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_PKG_ROOT / ".env")
+except ImportError:  # pragma: no cover
+    pass
+
 # Allow `python -m scenarios.ask_business` to find the adk_kb_bot
 # package even when the project is NOT pip-installed. Same sys.path
 # trick as adk_writer_agent/scenarios/bootstrap_bundle.py.

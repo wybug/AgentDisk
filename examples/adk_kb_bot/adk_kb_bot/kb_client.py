@@ -26,7 +26,6 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
-import httpx
 from agentdisk import AgentDiskClient, AgentDiskError
 
 __all__ = [
@@ -134,8 +133,11 @@ def read_node_body(rel_path: str) -> str:
     clean = rel_path.lstrip("/")
     path = f"{pd_name}/{clean}"
 
-    token = get_client().download_file(path)
-    # download_url is presigned — a plain GET yields the bytes.
-    resp = httpx.get(token.download_url, timeout=30.0)
+    client = get_client()
+    token = client.download_file(path)
+    # download_url may be relative (e.g. "/v1/disk/local-storage/..."). The
+    # SDK's internal httpx.Client has base_url configured, so reusing it
+    # handles both relative and absolute URLs uniformly.
+    resp = client._http.get(token.download_url, timeout=30.0)  # noqa: SLF001
     resp.raise_for_status()
-    return resp.text
+    return str(resp.text)
