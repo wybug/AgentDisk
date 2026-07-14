@@ -34,4 +34,4 @@ def configured_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENTDISK_BASE_URL", "http://test.local:8080")
     monkeypatch.setenv("AGENTDISK_API_KEY", "adk_test_key")
     monkeypatch.setenv("KB_BOT_BUNDLE_ID", "42")
-    monkeypatch.setenv("KB_BOT_PUBLIC_DIRECTORY_NAME", "test")
+    monkeypatch.setenv("AGENTDISK_PUBLIC_DIRECTORY_ID", "7")

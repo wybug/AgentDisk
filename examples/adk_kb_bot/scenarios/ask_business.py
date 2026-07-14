@@ -126,10 +126,11 @@ def _pick_search_query() -> str:
 def main() -> int:
     base_url = _require_env("AGENTDISK_BASE_URL")
     api_key = _require_env("AGENTDISK_API_KEY")
-    pd_name = os.environ.get("KB_BOT_PUBLIC_DIRECTORY_NAME", "").strip()
-    if not pd_name:
+    pd_id_raw = os.environ.get("AGENTDISK_PUBLIC_DIRECTORY_ID", "").strip()
+    pd_name_legacy = os.environ.get("KB_BOT_PUBLIC_DIRECTORY_NAME", "").strip()
+    if not pd_id_raw and not pd_name_legacy:
         sys.stderr.write(
-            "KB_BOT_PUBLIC_DIRECTORY_NAME is not set; required for "
+            "AGENTDISK_PUBLIC_DIRECTORY_ID is not set; required for "
             "read_node_body. Skipping that step.\n"
         )
 
@@ -194,7 +195,7 @@ def main() -> int:
                 )
 
         # Step 5: read full markdown body of the top hit.
-        if top is not None and pd_name:
+        if top is not None and (pd_id_raw or pd_name_legacy):
             _step(f'read_node_body("{top.rel_path}")')
             t = time.perf_counter()
             try:

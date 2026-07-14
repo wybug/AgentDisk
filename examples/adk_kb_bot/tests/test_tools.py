@@ -344,8 +344,9 @@ def test_read_node_content_sdk_error(
 def test_read_node_content_config_error(
     mock_client: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Missing PD name → RuntimeError surfaces as error dict."""
+    """Missing PD id → RuntimeError surfaces as error dict."""
+    monkeypatch.delenv("AGENTDISK_PUBLIC_DIRECTORY_ID", raising=False)
     monkeypatch.delenv("KB_BOT_PUBLIC_DIRECTORY_NAME", raising=False)
     result = tools.read_node_content(rel_path="x.md")
     assert result["ok"] is False
-    assert "KB_BOT_PUBLIC_DIRECTORY_NAME" in result["error"]
+    assert "AGENTDISK_PUBLIC_DIRECTORY_ID" in result["error"]

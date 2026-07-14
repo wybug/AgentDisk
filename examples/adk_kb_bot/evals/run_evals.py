@@ -32,8 +32,8 @@ _PKG_ROOT = Path(__file__).resolve().parent.parent
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-# Auto-load .env so values with spaces (e.g. KB_BOT_PUBLIC_DIRECTORY_NAME) and
-# secrets don't have to be sourced in the shell. python-dotenv is a core dep.
+# Auto-load .env so secrets don't have to be sourced in the shell.
+# python-dotenv is a core dep.
 try:
     from dotenv import load_dotenv
 

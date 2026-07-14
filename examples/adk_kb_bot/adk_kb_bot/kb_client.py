@@ -1,9 +1,10 @@
 """agentdisk SDK wrapper for the kb_bot agent.
 
-This is the only place in the package that talks to the AgentDisk Python SDK
-(``agentdisk.AgentDiskClient``). Tools in :mod:`adk_kb_bot.tools` go through
-here so the SDK is the single source of truth for OKF read access — no
-hand-rolled HTTP, in contrast to ``adk_writer_agent/agentdisk_client.py``.
+This is the only place in the package that talks to the AgentDisk Python
+SDK (``agentdisk.AgentDiskClient``). Tools in :mod:`adk_kb_bot.tools` go
+through here so the SDK is the single source of truth for OKF read
+access — no hand-rolled HTTP, in contrast to
+``adk_writer_agent/agentdisk_client.py``.
 
 The wrapper exposes:
 
@@ -11,14 +12,23 @@ The wrapper exposes:
 * :func:`default_bundle_id` — resolve the ``KB_BOT_BUNDLE_ID`` env var
   (raises with a helpful message if unset; tools catch and surface as a
   tool-error dict so the LLM gets actionable feedback).
-* :func:`default_public_dir_name` — same for ``KB_BOT_PUBLIC_DIRECTORY_NAME``.
-* :func:`read_node_body` — download an OKF node's markdown body via the SDK
-  (OKF read APIs return frontmatter only; the body has to be fetched as a
-  file download).
+* :func:`default_public_directory_id` — resolve
+  ``AGENTDISK_PUBLIC_DIRECTORY_ID`` (numeric, same env var the writer
+  uses). Falls back to ``KB_BOT_PUBLIC_DIRECTORY_NAME`` resolved to an
+  id via :meth:`AgentDiskClient.list_public_directories` for backward
+  compatibility with older .env files.
+* :func:`default_public_dir_name` — the displayName of the configured
+  PD. Used by :func:`read_node_body` to build the SDK download path
+  ``"<name>/<rel_path>"`` because the SDK's path resolver keys off the
+  leading segment matching a visible PD's displayName.
+* :func:`read_node_body` — download an OKF node's markdown body via the
+  SDK (OKF read APIs return frontmatter only; the body has to be
+  fetched as a file download).
 
-Configuration is read lazily so unit tests can ``monkeypatch.setenv`` before
-the first call. The singleton is cached via :func:`functools.lru_cache` —
-calling ``get_client.cache_clear()`` in tests wipes it after env changes.
+Configuration is read lazily so unit tests can ``monkeypatch.setenv``
+before the first call. The singleton is cached via
+:func:`functools.lru_cache` — calling ``get_client.cache_clear()`` in
+tests wipes it after env changes.
 """
 
 from __future__ import annotations
@@ -32,6 +42,7 @@ __all__ = [
     "AgentDiskError",
     "default_bundle_id",
     "default_public_dir_name",
+    "default_public_directory_id",
     "get_client",
     "read_node_body",
     "reset_client_cache",
@@ -62,14 +73,15 @@ def get_client() -> AgentDiskClient:
 def reset_client_cache() -> None:
     """Clear the singleton cache. Used by tests after monkeypatching env."""
     get_client.cache_clear()
+    _resolved_pd_cache_clear()
 
 
 def default_bundle_id() -> int:
     """Return the bundle id configured via ``KB_BOT_BUNDLE_ID``.
 
     Tools that take an optional ``bundle_id`` argument fall back to this
-    when the LLM omits it (the common case — the bot is configured against
-    a single bundle).
+    when the LLM omits it (the common case — the bot is configured
+    against a single bundle).
 
     Raises:
         RuntimeError: if the env var is unset or not a positive int.
@@ -89,23 +101,90 @@ def default_bundle_id() -> int:
     return bid
 
 
-def default_public_dir_name() -> str:
-    """Return the public directory ``displayName`` used as a path prefix.
+def default_public_directory_id() -> int:
+    """Return the PD id configured via ``AGENTDISK_PUBLIC_DIRECTORY_ID``.
 
-    Used by :func:`read_node_body` to build the download path
-    ``"<name>/<rel_path>"``. The SDK's path resolver treats a leading
-    segment matching a visible public directory's name as the PD marker
-    and routes the request through the PD-aware code path.
+    Mirrors the writer's config (see
+    ``adk_writer_agent/adk_writer_agent/agentdisk_client.py``) so the
+    two examples can share the same .env block. Falls back to
+    ``KB_BOT_PUBLIC_DIRECTORY_NAME`` resolved through
+    :meth:`AgentDiskClient.list_public_directories` for callers that
+    haven't migrated yet.
 
     Raises:
-        RuntimeError: if the env var is unset.
+        RuntimeError: if neither env var is set, the value isn't a
+            positive int, or the name can't be matched to a visible PD.
     """
+    raw = os.environ.get("AGENTDISK_PUBLIC_DIRECTORY_ID", "").strip()
+    if raw:
+        try:
+            pd_id = int(raw)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"AGENTDISK_PUBLIC_DIRECTORY_ID must be an int, got {raw!r}"
+            ) from exc
+        if pd_id <= 0:
+            raise RuntimeError(
+                f"AGENTDISK_PUBLIC_DIRECTORY_ID must be positive, got {pd_id}"
+            )
+        return pd_id
+
+    # Legacy fallback: resolve displayName → id via the SDK. This still
+    # works for older .env files but produces an extra round-trip on
+    # the first call (cached after that).
     name = os.environ.get("KB_BOT_PUBLIC_DIRECTORY_NAME", "").strip().strip("/")
     if not name:
         raise RuntimeError(
-            "KB_BOT_PUBLIC_DIRECTORY_NAME is not set; required by read_node_content"
+            "AGENTDISK_PUBLIC_DIRECTORY_ID is not set (or legacy "
+            "KB_BOT_PUBLIC_DIRECTORY_NAME). Set the PD id in .env — "
+            "same value the writer uses."
         )
-    return name
+    for pd in get_client().list_public_directories():
+        if pd.display_name == name or pd.fixed_path.rstrip("/") == f"/public/{name}":
+            return int(pd.id)
+    raise RuntimeError(
+        f"No visible public directory matches displayName/fixedPath "
+        f"{name!r}. Check AGENTDISK_API_KEY scopes or set "
+        f"AGENTDISK_PUBLIC_DIRECTORY_ID directly."
+    )
+
+
+@lru_cache(maxsize=1)
+def _resolved_pd() -> tuple[int, str]:
+    """Look up the configured PD once and cache (id, displayName).
+
+    Both :func:`default_public_dir_name` and :func:`read_node_body` need
+    the displayName, but resolving it costs a ``list_public_directories``
+    round-trip. Cache it alongside the singleton client; cleared by
+    :func:`reset_client_cache`.
+    """
+    pd_id = default_public_directory_id()
+    for pd in get_client().list_public_directories():
+        if pd.id == pd_id:
+            return pd_id, pd.display_name
+    raise RuntimeError(
+        f"No visible public directory with id={pd_id}. Check "
+        f"AGENTDISK_PUBLIC_DIRECTORY_ID and the API key's grants."
+    )
+
+
+def _resolved_pd_cache_clear() -> None:
+    _resolved_pd.cache_clear()
+
+
+def default_public_dir_name() -> str:
+    """Return the displayName of the configured public directory.
+
+    Used by :func:`read_node_body` to build the download path
+    ``"<name>/<rel_path>"``. The SDK's path resolver treats a leading
+    segment matching a visible public directory's displayName as the PD
+    marker and routes the request through the PD-aware code path.
+
+    Raises:
+        RuntimeError: if the PD can't be resolved (see
+            :func:`default_public_directory_id`).
+    """
+    return _resolved_pd()[1]
 
 
 def read_node_body(rel_path: str) -> str:
@@ -128,6 +207,13 @@ def read_node_body(rel_path: str) -> str:
     Raises:
         AgentDiskError: if the SDK can't resolve or download the file.
         httpx.HTTPError: if the download URL GET fails.
+
+    Note:
+        SDK resolver limitation — for subfolder paths (more than one
+        segment under the PD) the resolver falls back to a private
+        ``/v1/disk/files`` route that ``RequireNonAPIKey`` blocks for
+        API keys. PD-root files work; subfolder reads may 403 until the
+        backend exposes a PD-scoped listing-by-folderId route.
     """
     pd_name = default_public_dir_name()
     clean = rel_path.lstrip("/")

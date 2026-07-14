@@ -63,7 +63,7 @@ cp .env.example .env
 | `AGENTDISK_BASE_URL` | Backend base URL, e.g. `http://localhost:8080` |
 | `AGENTDISK_API_KEY` | API key (read scope is sufficient) |
 | `KB_BOT_BUNDLE_ID` | Numeric id of the bundle to consume |
-| `KB_BOT_PUBLIC_DIRECTORY_NAME` | Path segment of the public directory backing the bundle, e.g. `test` (used to download node bodies) |
+| `AGENTDISK_PUBLIC_DIRECTORY_ID` | Numeric id of the public directory backing the bundle (same var as `adk_writer_agent`; resolved to displayName for SDK download paths) |
 | `KB_BOT_MODEL` | LiteLLM model id (default `deepseek/deepseek-chat`) |
 | `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | Provider key for the chosen model |
 
