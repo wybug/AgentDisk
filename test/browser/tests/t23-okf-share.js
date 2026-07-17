@@ -352,16 +352,18 @@ describe('T23: OKF Bundle 分享端到端', () => {
   `);
   ab.waitMs(800);
 
-  // T23.13 - 切到图谱 tab → Cytoscape canvas
+  // T23.13 - 切到图谱 tab → Cytoscape canvas. Cytoscape mounts its canvas
+  // asynchronously (cose-bilkent layout load), so poll for it instead of
+  // asserting on a single fixed wait — the old one-shot check flaked under load.
   clickTab('图谱');
-  ab.waitMs(3000);
-  ab.waitLoad('networkidle');
-  const canvasCount = unwrap(ab.evalStdin(`
-    (function() {
-      var canvases = document.querySelectorAll('canvas');
-      return String(canvases.length);
-    })()
-  `));
+  let canvasCount = '0';
+  for (let w = 0; w < 10; w++) {
+    ab.waitMs(1000);
+    canvasCount = unwrap(ab.evalStdin(`
+      (function() { return String(document.querySelectorAll('canvas').length); })()
+    `));
+    if (Number(canvasCount) > 0) break;
+  }
   assertCondition(
     Number(canvasCount) > 0,
     'T23.13: 图谱 tab 渲染 Cytoscape canvas',

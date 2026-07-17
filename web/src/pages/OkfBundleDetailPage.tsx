@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { okfApi } from '@/api/okf';
 import OkfNodeList from '@/components/okf/OkfNodeList';
 import OkfGraphView from '@/components/okf/OkfGraphView';
+import OkfSearchPanel from '@/components/okf/OkfSearchPanel';
 import OkfStatsPanel from '@/components/okf/OkfStatsPanel';
 import OkfBrokenLinksPanel from '@/components/okf/OkfBrokenLinksPanel';
 import OkfFrontmatterDrawer from '@/components/okf/OkfFrontmatterDrawer';
@@ -147,6 +148,10 @@ export default function OkfBundleDetailPage() {
           {new Date(bundle.updatedAt).toLocaleString()}
         </Typography.Text>
       </Card>
+
+      <div style={{ marginTop: 16 }}>
+        <OkfSearchPanel bundleId={id} onNodeClick={setSelectedNode} />
+      </div>
 
       <Card style={{ marginTop: 16 }}>
         <Tabs
