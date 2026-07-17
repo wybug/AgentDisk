@@ -297,7 +297,7 @@ func (r *OkfNodeRepo) Search(query string, filter SearchFilter, limit int, curso
 		return nil, 0, nil
 	}
 	q := r.db.Model(&model.OkfNode{}).
-		Where("MATCH(title, description) AGAINST(? IN NATURAL LANGUAGE MODE)", query)
+		Where("MATCH(title, description, body) AGAINST(? IN NATURAL LANGUAGE MODE)", query)
 	if len(filter.BundleIDs) > 0 {
 		q = q.Where("bundle_id IN ?", filter.BundleIDs)
 	}

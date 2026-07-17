@@ -307,3 +307,26 @@ func TestOkfNodeRepo_SearchSQLite_TriggerSyncOnDelete(t *testing.T) {
 		t.Fatalf("post-delete got %d rows, want 0 (trigger must evict from index)", len(out))
 	}
 }
+
+// TestOkfNodeRepo_SearchSQLite_MatchesBody verifies the FTS index includes the
+// body column: a query term that appears only in the body (not title or
+// description) still matches. Regression guard for the body-indexing change.
+func TestOkfNodeRepo_SearchSQLite_MatchesBody(t *testing.T) {
+	db := newSearchDB(t)
+	repo := NewOkfNodeRepo(db)
+	bundleID := seedSearchBundle(t, db, 7, []*model.OkfNode{
+		{Title: "Quantum primer", Description: "introduction", Body: "the quick brown fox jumps over the lazy dog"},
+		{Title: "Unrelated node", Description: "nothing here"},
+	})
+
+	out, _, err := repo.SearchSQLite("fox", SearchFilter{BundleIDs: []uint64{bundleID}}, 50, 0)
+	if err != nil {
+		t.Fatalf("SearchSQLite: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("got %d rows, want 1 (body-only match)", len(out))
+	}
+	if !strings.Contains(strings.ToLower(out[0].Title), "quantum") {
+		t.Errorf("matched title = %q, want the Quantum primer (body contains 'fox')", out[0].Title)
+	}
+}

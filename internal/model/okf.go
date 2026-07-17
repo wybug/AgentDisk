@@ -43,13 +43,19 @@ func (OkfBundle) TableName() string { return "disk_okf_bundle" }
 // unknown fields are serialized into TagsJSON / ExtraJSON so the schema stays
 // forward-compatible (OKF §9 tolerance).
 type OkfNode struct {
-	ID            uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	BundleID      uint64    `gorm:"uniqueIndex:uk_bundle_rel_path,priority:1;not null" json:"bundleId"`
-	FileID        uint64    `gorm:"index:idx_bundle_file,priority:1;not null" json:"fileId"`
-	RelPath       string    `gorm:"size:1024;uniqueIndex:uk_bundle_rel_path,priority:2;not null" json:"relPath"`
-	Type          string    `gorm:"size:64;not null;default:'';index:idx_bundle_type,priority:2" json:"type"`
-	Title         string    `gorm:"size:255" json:"title"`
-	Description   string    `gorm:"type:text" json:"description"`
+	ID          uint64 `gorm:"primaryKey;autoIncrement" json:"id"`
+	BundleID    uint64 `gorm:"uniqueIndex:uk_bundle_rel_path,priority:1;not null" json:"bundleId"`
+	FileID      uint64 `gorm:"index:idx_bundle_file,priority:1;not null" json:"fileId"`
+	RelPath     string `gorm:"size:1024;uniqueIndex:uk_bundle_rel_path,priority:2;not null" json:"relPath"`
+	Type        string `gorm:"size:64;not null;default:'';index:idx_bundle_type,priority:2" json:"type"`
+	Title       string `gorm:"size:255" json:"title"`
+	Description string `gorm:"type:text" json:"description"`
+	// Body holds the markdown body (frontmatter stripped) for full-text search
+	// indexing. It mirrors the OSS file content so the FTS index can match
+	// against prose, not just title/description. Excluded from API responses:
+	// nodeToResponse omits it and json:"-" guards any direct serialization. The
+	// canonical body stays in OSS, fetched via the separate getNode endpoint.
+	Body          string    `gorm:"type:text" json:"-"`
 	TagsJSON      *string   `gorm:"type:json" json:"tagsJson,omitempty"`
 	Timestamp     string    `gorm:"size:32" json:"timestamp"`
 	HasBrokenLink bool      `gorm:"not null;default:false" json:"hasBrokenLink"`

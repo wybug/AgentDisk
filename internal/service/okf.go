@@ -648,7 +648,7 @@ func (s *OkfService) validateFrontmatterForPath(relPath string, fm okf.Frontmatt
 // in-progress transaction (or nil when running outside a transaction, e.g. in
 // unit tests with fake repos).
 func (s *OkfService) materializeNode(_ context.Context, tx *gorm.DB, bundle *model.OkfBundle, relPath string, file *model.DiskFile, body []byte) (*model.OkfNode, error) {
-	fm, _, err := okf.Parse(body)
+	fm, bodyContent, err := okf.Parse(body)
 	if err != nil {
 		return nil, fmt.Errorf("parse markdown: %w", err)
 	}
@@ -657,12 +657,15 @@ func (s *OkfService) materializeNode(_ context.Context, tx *gorm.DB, bundle *mod
 	contentHash := hex.EncodeToString(hash[:])
 
 	node := &model.OkfNode{
-		BundleID:      bundle.ID,
-		FileID:        file.ID,
-		RelPath:       relPath,
-		Type:          fm.Type,
-		Title:         fm.Title,
-		Description:   fm.Description,
+		BundleID:    bundle.ID,
+		FileID:      file.ID,
+		RelPath:     relPath,
+		Type:        fm.Type,
+		Title:       fm.Title,
+		Description: fm.Description,
+		// Body (frontmatter stripped) feeds the FTS index so prose is searchable,
+		// not just title/description.
+		Body:          string(bodyContent),
 		Timestamp:     fm.Timestamp,
 		HasBrokenLink: s.nodeHasBrokenLink(bundle.ID, relPath, body),
 		ContentHash:   contentHash,

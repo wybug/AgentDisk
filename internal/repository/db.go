@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/agentdisk/agent-disk/config"
 	"github.com/agentdisk/agent-disk/internal/model"
@@ -131,14 +132,19 @@ func migrateOkfFullTextIndex(db *gorm.DB) error {
 	if db.Name() != "mysql" {
 		return nil
 	}
-	var exists int64
-	if err := db.Raw("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'disk_okf_node' AND index_name = 'idx_okf_node_search'").Scan(&exists).Error; err != nil {
-		return fmt.Errorf("check fulltext index: %w", err)
+	// Does the FULLTEXT index already cover body? information_schema.statistics
+	// has one row per index column, so a body row means it was already migrated.
+	var bodyCol int64
+	if err := db.Raw(`SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'disk_okf_node' AND index_name = 'idx_okf_node_search' AND column_name = 'body'`).Scan(&bodyCol).Error; err != nil {
+		return fmt.Errorf("check fulltext index columns: %w", err)
 	}
-	if exists > 0 {
-		return nil
+	if bodyCol > 0 {
+		return nil // already includes body
 	}
-	return db.Exec("CREATE FULLTEXT INDEX idx_okf_node_search ON disk_okf_node (title, description) WITH PARSER ngram").Error
+	// Index missing, or pre-body (title, description only): (re)create over body.
+	// DROP IF EXISTS covers the upgrade from the old two-column index.
+	_ = db.Exec("DROP INDEX idx_okf_node_search ON disk_okf_node").Error
+	return db.Exec("CREATE FULLTEXT INDEX idx_okf_node_search ON disk_okf_node (title, description, body) WITH PARSER ngram").Error
 }
 
 // migrateOkfFts5Index builds the SQLite FTS5 virtual table that mirrors
@@ -162,25 +168,41 @@ func migrateOkfFts5Index(db *gorm.DB) error {
 	if db.Name() != "sqlite" {
 		return nil
 	}
-	var exists int64
-	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='disk_okf_node_fts'").Scan(&exists).Error; err != nil {
-		return fmt.Errorf("check fts5 table: %w", err)
+	// Does the FTS5 table already have a body column? Read its CREATE sql from
+	// sqlite_master; absence of 'body' means it predates body-indexing (or does
+	// not exist yet) and needs (re)creation.
+	var createSQL string
+	if err := db.Raw("SELECT sql FROM sqlite_master WHERE type='table' AND name='disk_okf_node_fts'").Scan(&createSQL).Error; err != nil {
+		return fmt.Errorf("check fts5 schema: %w", err)
 	}
-	if exists > 0 {
-		return nil
+	if createSQL != "" && strings.Contains(createSQL, "body") {
+		return nil // already migrated to include body
+	}
+	// Old FTS table lacks body (or is absent): drop triggers + table so the body
+	// column is picked up, then recreate with body + repopulate from the base
+	// table (body column was added by AutoMigrate before this runs).
+	if createSQL != "" {
+		for _, trig := range []string{"disk_okf_node_ai", "disk_okf_node_ad", "disk_okf_node_au"} {
+			if err := db.Exec("DROP TRIGGER IF EXISTS " + trig).Error; err != nil {
+				return fmt.Errorf("drop trigger %s: %w", trig, err)
+			}
+		}
+		if err := db.Exec("DROP TABLE disk_okf_node_fts").Error; err != nil {
+			return fmt.Errorf("drop old fts5 table: %w", err)
+		}
 	}
 	stmts := []string{
-		`CREATE VIRTUAL TABLE disk_okf_node_fts USING fts5(title, description, content='disk_okf_node', content_rowid='id', tokenize='unicode61')`,
-		`INSERT INTO disk_okf_node_fts(rowid, title, description) SELECT id, title, description FROM disk_okf_node`,
+		`CREATE VIRTUAL TABLE disk_okf_node_fts USING fts5(title, description, body, content='disk_okf_node', content_rowid='id', tokenize='unicode61')`,
+		`INSERT INTO disk_okf_node_fts(rowid, title, description, body) SELECT id, title, description, body FROM disk_okf_node`,
 		`CREATE TRIGGER disk_okf_node_ai AFTER INSERT ON disk_okf_node BEGIN
-			INSERT INTO disk_okf_node_fts(rowid, title, description) VALUES (new.id, new.title, new.description);
+			INSERT INTO disk_okf_node_fts(rowid, title, description, body) VALUES (new.id, new.title, new.description, new.body);
 		END`,
 		`CREATE TRIGGER disk_okf_node_ad AFTER DELETE ON disk_okf_node BEGIN
-			INSERT INTO disk_okf_node_fts(disk_okf_node_fts, rowid, title, description) VALUES ('delete', old.id, old.title, old.description);
+			INSERT INTO disk_okf_node_fts(disk_okf_node_fts, rowid, title, description, body) VALUES ('delete', old.id, old.title, old.description, old.body);
 		END`,
 		`CREATE TRIGGER disk_okf_node_au AFTER UPDATE ON disk_okf_node BEGIN
-			INSERT INTO disk_okf_node_fts(disk_okf_node_fts, rowid, title, description) VALUES ('delete', old.id, old.title, old.description);
-			INSERT INTO disk_okf_node_fts(rowid, title, description) VALUES (new.id, new.title, new.description);
+			INSERT INTO disk_okf_node_fts(disk_okf_node_fts, rowid, title, description, body) VALUES ('delete', old.id, old.title, old.description, old.body);
+			INSERT INTO disk_okf_node_fts(rowid, title, description, body) VALUES (new.id, new.title, new.description, new.body);
 		END`,
 	}
 	for _, s := range stmts {
