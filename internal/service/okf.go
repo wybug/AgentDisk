@@ -872,9 +872,15 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 // in-progress transaction (or nil in unit tests) so each upsert joins the
 // caller's atomic refresh.
 //
-// Edges are materialized in a second pass once every node exists, so a
-// forward-reference from a.md to b.md resolves correctly even if b.md is
-// visited after a.md in the walk order.
+// Edges still need a deferred pass — a forward-reference from a.md to b.md only
+// resolves once b.md's node exists, and the walk may visit a.md first. The old
+// implementation ran a full second tree walk that re-listed every folder and
+// re-read every .md body from OSS. Instead this reads each body once in a single
+// walk, materializes its node, and queues (node, body) for the edge pass; after
+// the walk every node is durable, so the queued jobs replay to derive edges.
+// That halves the OSS reads and the folder listings without changing the
+// forward-reference semantics. Queued bodies live in memory for the duration of
+// the refresh — acceptable since refresh is infrequent and markdown is small.
 func (s *OkfService) walkAndMaterialize(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, publicDirID uint64) error {
 	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
 	if !ok {
@@ -882,29 +888,48 @@ func (s *OkfService) walkAndMaterialize(ctx context.Context, tx *gorm.DB, bundle
 		// service-layer refresh is exercised through the integration tests.
 		return nil
 	}
-	// Resolve the root folder ID for this public directory and recurse.
 	pd, err := pdSvc.GetPublicDirectory(publicDirID)
 	if err != nil {
 		return fmt.Errorf("public directory not found: %w", err)
 	}
 	rootFolder := &model.DiskFolder{ID: pd.FolderID, FolderName: "", FullPath: pd.FixedPath}
-	if err := s.materializeFolderTree(ctx, tx, bundle, rootFolder, ""); err != nil {
+
+	// Single walk: materialize every node and collect the bodies still needed
+	// for edge derivation. edgeJobs stays empty when no edge repo is wired.
+	var edgeJobs []edgeMaterializeJob
+	if err := s.materializeTreeOnce(ctx, tx, bundle, rootFolder, "", &edgeJobs); err != nil {
 		return err
 	}
 	if s.edges == nil {
 		return nil
 	}
-	// Second pass: with every node in place, derive edges from each body.
-	// Cross-references resolve cleanly now that the full node set is durable.
-	return s.materializeEdgeTree(ctx, tx, bundle, rootFolder, "")
+	// Replay: with every node now durable, derive edges from each queued body
+	// without re-reading it from OSS. Forward references resolve cleanly.
+	for i := range edgeJobs {
+		j := &edgeJobs[i]
+		if mErr := s.materializeEdges(ctx, tx, bundle, j.node, j.body); mErr != nil {
+			continue
+		}
+	}
+	return nil
 }
 
-// materializeFolderTree walks one folder, materializes its .md files, then
-// recurses into its sub-folders. relPrefix is the bundle-relative path of the
-// current folder ("" at the root). Per-file parse errors are tolerated so one
-// bad file does not abort a refresh. tx threads the surrounding transaction
-// through each per-file upsert.
-func (s *OkfService) materializeFolderTree(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, folder *model.DiskFolder, relPrefix string) error {
+// edgeMaterializeJob pairs a materialized node with the body bytes that still
+// need edge derivation, so walkAndMaterialize's deferred edge pass can replay
+// without re-reading the file from OSS.
+type edgeMaterializeJob struct {
+	node *model.OkfNode
+	body []byte
+}
+
+// materializeTreeOnce is the single-pass tree walker that replaced the old
+// materializeFolderTree + materializeEdgeTree pair. It walks one folder, reads
+// each .md body once, materializes its node, and queues (node, body) into
+// *edgeJobs for the deferred edge pass (only when an edge repo is wired). relPrefix
+// is the bundle-relative path of the current folder ("" at the root). It then
+// recurses into sub-folders. Per-file errors are tolerated so one bad file does
+// not abort a refresh. tx threads the surrounding transaction through each upsert.
+func (s *OkfService) materializeTreeOnce(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, folder *model.DiskFolder, relPrefix string, edgeJobs *[]edgeMaterializeJob) error {
 	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
 	if !ok {
 		return nil
@@ -934,8 +959,15 @@ func (s *OkfService) materializeFolderTree(ctx context.Context, tx *gorm.DB, bun
 		if rErr != nil {
 			continue
 		}
-		if _, mErr := s.materializeNode(ctx, tx, bundle, rel, &f, body); mErr != nil {
+		node, mErr := s.materializeNode(ctx, tx, bundle, rel, &f, body)
+		if mErr != nil {
 			continue
+		}
+		// Defer edge derivation: queue the body so the edge pass (run after the
+		// full walk, when every node is durable) can derive edges without a
+		// second OSS read. Skipped entirely when no edge repo is wired.
+		if s.edges != nil && node != nil {
+			*edgeJobs = append(*edgeJobs, edgeMaterializeJob{node: node, body: body})
 		}
 	}
 
@@ -952,65 +984,7 @@ func (s *OkfService) materializeFolderTree(ctx context.Context, tx *gorm.DB, bun
 		if relPrefix != "" {
 			subRel = relPrefix + "/" + child.FolderName
 		}
-		if err := s.materializeFolderTree(ctx, tx, bundle, &child, subRel); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// materializeEdgeTree is the second-pass edge walker paired with
-// materializeFolderTree. It visits the same folders in the same order, reads
-// each .md body again, and runs materializeEdges against the node that
-// already exists at that relPath. The first pass guarantees every node is
-// durable, so bundle-relative links resolve cleanly.
-func (s *OkfService) materializeEdgeTree(ctx context.Context, tx *gorm.DB, bundle *model.OkfBundle, folder *model.DiskFolder, relPrefix string) error {
-	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
-	if !ok {
-		return nil
-	}
-	files, err := pdSvc.ListFilesInFolder(folder.ID)
-	if err != nil {
-		return fmt.Errorf("list files in folder %s: %w", folder.FolderName, err)
-	}
-	for i := range files {
-		f := files[i]
-		if !strings.HasSuffix(f.FileName, ".md") {
-			continue
-		}
-		rel := f.FileName
-		if relPrefix != "" {
-			rel = relPrefix + "/" + f.FileName
-		}
-		if rel == model.OkfReservedLogRelPath {
-			continue
-		}
-		node, nErr := s.nodes.GetByBundleAndRelPath(bundle.ID, rel)
-		if nErr != nil {
-			continue
-		}
-		body, rErr := pdSvc.ReadFileContent(ctx, f.ID)
-		if rErr != nil {
-			continue
-		}
-		if mErr := s.materializeEdges(ctx, tx, bundle, node, body); mErr != nil {
-			continue
-		}
-	}
-	children, err := pdSvc.ListSubFoldersByParent(folder.ID)
-	if err != nil {
-		return fmt.Errorf("list sub folders of %s: %w", folder.FolderName, err)
-	}
-	for i := range children {
-		child := children[i]
-		if child.IsDeleted {
-			continue
-		}
-		subRel := child.FolderName
-		if relPrefix != "" {
-			subRel = relPrefix + "/" + child.FolderName
-		}
-		if err := s.materializeEdgeTree(ctx, tx, bundle, &child, subRel); err != nil {
+		if err := s.materializeTreeOnce(ctx, tx, bundle, &child, subRel, edgeJobs); err != nil {
 			return err
 		}
 	}
