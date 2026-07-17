@@ -4,7 +4,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'AgentDisk 文档',
   description: '专为多智能体设计的企业级云盘中间件',
-  ignoreDeadLinks: true,
+  ignoreDeadLinks: false,
   vite: {
     server: {
       port: 9102,

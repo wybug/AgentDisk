@@ -176,7 +176,7 @@ JWT Token 中包含以下声明：
 
 OAuth2 配置存储在数据库中，通过 Admin 管理面板或 API 管理，不在 `config.yaml` 中配置。
 
-详细配置说明请参考 [OAuth2 协议参考文档](../oauth2_protocol_reference.md) 和 [Admin 管理面板 - OAuth2 配置](guide/admin-panel.md#oauth2-动态配置)。
+详细配置说明请参考 [Admin 管理面板 - OAuth2 配置](./admin-panel.md#oauth2-动态配置)。
 
 | 字段 | 说明 |
 |------|------|

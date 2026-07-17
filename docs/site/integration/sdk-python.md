@@ -243,12 +243,9 @@ client.revoke_share(share.id)
 
 ### 预览操作
 
-```python
-# 获取文件预览信息
-preview = client.preview("docs/report.pdf")
-print(f"文件类型: {preview.file_type}")
-print(f"预览 URL: {preview.url}")
-```
+> 文件预览的后端路由（`GET /v1/disk/preview/:fileId`）已就绪，但当前 SDK 客户端尚未
+> 把预览方法挂到 `AgentDiskClient` 上（`_PreviewAPI` 已实现但未接线到 client）。需要
+> 预览时可直接调用后端路由，或关注后续版本接入。
 
 ### 回收站操作
 
@@ -268,10 +265,12 @@ client.delete_permanent(items[0].id)
 ```python
 # 列出可见的公共目录
 dirs = client.list_public_directories()
-
-# 获取公共目录详情
-detail = client.get_public_directory(dirs[0].id)
+for d in dirs:
+    print(d.id, d.fixedPath or d.displayName)
 ```
+
+> 注：当前 SDK 仅暴露 `list_public_directories()`；按 ID 获取单个公共目录的便捷方法
+> 尚未提供，可从列表结果中按 id 取用。
 
 ### 缓存管理
 
@@ -349,7 +348,6 @@ asyncio.run(main())
 | `client.create_share(path)` | `await client.create_share(path)` |
 | `client.bind_tag(path, tag)` | `await client.bind_tag(path, tag)` |
 | `client.grant_permission(...)` | `await client.grant_permission(...)` |
-| `client.preview(path)` | `await client.preview(path)` |
 | `client.list_versions(path)` | `await client.list_versions(path)` |
 | `client.list_recycle()` | `await client.list_recycle()` |
 
