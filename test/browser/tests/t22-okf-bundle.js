@@ -270,8 +270,12 @@ describe('T22: OKF 知识库 UI 完整链路', () => {
       return 'canvas:' + canvas.length + '|container:' + container.length;
     })()
   `);
-  // Cytoscape often uses canvas — at minimum some graph-related element should exist.
-  step('T22.10: 图谱 tab 挂载 Cytoscape', cyMounted.length > 0, cyMounted);
+  // Parse the canvas/container counts out of the report string. The raw
+  // string's .length is always > 0 (it is never empty), so the old check was
+  // vacuously true; parse it so the step actually verifies Cytoscape mounted.
+  const cyMatch = /canvas:(\d+)\|container:(\d+)/.exec(cyMounted);
+  const cyCount = cyMatch ? Number(cyMatch[1]) + Number(cyMatch[2]) : 0;
+  step('T22.10: 图谱 tab 挂载 Cytoscape', cyCount > 0, cyMounted);
   ab.screenshot('t22-05-graph-tab');
 
   // T22.11 - 切到统计 tab

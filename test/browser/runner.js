@@ -49,10 +49,13 @@ const testFiles = fs.readdirSync(testDir)
 
 const args = process.argv.slice(2);
 const includeManual = args.includes('--include-manual');
-const filter = args.find(a => !a.startsWith('--'));
+// Honor every positional arg as a filter (OR-joined), not just the first.
+// Previously args.find returned only the first match, so `node runner.js t22
+// t23` silently ran t22 alone and dropped the rest.
+const filters = args.filter(a => !a.startsWith('--'));
 
-let filteredTests = filter
-  ? testFiles.filter(f => f.includes(filter))
+let filteredTests = filters.length
+  ? testFiles.filter(f => filters.some(g => f.includes(g)))
   : testFiles;
 
 if (!includeManual) {
@@ -102,13 +105,24 @@ for (const testFile of filteredTests) {
   const testPath = path.join(testDir, testFile);
   const testName = testFile.replace('.js', '');
 
+  // Reset the agent-browser driver before each test. A previous test that timed
+  // out or crashed can leave its chromium orphaned and wedged on the shared
+  // 'agentdisk-test' session, which makes every subsequent ab.open / evalStdin
+  // hit spawnSync ETIMEDOUT. Closing all sessions here keeps that cascade from
+  // propagating across the whole suite.
+  try {
+    execSync('agent-browser close --all', { encoding: 'utf-8', timeout: 15000 });
+  } catch {}
+
   console.log(`\n\x1b[1m--- 运行 ${testName} ---\x1b[0m`);
   const startTime = Date.now();
 
   try {
     execSync(`node "${testPath}"`, {
       encoding: 'utf-8',
-      timeout: testName.includes('record') ? 180000 : 180000,
+      // Record-mode tests append fixtures and run longer; the old ternary was
+      // dead code (both branches 180000). Give record mode more room now.
+      timeout: testName.includes('record') ? 300000 : 180000,
       stdio: 'inherit',
     });
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -117,6 +131,16 @@ for (const testFile of filteredTests) {
   } catch (e) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     results.push({ name: testName, status: 'FAIL', time: elapsed });
+    // On failure (especially timeout) the node test child is killed but the
+    // chromium it spawned survives as an orphan and wedges the shared session —
+    // the root cause of the old cascading ETIMEDOUT. Force-close the driver and
+    // reap orphaned chromium so the next test starts from a clean slate.
+    try {
+      execSync('agent-browser close --all', { encoding: 'utf-8', timeout: 15000 });
+    } catch {}
+    try {
+      execSync('pkill -9 -f "Chromium|Chrome for Testing"', { encoding: 'utf-8', timeout: 10000 });
+    } catch {}
     console.log(`\x1b[31m  ✗ ${testName} 失败 (${elapsed}s)\x1b[0m`);
   }
 }
