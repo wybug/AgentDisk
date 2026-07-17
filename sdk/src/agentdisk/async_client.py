@@ -101,6 +101,7 @@ class AsyncAgentDiskClient:
         self._shares._token = value
         self._space._token = value
         self._public_dirs._token = value
+        self._wiki._token = value
 
     @property
     def api_key(self) -> str:
@@ -118,6 +119,7 @@ class AsyncAgentDiskClient:
         self._shares._api_key = value
         self._space._api_key = value
         self._public_dirs._api_key = value
+        self._wiki._api_key = value
 
     # --- Folder operations ---
 

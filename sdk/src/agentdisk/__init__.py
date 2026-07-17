@@ -12,6 +12,19 @@ from .exceptions import (
     PermissionDeniedError,
     ServerError,
 )
+from .models.wiki import (
+    BrokenLinksPage,
+    BundleStats,
+    IndexRegenResult,
+    NeighborsResult,
+    OkfBundle,
+    OkfNode,
+    ScanReport,
+    SearchPage,
+    ShortestPathResult,
+    SubgraphResult,
+    TypeCount,
+)
 
 __version__ = "0.3.0"
 
@@ -22,8 +35,19 @@ __all__ = [
     "AsyncAgentDiskClient",
     "AuthError",
     "BadRequestError",
+    "BrokenLinksPage",
+    "BundleStats",
     "ClientConfig",
+    "IndexRegenResult",
+    "NeighborsResult",
     "NotFoundError",
+    "OkfBundle",
+    "OkfNode",
     "PermissionDeniedError",
+    "ScanReport",
+    "SearchPage",
     "ServerError",
+    "ShortestPathResult",
+    "SubgraphResult",
+    "TypeCount",
 ]
