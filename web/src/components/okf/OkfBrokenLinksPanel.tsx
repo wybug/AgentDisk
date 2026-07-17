@@ -17,6 +17,7 @@ export default function OkfBrokenLinksPanel({ bundleId }: Props) {
   const [links, setLinks] = useState<OkfBrokenLink[]>([]);
   const [cursor, setCursor] = useState(0);
   const [nextCursor, setNextCursor] = useState(0);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const { message } = App.useApp();
@@ -28,6 +29,7 @@ export default function OkfBrokenLinksPanel({ bundleId }: Props) {
         const res = await okfApi.listBrokenLinks(bundleId, cur);
         setLinks(res.brokenLinks || []);
         setNextCursor(res.nextCursor || 0);
+        setTotal(res.total ?? 0);
       } finally {
         setLoading(false);
       }
@@ -126,7 +128,7 @@ export default function OkfBrokenLinksPanel({ bundleId }: Props) {
             : {
                 pageSize: 50,
                 current: Math.floor(cursor / 50) + 1,
-                total: nextCursor === 0 ? (cursor + 1) * 50 : (cursor + 2) * 50,
+                total,
                 onChange: (page) => {
                   const newCursor = (page - 1) * 50;
                   setCursor(newCursor);

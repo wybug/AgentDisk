@@ -101,8 +101,10 @@ export default function OkfShareBundleView({ code, bundleId, extractCode }: Prop
       <OkfFrontmatterDrawer
         node={selectedNode}
         onClose={() => setSelectedNode(null)}
-        onPreview={(fileId) => {
-          void fileId;
+        // The drawer hands us the node's fileId, but the share markdown modal
+        // fetches by nodeId (recipients have no authed /preview/:fileId route).
+        // The drawer's node is always selectedNode here, so use its nodeId.
+        onPreview={() => {
           if (selectedNode) setMarkdownNodeId(selectedNode.nodeId);
         }}
       />

@@ -246,5 +246,6 @@ export interface OkfGraphResult {
 export interface OkfBrokenLinksPage {
   brokenLinks: OkfBrokenLink[];
   nextCursor: number;
+  total: number;
 }
 

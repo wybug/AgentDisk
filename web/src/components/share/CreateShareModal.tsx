@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Form, Input, InputNumber, Typography, message } from 'antd';
+import { App, Button, Form, Input, InputNumber, Modal, Typography } from 'antd';
 import { shareApi } from '@/api/share';
 
 export type ShareResType = 'file' | 'folder' | 'bundle';
@@ -17,6 +17,7 @@ interface Props {
 export default function CreateShareModal({ resource, resType, open, onClose }: Props) {
   const [form] = Form.useForm();
   const [shareResult, setShareResult] = useState<{ shareCode: string; extractCode: string } | null>(null);
+  const { message } = App.useApp();
 
   const handleOk = async () => {
     if (!resource) return;
@@ -55,7 +56,13 @@ export default function CreateShareModal({ resource, resType, open, onClose }: P
       onCancel={handleClose}
       okText="创建分享"
       cancelText="关闭"
-      footer={shareResult ? undefined : undefined}
+      footer={
+        shareResult ? (
+          <Button type="primary" onClick={handleClose}>
+            关闭
+          </Button>
+        ) : undefined
+      }
     >
       {shareResult ? (
         <div>

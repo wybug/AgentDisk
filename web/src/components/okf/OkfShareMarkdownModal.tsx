@@ -6,6 +6,21 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useQuery } from '@tanstack/react-query';
 import { okfShareApi } from '@/api/okf';
 
+// safeUrlTransform allowlists URL schemes rendered by the share markdown view.
+// react-markdown does not render raw HTML (so <script> is escaped), but writer-
+// supplied markdown could still ship executable URLs like [x](javascript:...).
+// Allow relative links, anchors, absolute paths, and a small safe-protocol set;
+// drop everything else (javascript:, data:, vbscript:, file:, ...) so a shared
+// bundle cannot surface dangerous links to anonymous recipients.
+function safeUrlTransform(url: string): string {
+  if (url.startsWith('#') || url.startsWith('/') || url.startsWith('.')) return url;
+  const colon = url.indexOf(':');
+  if (colon === -1) return url; // schemeless / relative
+  const scheme = url.slice(0, colon).toLowerCase();
+  if (scheme === 'http' || scheme === 'https' || scheme === 'mailto' || scheme === 'tel') return url;
+  return '';
+}
+
 interface Props {
   code: string;
   nodeId: number | null;
@@ -44,6 +59,7 @@ export default function OkfShareMarkdownModal({ code, nodeId, extractCode, onClo
         <div className="markdown-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
+            urlTransform={safeUrlTransform}
             components={{
               code({ className, children, ...rest }) {
                 const match = /language-(\w+)/.exec(className || '');
