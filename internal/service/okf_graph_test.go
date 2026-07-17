@@ -73,6 +73,55 @@ func TestMaterializeEdges_NewNode_PersistsEdges(t *testing.T) {
 	}
 }
 
+// TestMaterializeEdges_ResolvesLinksInOneBatch verifies that writing a node
+// whose body holds several bundle links resolves them via a single batched
+// ListByBundleAndRelPaths call (not one GetByBundleAndRelPath per link — the
+// N+1 this fixes). It also confirms the batch path resolves correctly: 3
+// existing targets come back live, 1 missing target comes back broken, and the
+// source's HasBrokenLink flips on.
+func TestMaterializeEdges_ResolvesLinksInOneBatch(t *testing.T) {
+	_, nodes, edges, pub, svc := okfTestHarness(t)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	if _, err := svc.RegisterBundle(context.Background(), 7); err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+
+	writeTestMarkdown(t, svc, "t1", "---\ntype: concept\n---\n1")
+	writeTestMarkdown(t, svc, "t2", "---\ntype: concept\n---\n2")
+	writeTestMarkdown(t, svc, "t3", "---\ntype: concept\n---\n3")
+
+	before := nodes.batchLinkLookups.Load()
+	src := writeTestMarkdown(t, svc, "source",
+		"---\ntype: concept\n---\n[a](./t1.md) [b](./t2.md) [c](./t3.md) [miss](./missing.md)\n")
+
+	if calls := nodes.batchLinkLookups.Load() - before; calls == 0 {
+		t.Fatal("ListByBundleAndRelPaths never called during a multi-link write — edge resolution regressed to per-link lookups (N+1)")
+	}
+
+	got, err := edges.ListBySrc(7, src.ID, 0)
+	if err != nil {
+		t.Fatalf("ListBySrc: %v", err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("got %d edges, want 4", len(got))
+	}
+	live, broken := 0, 0
+	for _, e := range got {
+		if e.DstExists {
+			live++
+		} else {
+			broken++
+		}
+	}
+	if live != 3 || broken != 1 {
+		t.Errorf("edges live/broken = %d/%d, want 3/1", live, broken)
+	}
+	refreshed, _ := nodes.GetByBundleAndRelPath(1, "concepts/source.md")
+	if !refreshed.HasBrokenLink {
+		t.Errorf("HasBrokenLink = false, want true (one missing target)")
+	}
+}
+
 // TestMaterializeEdges_BacklinkIncremental writes a → b, then c → b, and
 // verifies b's backlink_count lands at 2.
 func TestMaterializeEdges_BacklinkIncremental(t *testing.T) {

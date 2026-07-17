@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,10 +88,11 @@ func (r *fakeOkfBundleRepo) Delete(id uint64) error {
 }
 
 type fakeOkfNodeRepo struct {
-	mu     sync.RWMutex
-	nodes  map[uint64]*model.OkfNode
-	byKey  map[string]uint64 // bundleID:relPath -> node ID
-	nextID uint64
+	mu               sync.RWMutex
+	nodes            map[uint64]*model.OkfNode
+	byKey            map[string]uint64 // bundleID:relPath -> node ID
+	nextID           uint64
+	batchLinkLookups atomic.Int64 // counts ListByBundleAndRelPaths calls (N+1 guard)
 }
 
 func newFakeOkfNodeRepo() *fakeOkfNodeRepo {
@@ -144,6 +146,21 @@ func (r *fakeOkfNodeRepo) GetByBundleAndRelPath(bundleID uint64, rel string) (*m
 		return r.nodes[id], nil
 	}
 	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeOkfNodeRepo) ListByBundleAndRelPaths(bundleID uint64, relPaths []string) ([]model.OkfNode, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.batchLinkLookups.Add(1)
+	out := make([]model.OkfNode, 0, len(relPaths))
+	seen := map[uint64]bool{}
+	for _, rel := range relPaths {
+		if id, ok := r.byKey[keyFor(bundleID, rel)]; ok && !seen[id] {
+			out = append(out, *r.nodes[id])
+			seen[id] = true
+		}
+	}
+	return out, nil
 }
 
 func (r *fakeOkfNodeRepo) GetByID(id uint64) (*model.OkfNode, error) {

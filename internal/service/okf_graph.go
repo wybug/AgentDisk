@@ -76,19 +76,50 @@ func (s *OkfService) materializeEdges(_ context.Context, tx *gorm.DB, bundle *mo
 	return s.nodes.Upsert(tx, node)
 }
 
+// resolveBundleLinkTargets batch-resolves the destination nodes for every
+// bundle-relative link in a single query (WHERE bundle_id = ? AND rel_path IN
+// (?)), returning a relPath→node map. This replaces the per-link
+// GetByBundleAndRelPath the edge materializer used to issue — an N+1 where K
+// links cost K round trips. Best-effort: a lookup failure yields an empty map,
+// which callers treat as "no targets resolved" (every bundle link broken), the
+// same outcome as each per-link lookup failing.
+func (s *OkfService) resolveBundleLinkTargets(bundleID uint64, links []LinkInfo) map[string]*model.OkfNode {
+	out := map[string]*model.OkfNode{}
+	relPaths := make([]string, 0, len(links))
+	seen := map[string]bool{}
+	for i := range links {
+		li := links[i]
+		if li.LinkKind != LinkKindBundle || seen[li.DstRelPath] {
+			continue
+		}
+		seen[li.DstRelPath] = true
+		relPaths = append(relPaths, li.DstRelPath)
+	}
+	if len(relPaths) == 0 {
+		return out
+	}
+	nodes, err := s.nodes.ListByBundleAndRelPaths(bundleID, relPaths)
+	if err != nil {
+		return out
+	}
+	for i := range nodes {
+		out[nodes[i].RelPath] = &nodes[i]
+	}
+	return out
+}
+
 // buildEdgesForLinks turns a slice of ExtractLinks output into OkfEdge rows
-// ready for insert. Bundle links are resolved against the node repo to get
-// dst_node_id + dst_exists; external and anchor links land as-is with
-// dst_exists=false (they have no in-bundle target and are not broken-link
-// candidates by themselves — broken-link scans only apply to LinkKindBundle).
-//
-// The resolution is a single sequential pass — a node body rarely has more
-// than a few dozen links, so a per-link GetByBundleAndRelPath lookup is
-// cheaper than a bulk fetch and the code stays simple.
+// ready for insert. Bundle links are resolved against the node repo (one batched
+// query via resolveBundleLinkTargets) to get dst_node_id + dst_exists; external
+// and anchor links land as-is with dst_exists=false (they have no in-bundle
+// target and are not broken-link candidates by themselves — broken-link scans
+// only apply to LinkKindBundle).
 func (s *OkfService) buildEdgesForLinks(bundle *model.OkfBundle, node *model.OkfNode, links []LinkInfo) []model.OkfEdge {
 	if len(links) == 0 {
 		return nil
 	}
+	// Resolve every bundle-link target in one query instead of one per link.
+	resolved := s.resolveBundleLinkTargets(bundle.ID, links)
 	out := make([]model.OkfEdge, 0, len(links))
 	for i := range links {
 		li := links[i]
@@ -101,7 +132,7 @@ func (s *OkfService) buildEdgesForLinks(bundle *model.OkfBundle, node *model.Okf
 			LinkKind:    li.LinkKind,
 		}
 		if li.LinkKind == LinkKindBundle {
-			if dst, err := s.nodes.GetByBundleAndRelPath(bundle.ID, li.DstRelPath); err == nil {
+			if dst := resolved[li.DstRelPath]; dst != nil {
 				edge.DstNodeID = dst.ID
 				edge.DstExists = true
 			}

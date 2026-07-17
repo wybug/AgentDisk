@@ -114,6 +114,22 @@ func (r *OkfNodeRepo) GetByBundleAndRelPath(bundleID uint64, relPath string) (*m
 	return &n, nil
 }
 
+// ListByBundleAndRelPaths returns the nodes for a bundle whose rel_path is in
+// relPaths, in a single query (WHERE bundle_id = ? AND rel_path IN (?)). The
+// edge materializer uses it to resolve all of a node's bundle-relative link
+// targets at once instead of one GetByBundleAndRelPath per link (an N+1: K links
+// used to cost K round trips). relPaths with no match are absent from the result.
+func (r *OkfNodeRepo) ListByBundleAndRelPaths(bundleID uint64, relPaths []string) ([]model.OkfNode, error) {
+	if len(relPaths) == 0 {
+		return nil, nil
+	}
+	var out []model.OkfNode
+	if err := r.db.Where("bundle_id = ? AND rel_path IN ?", bundleID, relPaths).Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GetByID returns the node for a primary key. P3b graph queries take a nodeID
 // from the URL path and need to resolve it back to its bundle for the ACL
 // check, so this is the entry point for every reader.

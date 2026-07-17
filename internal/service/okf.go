@@ -52,6 +52,7 @@ type okfNodeRepo interface {
 	Upsert(tx *gorm.DB, n *model.OkfNode) error
 	GetByID(id uint64) (*model.OkfNode, error)
 	GetByBundleAndRelPath(bundleID uint64, relPath string) (*model.OkfNode, error)
+	ListByBundleAndRelPaths(bundleID uint64, relPaths []string) ([]model.OkfNode, error)
 	ListByBundle(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
 	ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
 	ListByIDs(ids []uint64) ([]model.OkfNode, error)
@@ -543,11 +544,15 @@ func (s *OkfService) postWriteSyncHooks(ctx context.Context, _ *model.OkfBundle,
 // resolve to an existing node. External / anchor links are never broken.
 func (s *OkfService) nodeHasBrokenLink(bundleID uint64, relPath string, body []byte) bool {
 	links := ExtractLinks(body, relPath)
+	// Resolve all bundle-link targets in one batched query instead of one
+	// GetByBundleAndRelPath per link (resolveBundleLinkTargets lives in
+	// okf_graph.go alongside the edge builder that shares the same lookup).
+	resolved := s.resolveBundleLinkTargets(bundleID, links)
 	for _, li := range links {
 		if li.LinkKind != LinkKindBundle {
 			continue
 		}
-		if _, err := s.nodes.GetByBundleAndRelPath(bundleID, li.DstRelPath); err != nil {
+		if resolved[li.DstRelPath] == nil {
 			return true
 		}
 	}
