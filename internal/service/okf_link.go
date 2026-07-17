@@ -404,3 +404,22 @@ func (s *OkfService) ListBrokenLinks(ctx context.Context, bundleID uint64, userI
 	}
 	return out, 0, nil
 }
+
+// CountBrokenLinks returns the total broken-link count for a bundle from the
+// materialized edge table (dst_exists=false). It is a cheap COUNT that lets the
+// broken-links response carry a real total for pagination without re-scanning
+// every node body. The visibility check mirrors ListBrokenLinks so a caller
+// cannot probe a bundle they cannot read.
+func (s *OkfService) CountBrokenLinks(_ context.Context, bundleID uint64, userID, department string) (int64, error) {
+	bundle, err := s.bundles.GetByID(bundleID)
+	if err != nil {
+		if isNotFound(err) {
+			return 0, ErrOkfBundleNotFound
+		}
+		return 0, fmt.Errorf("lookup bundle: %w", err)
+	}
+	if err := s.requireBundleVisible(bundle, userID, department); err != nil {
+		return 0, err
+	}
+	return s.edges.CountBrokenByBundle(bundle.PublicDirectoryID)
+}

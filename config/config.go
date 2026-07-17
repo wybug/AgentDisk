@@ -101,6 +101,11 @@ type OkfConfig struct {
 	Enabled         bool `mapstructure:"enabled"`
 	AutoIndexUpdate bool `mapstructure:"autoIndexUpdate"` // default true via ApplyDefaults
 	LockTTLSeconds  int  `mapstructure:"lockTTLSeconds"`  // default 5 via ApplyDefaults
+	// AdjTTLSeconds is the TTL for the Redis graph adjacency cache that lets
+	// BFS expansions (Reachable/Subgraph/Neighbors) skip the edge table on warm
+	// paths. Only takes effect when RedisAddr is set; the writer invalidates
+	// touched entries on commit. Defaults to 300s via ApplyDefaults.
+	AdjTTLSeconds int `mapstructure:"adjTTLSeconds"`
 	// RedisAddr is the optional Redis address used by the OKF bundle writer
 	// lock. When empty, the writer falls back to a no-op lock (last-writer-
 	// wins). Operators that want strict serialization must point this at the
@@ -198,6 +203,19 @@ func applyDefaults(v *viper.Viper, cfg *Config) {
 	}
 	if cfg.Okf.LockTTLSeconds <= 0 {
 		cfg.Okf.LockTTLSeconds = 5
+	}
+	// AdjTTLSeconds caps the worst-case staleness of a cached adjacency entry.
+	// 300s keeps warm BFS reads fast across a typical write burst while bounding
+	// drift if a writer ever fails to invalidate. OKF_ADJ_TTL_SECONDS overrides.
+	if cfg.Okf.AdjTTLSeconds <= 0 {
+		if envVal := os.Getenv("OKF_ADJ_TTL_SECONDS"); envVal != "" {
+			if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
+				cfg.Okf.AdjTTLSeconds = n
+			}
+		}
+	}
+	if cfg.Okf.AdjTTLSeconds <= 0 {
+		cfg.Okf.AdjTTLSeconds = 300
 	}
 	if envVal := os.Getenv("OKF_REDIS_ADDR"); envVal != "" {
 		cfg.Okf.RedisAddr = envVal

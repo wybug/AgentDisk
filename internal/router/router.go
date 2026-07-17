@@ -150,6 +150,12 @@ func Setup(cfg *config.Config, cfgPath string) (*gin.Engine, *feature.Registry, 
 				log.Printf("warning: okf redis ping failed (%v); writer lock falls back to no-op", pErr)
 			} else {
 				okfSvc.SetBundleLock(service.NewRedisBundleLock(redisClient, cfg.Okf.LockTTLSeconds))
+				// Wire the BFS adjacency cache on the same Redis client. A warm
+				// cache lets Reachable/Subgraph/Neighbors skip the per-hop edge
+				// lookup; WriteMarkdown invalidates the touched entry on commit.
+				// Without this call the cache defaulted to NoOp and every BFS hop
+				// hit the DB regardless of cfg.Okf.RedisAddr.
+				okfSvc.SetGraphCache(service.NewRedisGraphCache(redisClient, cfg.Okf.AdjTTLSeconds))
 			}
 		}
 	}
@@ -174,6 +180,10 @@ func Setup(cfg *config.Config, cfgPath string) (*gin.Engine, *feature.Registry, 
 	okfH := handler.NewOkfHandler(okfSvc)
 	okfShareH := handler.NewOkfShareHandler(okfShareReaderSvc, shareSvc)
 	okfScanH := handler.NewOkfScanHandler(okfSvc)
+	// Retry-After on a 409 lock-held should hint the configured lock lifetime so
+	// clients back off for the right duration rather than a hardcoded guess.
+	okfH.SetLockRetryAfter(cfg.Okf.LockTTLSeconds)
+	okfScanH.SetLockRetryAfter(cfg.Okf.LockTTLSeconds)
 	oauth2ConfigH := handler.NewOAuth2ConfigHandler(oauth2ConfigSvc)
 	featureH := handler.NewFeatureHandler(featureReg)
 

@@ -26,6 +26,7 @@ type stubOkfSvc struct {
 	getBundle        func(id uint64, userID, department string) (*model.OkfBundle, error)
 	listNodesByType  func(bundleID uint64, typeF, tagF, userID, department string) ([]model.OkfNode, error)
 	aggregateByType  func(bundleID uint64, userID, department string) ([]repository.TypeCount, error)
+	aggregateTypes   func(userID, department string) ([]repository.TypeCount, error)
 	refreshBundle    func(ctx context.Context, id uint64) (*model.OkfBundle, error)
 	unregisterBundle func(id uint64) error
 	writeMarkdown    func(ctx context.Context, req service.WriteMarkdownRequest) (*model.OkfNode, error)
@@ -70,6 +71,13 @@ func (s *stubOkfSvc) AggregateByType(bundleID uint64, userID, department string)
 		return nil, errors.New("not stubbed")
 	}
 	return s.aggregateByType(bundleID, userID, department)
+}
+
+func (s *stubOkfSvc) AggregateTypes(userID, department string) ([]repository.TypeCount, error) {
+	if s.aggregateTypes == nil {
+		return nil, errors.New("not stubbed")
+	}
+	return s.aggregateTypes(userID, department)
 }
 
 func (s *stubOkfSvc) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBundle, error) {
@@ -133,6 +141,30 @@ func (s *stubOkfSvc) Stats(ctx context.Context, req service.StatsRequest) (*serv
 		return nil, errors.New("not stubbed")
 	}
 	return s.stats(ctx, req)
+}
+
+// TestRefreshBundle_LockHeldReturns409WithRetryAfter verifies the writer path
+// maps a lock-held error to 409 (not 500) and emits a Retry-After hint.
+// Regression guard for the missing ErrOkfLockHeld case in respondOkfError,
+// which previously let contention surface as a 500 server error.
+func TestRefreshBundle_LockHeldReturns409WithRetryAfter(t *testing.T) {
+	stub := &stubOkfSvc{
+		refreshBundle: func(_ context.Context, _ uint64) (*model.OkfBundle, error) {
+			return nil, service.ErrOkfLockHeld
+		},
+	}
+	r := okfHandlerWithStub(t, stub)
+	req, w := doJSON(t, http.MethodPost, "/v1/disk/okf/bundles/1/refresh", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d (lock-held must be 409, not 500)", w.Code, http.StatusConflict)
+	}
+	if got := w.Header().Get("Retry-After"); got == "" {
+		t.Error("missing Retry-After header on 409 lock-held response")
+	} else if got != "5" {
+		t.Errorf("Retry-After = %q, want %q (default lock TTL)", got, "5")
+	}
 }
 
 // okfHandlerWithStub builds a gin engine with the OKF routes wired to a stub
@@ -384,14 +416,13 @@ func TestOkfHandler_ListNodes_FiltersAndParses(t *testing.T) {
 
 func TestOkfHandler_AggregateTypes_Rollup(t *testing.T) {
 	stub := &stubOkfSvc{
-		listBundles: func(_, _ string) ([]model.OkfBundle, error) {
-			return []model.OkfBundle{{ID: 1}, {ID: 2}}, nil
-		},
-		aggregateByType: func(bundleID uint64, _, _ string) ([]repository.TypeCount, error) {
-			if bundleID == 1 {
-				return []repository.TypeCount{{Type: "concept", Count: 2}}, nil
-			}
-			return []repository.TypeCount{{Type: "concept", Count: 1}, {Type: "guide", Count: 3}}, nil
+		aggregateTypes: func(_, _ string) ([]repository.TypeCount, error) {
+			// The service now returns the already-rolled-up counts from a single
+			// grouped query; the handler only re-sorts and projects them.
+			return []repository.TypeCount{
+				{Type: "concept", Count: 3},
+				{Type: "guide", Count: 3},
+			}, nil
 		},
 	}
 	r := okfHandlerWithStub(t, stub)
@@ -411,7 +442,6 @@ func TestOkfHandler_AggregateTypes_Rollup(t *testing.T) {
 		row, _ := r.(map[string]any)
 		got[row["type"].(string)] = row["count"].(float64)
 	}
-	// concept: 2 + 1 = 3 across both bundles; guide: 3.
 	if got["concept"] != 3 {
 		t.Errorf("concept = %v, want 3", got["concept"])
 	}
@@ -430,9 +460,9 @@ func TestOkfHandler_AggregateTypes_Rollup(t *testing.T) {
 	}
 }
 
-func TestOkfHandler_AggregateTypes_ListError(t *testing.T) {
+func TestOkfHandler_AggregateTypes_Error(t *testing.T) {
 	stub := &stubOkfSvc{
-		listBundles: func(_, _ string) ([]model.OkfBundle, error) { return nil, errors.New("db down") },
+		aggregateTypes: func(_, _ string) ([]repository.TypeCount, error) { return nil, errors.New("db down") },
 	}
 	r := okfHandlerWithStub(t, stub)
 	req, w := doJSON(t, "GET", "/v1/disk/okf/types", nil)

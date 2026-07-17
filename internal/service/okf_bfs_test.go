@@ -98,6 +98,39 @@ func newBFSServiceRepos(tb testing.TB) (*OkfService, *fakeOkfBundleRepo, *fakeOk
 	return svc, bundles, nodes, edges
 }
 
+// recordingGraphCache records GetAdj calls so a test can prove the BFS read
+// path consults the graph cache once one is wired via SetGraphCache. It always
+// misses (returns nil) so the walk still falls through to the fake edge repo.
+type recordingGraphCache struct {
+	gets [][2]uint64 // (bundleID, nodeID)
+}
+
+func (r *recordingGraphCache) GetAdj(_ context.Context, bundleID, nodeID uint64) ([]uint64, error) {
+	r.gets = append(r.gets, [2]uint64{bundleID, nodeID})
+	return nil, nil
+}
+
+func (recordingGraphCache) SetAdj(context.Context, uint64, uint64, []uint64) error { return nil }
+func (recordingGraphCache) Invalidate(context.Context, uint64, []uint64) error     { return nil }
+
+// TestBFS_ReadsAdjacencyFromGraphCache proves that once a GraphCache is wired
+// via SetGraphCache, the multi-hop BFS read path (Reachable here) consults it
+// for each expanded node. Regression guard for the dead-cache bug: before the
+// router called SetGraphCache, the cache stayed NoOp and every BFS hop hit the
+// DB regardless of cfg.Okf.RedisAddr.
+func TestBFS_ReadsAdjacencyFromGraphCache(t *testing.T) {
+	svc, _, _, _, byLabel, _ := newBFSService(t)
+	rec := &recordingGraphCache{}
+	svc.SetGraphCache(rec)
+
+	if _, err := svc.Reachable(context.Background(), ReachableRequest{NodeID: byLabel["A"], Depth: 2}); err != nil {
+		t.Fatalf("Reachable: %v", err)
+	}
+	if len(rec.gets) == 0 {
+		t.Fatal("cache.GetAdj never called — BFS read path does not consult the wired graph cache")
+	}
+}
+
 // TestNeighbors_OutDirection verifies the 1-hop out-edge walk: A's neighbors
 // are {B, C}. The dead edge from B is not A's neighbor so it should not
 // surface here.

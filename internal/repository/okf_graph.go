@@ -210,6 +210,20 @@ func (r *OkfEdgeRepo) ListBrokenByBundle(publicDirID, cursor uint64, limit int) 
 	return out, nextCursor, nil
 }
 
+// CountBrokenByBundle returns the total dead-link edge count (dst_exists=false)
+// for a bundle's public directory. It is a cheap COUNT over the materialized
+// edge table so the broken-links response can carry a real total for pagination
+// without re-scanning every node body on each page request.
+func (r *OkfEdgeRepo) CountBrokenByBundle(publicDirID uint64) (int64, error) {
+	var count int64
+	if err := r.db.Model(&model.OkfEdge{}).
+		Where("public_dir_id = ? AND dst_exists = ?", publicDirID, false).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // CountByBundle returns the total edge count for a bundle. The bundleID arg
 // is accepted for symmetry with OkfNodeRepo.CountByBundle but the lookup goes
 // through public_dir_id (the edge table's clustering key). tx is the caller's

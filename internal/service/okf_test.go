@@ -226,6 +226,27 @@ func (r *fakeOkfNodeRepo) AggregateByType(bundleID uint64) ([]repository.TypeCou
 	return out, nil
 }
 
+func (r *fakeOkfNodeRepo) AggregateTypesByBundles(bundleIDs []uint64) ([]repository.TypeCount, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	allowed := make(map[uint64]bool, len(bundleIDs))
+	for _, id := range bundleIDs {
+		allowed[id] = true
+	}
+	counts := map[string]uint32{}
+	for _, n := range r.nodes {
+		if !allowed[n.BundleID] {
+			continue
+		}
+		counts[n.Type]++
+	}
+	out := make([]repository.TypeCount, 0, len(counts))
+	for t, c := range counts {
+		out = append(out, repository.TypeCount{Type: t, Count: c})
+	}
+	return out, nil
+}
+
 func (r *fakeOkfNodeRepo) DeleteByBundle(_ *gorm.DB, bundleID uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -427,6 +448,20 @@ func (r *fakeOkfEdgeRepo) ListBrokenByBundle(_ uint64, _ uint64, _ int) ([]model
 		}
 	}
 	return out, 0, nil
+}
+
+func (r *fakeOkfEdgeRepo) CountBrokenByBundle(_ uint64) (int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var count int64
+	for _, group := range r.edges {
+		for _, e := range group {
+			if !e.DstExists {
+				count++
+			}
+		}
+	}
+	return count, nil
 }
 
 func (r *fakeOkfEdgeRepo) CountByBundle(_ *gorm.DB, _ uint64, _ uint64) (uint32, error) {

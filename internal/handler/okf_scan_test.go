@@ -19,6 +19,7 @@ import (
 type stubOkfScanSvc struct {
 	scanBundleLinksForHandler func(ctx context.Context, bundleID uint64, userID, department string) (*service.ScanReport, error)
 	listBrokenLinks           func(ctx context.Context, bundleID uint64, userID, department string, cursor uint64, limit int) ([]service.BrokenLink, uint64, error)
+	countBrokenLinks          func(ctx context.Context, bundleID uint64, userID, department string) (int64, error)
 	regenerateIndex           func(ctx context.Context, bundleID uint64, userID, department string) (uint32, time.Time, error)
 }
 
@@ -34,6 +35,13 @@ func (s *stubOkfScanSvc) ListBrokenLinks(ctx context.Context, bundleID uint64, u
 		return nil, 0, errors.New("not stubbed")
 	}
 	return s.listBrokenLinks(ctx, bundleID, userID, department, cursor, limit)
+}
+
+func (s *stubOkfScanSvc) CountBrokenLinks(ctx context.Context, bundleID uint64, userID, department string) (int64, error) {
+	if s.countBrokenLinks == nil {
+		return 0, errors.New("not stubbed")
+	}
+	return s.countBrokenLinks(ctx, bundleID, userID, department)
 }
 
 func (s *stubOkfScanSvc) RegenerateIndex(ctx context.Context, bundleID uint64, userID, department string) (uint32, time.Time, error) {
@@ -56,6 +64,28 @@ func okfScanHandlerWithStub(t *testing.T, stub *stubOkfScanSvc) *gin.Engine {
 	v1.GET("/bundles/:id/broken-links", h.ListBrokenLinks)
 	v1.POST("/bundles/:id/regenerate-index", h.RegenerateIndex)
 	return r
+}
+
+// TestListBrokenLinks_LockHeldReturns409WithRetryAfter verifies the scan path
+// emits a Retry-After hint on a 409 lock-held response (the 409 mapping itself
+// already existed; the header was missing).
+func TestListBrokenLinks_LockHeldReturns409WithRetryAfter(t *testing.T) {
+	stub := &stubOkfScanSvc{
+		listBrokenLinks: func(_ context.Context, _ uint64, _, _ string, _ uint64, _ int) ([]service.BrokenLink, uint64, error) {
+			return nil, 0, service.ErrOkfLockHeld
+		},
+	}
+	r := okfScanHandlerWithStub(t, stub)
+	req := httptest.NewRequest(http.MethodGet, "/v1/disk/okf/bundles/1/broken-links", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
+	}
+	if got := w.Header().Get("Retry-After"); got == "" {
+		t.Error("missing Retry-After header on 409 lock-held response")
+	}
 }
 
 // TestOkfScanHandler_ScanBundle_Success verifies the scan returns the
@@ -143,6 +173,9 @@ func TestOkfScanHandler_ListBrokenLinks_Success(t *testing.T) {
 				{LinkInfo: service.LinkInfo{SrcNodeID: 5, SrcRelPath: "a.md", DstRelPath: "b.md", SrcLine: 3, LinkText: "b", LinkKind: service.LinkKindBundle}, Reason: service.BrokenReasonTargetNotFound},
 			}, uint64(5), nil
 		},
+		countBrokenLinks: func(_ context.Context, _ uint64, _, _ string) (int64, error) {
+			return 12, nil
+		},
 	}
 	r := okfScanHandlerWithStub(t, stub)
 	req, w := doJSON(t, "GET", "/v1/disk/okf/bundles/7/broken-links?limit=25", nil)
@@ -166,6 +199,9 @@ func TestOkfScanHandler_ListBrokenLinks_Success(t *testing.T) {
 	if first["srcRelPath"] != "a.md" {
 		t.Errorf("srcRelPath = %v, want a.md", first["srcRelPath"])
 	}
+	if data["total"].(float64) != 12 {
+		t.Errorf("total = %v, want 12", data["total"])
+	}
 }
 
 // TestOkfScanHandler_ListBrokenLinks_LimitClampedTo50 verifies a malicious
@@ -177,6 +213,7 @@ func TestOkfScanHandler_ListBrokenLinks_LimitClampedTo50(t *testing.T) {
 			captured = limit
 			return nil, 0, nil
 		},
+		countBrokenLinks: func(context.Context, uint64, string, string) (int64, error) { return 0, nil },
 	}
 	r := okfScanHandlerWithStub(t, stub)
 	req, w := doJSON(t, "GET", "/v1/disk/okf/bundles/7/broken-links?limit=9999", nil)

@@ -17,6 +17,7 @@ import (
 type okfScanHandlerService interface {
 	ScanBundleLinksForHandler(ctx context.Context, bundleID uint64, userID, department string) (*service.ScanReport, error)
 	ListBrokenLinks(ctx context.Context, bundleID uint64, userID, department string, cursor uint64, limit int) ([]service.BrokenLink, uint64, error)
+	CountBrokenLinks(ctx context.Context, bundleID uint64, userID, department string) (int64, error)
 	RegenerateIndex(ctx context.Context, bundleID uint64, userID, department string) (indexVersion uint32, regeneratedAt time.Time, err error)
 }
 
@@ -25,12 +26,21 @@ type okfScanHandlerService interface {
 // /v1/disk/okf alongside the rest of the OKF group and inherit HybridAuth.
 type OkfScanHandler struct {
 	svc okfScanHandlerService
+	// lockRetryAfter is the seconds hint emitted as Retry-After on a 409
+	// lock-held response. The router wires cfg.Okf.LockTTLSeconds; 0 falls back
+	// to defaultLockRetryAfter (defined in okf.go) at response time.
+	lockRetryAfter int
 }
 
 // NewOkfScanHandler creates a new OkfScanHandler.
 func NewOkfScanHandler(svc okfScanHandlerService) *OkfScanHandler {
 	return &OkfScanHandler{svc: svc}
 }
+
+// SetLockRetryAfter configures the Retry-After (seconds) header emitted on 409
+// lock-held responses. The router passes cfg.Okf.LockTTLSeconds so the hint
+// matches the configured lock lifetime.
+func (h *OkfScanHandler) SetLockRetryAfter(seconds int) { h.lockRetryAfter = seconds }
 
 // ScanBundle handles POST /v1/disk/okf/bundles/:id/scan.
 //
@@ -83,12 +93,20 @@ func (h *OkfScanHandler) ListBrokenLinks(c *gin.Context) {
 		h.respondOkfScanError(c, err)
 		return
 	}
+	// Real total from the materialized edge table so pagination shows an accurate
+	// count / last page instead of the previous client-side heuristic.
+	total, tErr := h.svc.CountBrokenLinks(c.Request.Context(), id, userID, department)
+	if tErr != nil {
+		h.respondOkfScanError(c, tErr)
+		return
+	}
 	if links == nil {
 		links = []service.BrokenLink{}
 	}
 	response.OK(c, gin.H{
 		"brokenLinks": brokenLinksToResponse(links),
 		"nextCursor":  nextCursor,
+		"total":       total,
 	})
 }
 
@@ -129,8 +147,10 @@ func (h *OkfScanHandler) respondOkfScanError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrOkfLockHeld):
 		// 409 Conflict: another writer holds the bundle lock. Caller should
 		// back off and retry. Use Fail rather than a bare c.JSON so the body
-		// stays in the project's standard envelope.
+		// stays in the project's standard envelope. Retry-After hints the lock
+		// TTL so clients wait the right duration instead of polling blindly.
 		response.Fail(c, 409, 409, "bundle lock held by another caller")
+		applyRetryAfter(c, h.lockRetryAfter)
 	default:
 		response.InternalError(c, err.Error())
 	}

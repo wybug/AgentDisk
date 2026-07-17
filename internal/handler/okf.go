@@ -22,6 +22,7 @@ type okfHandlerService interface {
 	GetBundle(id uint64, userID, department string) (*model.OkfBundle, error)
 	ListNodesByType(bundleID uint64, typeFilter, tagFilter, userID, department string) ([]model.OkfNode, error)
 	AggregateByType(bundleID uint64, userID, department string) ([]repository.TypeCount, error)
+	AggregateTypes(userID, department string) ([]repository.TypeCount, error)
 	RefreshBundle(ctx context.Context, id uint64) (*model.OkfBundle, error)
 	UnregisterBundle(id uint64) error
 	WriteMarkdown(ctx context.Context, req service.WriteMarkdownRequest) (*model.OkfNode, error)
@@ -37,11 +38,34 @@ type okfHandlerService interface {
 // mounted under /v1/disk/okf and require HybridAuth (JWT or API Key).
 type OkfHandler struct {
 	svc okfHandlerService
+	// lockRetryAfter is the seconds hint emitted as Retry-After when a write is
+	// rejected with 409 lock-held. The router wires cfg.Okf.LockTTLSeconds; 0
+	// falls back to defaultLockRetryAfter at response time so unconfigured
+	// handlers (e.g. unit tests) still emit a sensible hint.
+	lockRetryAfter int
 }
 
 // NewOkfHandler creates a new OkfHandler.
 func NewOkfHandler(svc *service.OkfService) *OkfHandler {
 	return &OkfHandler{svc: svc}
+}
+
+// SetLockRetryAfter configures the Retry-After (seconds) header emitted on 409
+// lock-held responses. The router passes cfg.Okf.LockTTLSeconds so the hint
+// matches the configured lock lifetime.
+func (h *OkfHandler) SetLockRetryAfter(seconds int) { h.lockRetryAfter = seconds }
+
+// defaultLockRetryAfter mirrors cfg.Okf.LockTTLSeconds's default (5s). Used when
+// a handler's lockRetryAfter is unset so a 409 always carries a backoff hint.
+const defaultLockRetryAfter = 5
+
+// applyRetryAfter sets the HTTP Retry-After header (seconds) for a 409
+// lock-held response. seconds <= 0 falls back to defaultLockRetryAfter.
+func applyRetryAfter(c *gin.Context, seconds int) {
+	if seconds <= 0 {
+		seconds = defaultLockRetryAfter
+	}
+	c.Header("Retry-After", strconv.Itoa(seconds))
 }
 
 // registerBundleRequest is the body of POST /bundles/register.
@@ -134,24 +158,20 @@ func (h *OkfHandler) ListNodes(c *gin.Context) {
 // iterate without depending on map ordering.
 func (h *OkfHandler) AggregateTypes(c *gin.Context) {
 	userID, department := readUserContext(c)
-	bundles, err := h.svc.ListBundles(userID, department)
+	// One grouped query across all visible bundles (WHERE bundle_id IN (...))
+	// instead of a per-bundle round trip — see OkfService.AggregateTypes.
+	counts, err := h.svc.AggregateTypes(userID, department)
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return
 	}
-	rollup := map[string]uint32{}
-	for i := range bundles {
-		counts, cErr := h.svc.AggregateByType(bundles[i].ID, userID, department)
-		if cErr != nil {
-			response.InternalError(c, cErr.Error())
-			return
-		}
-		for _, tc := range counts {
-			rollup[tc.Type] += tc.Count
-		}
-	}
 	// Emit a deterministic order: sorted by count desc, then type asc, so the
-	// response is stable across requests and reproducible in tests.
+	// response is stable across requests and reproducible in tests. The service
+	// already returns this order; we re-sort defensively to pin the contract.
+	rollup := map[string]uint32{}
+	for _, tc := range counts {
+		rollup[tc.Type] += tc.Count
+	}
 	out := make([]gin.H, 0, len(rollup))
 	for _, k := range sortedRollupKeys(rollup) {
 		out = append(out, gin.H{"type": k, "count": rollup[k]})
@@ -222,6 +242,12 @@ func (h *OkfHandler) respondOkfError(c *gin.Context, err error) {
 		response.Forbidden(c, "bundle not visible to caller")
 	case errors.Is(err, service.ErrOkfBundleNotFound):
 		response.NotFound(c, "bundle not found")
+	case errors.Is(err, service.ErrOkfLockHeld):
+		// 409 Conflict: another writer holds the bundle lock. Without this case
+		// the error falls through to 500, which misleads clients into treating a
+		// transient contention as a server bug. Retry-After hints the lock TTL.
+		response.Fail(c, 409, 409, "bundle lock held by another caller")
+		applyRetryAfter(c, h.lockRetryAfter)
 	default:
 		response.InternalError(c, err.Error())
 	}

@@ -56,6 +56,7 @@ type okfNodeRepo interface {
 	ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
 	ListByIDs(ids []uint64) ([]model.OkfNode, error)
 	AggregateByType(bundleID uint64) ([]repository.TypeCount, error)
+	AggregateTypesByBundles(bundleIDs []uint64) ([]repository.TypeCount, error)
 	DeleteByBundle(tx *gorm.DB, bundleID uint64) error
 	CountByBundle(tx *gorm.DB, bundleID uint64) (uint32, error)
 	Search(query string, filter repository.SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error)
@@ -71,6 +72,7 @@ type okfEdgeRepo interface {
 	ListOutBySrcBatch(publicDirID uint64, srcIDs []uint64, limit int) ([]model.OkfEdge, error)
 	ListInByDstBatch(publicDirID uint64, dstIDs []uint64, limit int) ([]model.OkfEdge, error)
 	ListBrokenByBundle(publicDirID uint64, cursor uint64, limit int) ([]model.OkfEdge, uint64, error)
+	CountBrokenByBundle(publicDirID uint64) (int64, error)
 	CountByBundle(tx *gorm.DB, bundleID, publicDirID uint64) (uint32, error)
 	StatsByBundle(bundleID, publicDirID uint64) (repository.EdgeStats, error)
 	DeleteByBundle(tx *gorm.DB, publicDirID uint64) error
@@ -751,6 +753,23 @@ func (s *OkfService) AggregateByType(bundleID uint64, userID, department string)
 		return nil, err
 	}
 	return s.nodes.AggregateByType(bundleID)
+}
+
+// AggregateTypes returns the global type→count rollup across every bundle
+// visible to the caller in a single grouped query (WHERE bundle_id IN (?)),
+// collapsing the N+1 per-bundle queries the handler used to issue. Visibility
+// is enforced by deriving the bundle ID set from ListBundles, so only bundles
+// the caller already sees contribute to the rollup.
+func (s *OkfService) AggregateTypes(userID, department string) ([]repository.TypeCount, error) {
+	bundles, err := s.ListBundles(userID, department)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uint64, 0, len(bundles))
+	for i := range bundles {
+		ids = append(ids, bundles[i].ID)
+	}
+	return s.nodes.AggregateTypesByBundles(ids)
 }
 
 // requireBundleVisible returns ErrOkfForbidden when the caller's visibility

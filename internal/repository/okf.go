@@ -205,6 +205,24 @@ func (r *OkfNodeRepo) AggregateByType(bundleID uint64) ([]TypeCount, error) {
 	return out, err
 }
 
+// AggregateTypesByBundles returns the type→count rollup across multiple bundles
+// in a single grouped query (WHERE bundle_id IN (?)). It collapses the N+1
+// per-bundle queries the global AggregateTypes handler used to issue — a tenant
+// with 100 visible bundles now pays one round trip, not 100.
+func (r *OkfNodeRepo) AggregateTypesByBundles(bundleIDs []uint64) ([]TypeCount, error) {
+	var out []TypeCount
+	if len(bundleIDs) == 0 {
+		return out, nil
+	}
+	err := r.db.Model(&model.OkfNode{}).
+		Select("type, COUNT(*) as count").
+		Where("bundle_id IN ?", bundleIDs).
+		Group("type").
+		Order("count DESC, type ASC").
+		Scan(&out).Error
+	return out, err
+}
+
 // DeleteByBundle removes all nodes for a bundle. Intended for use during a
 // refresh within the same transaction as the new upserts.
 func (r *OkfNodeRepo) DeleteByBundle(tx *gorm.DB, bundleID uint64) error {
