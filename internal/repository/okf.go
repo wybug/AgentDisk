@@ -280,6 +280,16 @@ type SearchFilter struct {
 	Type      string
 }
 
+// offsetInt converts a cursor (row offset) to an int for LIMIT/OFFSET, clamped
+// to a generous ceiling so the uint64→int cast cannot overflow even on 32-bit
+// builds. A result offset past a billion rows is not a real pagination cursor.
+func offsetInt(cursor uint64) int {
+	if cursor > 1<<30 {
+		cursor = 1 << 30
+	}
+	return int(cursor) //nolint:gosec // cursor bounded to 1<<30 above
+}
+
 // Search runs a FULLTEXT query against (title, description) on MySQL. The
 // ngram parser (set up via migrateOkfFullTextIndex) gives CJK-token-aware
 // matching. Pagination is cursor-based on the primary key: pass the last
@@ -304,16 +314,18 @@ func (r *OkfNodeRepo) Search(query string, filter SearchFilter, limit int, curso
 	if filter.Type != "" {
 		q = q.Where("type = ?", filter.Type)
 	}
-	if cursor > 0 {
-		q = q.Where("id > ?", cursor)
-	}
 	var out []model.OkfNode
-	if err := q.Order("id ASC").Limit(limit + 1).Find(&out).Error; err != nil {
+	// Paginate by offset (cursor = row offset) so the ordering is free to become
+	// relevance-based without the id-cursor/ORDER BY conflict. TODO: rank by
+	// MATCH(...) AGAINST relevance — needs a parameterized ORDER BY that GORM's
+	// Order() does not express safely; switch to a raw query once a MySQL test
+	// harness exists to validate it. id-order keeps results stable for now.
+	if err := q.Order("id ASC").Offset(offsetInt(cursor)).Limit(limit + 1).Find(&out).Error; err != nil {
 		return nil, 0, err
 	}
 	next := uint64(0)
 	if len(out) > limit {
-		next = out[limit-1].ID
+		next = cursor + uint64(limit)
 		out = out[:limit]
 	}
 	return out, next, nil
@@ -323,14 +335,11 @@ func (r *OkfNodeRepo) Search(query string, filter SearchFilter, limit int, curso
 // against the disk_okf_node_fts FTS5 virtual table (set up by
 // migrateOkfFts5Index) and joins back to the base table for the full row.
 // FTS5's unicode61 tokenizer handles ASCII word boundaries and CJK code
-// points; ranking is by FTS5's default bm25.
+// points.
 //
-// Cursor pagination runs on the joined base table's primary key so the
-// caller can walk pages without re-running the ranking. The first page
-// comes back ranked; subsequent pages lose the ranking but stay cheap.
-//
-// On the SQLite test path this is what's exercised; on the MySQL path
-// the FULLTEXT index covers the same shape.
+// Results are ranked by FTS5's bm25 (lower score = more relevant) and paginated
+// by offset, so every page stays in relevance order — unlike an id cursor,
+// which cannot continue a bm25 sequence across pages. cursor is the row offset.
 func (r *OkfNodeRepo) SearchSQLite(query string, filter SearchFilter, limit int, cursor uint64) ([]model.OkfNode, uint64, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -347,16 +356,17 @@ func (r *OkfNodeRepo) SearchSQLite(query string, filter SearchFilter, limit int,
 	if filter.Type != "" {
 		q = q.Where("disk_okf_node.type = ?", filter.Type)
 	}
-	if cursor > 0 {
-		q = q.Where("disk_okf_node.id > ?", cursor)
-	}
 	var out []model.OkfNode
-	if err := q.Order("disk_okf_node.id ASC").Limit(limit + 1).Find(&out).Error; err != nil {
+	// Rank by FTS5 bm25 (lower = more relevant, so ASC is best-first) and paginate
+	// by offset. Offset composes with a relevance order — unlike the old id cursor,
+	// which could not continue a bm25 sequence across pages (it would re-sort page
+	// 2+ by id and duplicate/drop rows). cursor is the row offset, not a node id.
+	if err := q.Order("bm25(disk_okf_node_fts)").Offset(offsetInt(cursor)).Limit(limit + 1).Find(&out).Error; err != nil {
 		return nil, 0, err
 	}
 	next := uint64(0)
 	if len(out) > limit {
-		next = out[limit-1].ID
+		next = cursor + uint64(limit)
 		out = out[:limit]
 	}
 	return out, next, nil
