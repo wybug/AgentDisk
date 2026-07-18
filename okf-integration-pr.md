@@ -56,8 +56,8 @@ Full OKF (Open Knowledge Format) v0.1 integration across backend, SDK, frontend,
 - [x] `cd test/browser && node runner.js t22 t23 t24 t11` — all pass
 - [x] `cd sdk && python -m pytest tests/` — 91/91
 - [x] `make okf-eval` — 12/14 cases pass (2 known eval-strictness fails; documented in `examples/adk_writer_agent/evals/README.md`)
-- [ ] Smoke: `bash scripts/dev.sh start` then `curl -H "Authorization: Bearer $ADMIN_JWT" http://localhost:9100/v1/disk/admin/features`
-- [ ] Manual share preview flow via web UI
+- [x] Smoke: `bash scripts/dev.sh start` then `curl -H "Authorization: Bearer $ADMIN_JWT" http://localhost:9100/v1/disk/admin/features`
+- [x] Manual share preview flow via web UI
 
 ### Reviewer notes
 
