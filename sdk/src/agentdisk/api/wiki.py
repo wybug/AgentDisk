@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..models.wiki import (
+    BrokenLink,
     BrokenLinksPage,
     BundleStats,
     IndexRegenResult,
@@ -28,6 +29,7 @@ from .base import AsyncBaseAPI, BaseAPI
 
 if TYPE_CHECKING:
     import builtins
+    from collections.abc import AsyncIterator, Iterator
 
 
 class _WikiAPI(BaseAPI):
@@ -108,6 +110,32 @@ class _WikiAPI(BaseAPI):
             },
         )
         return SearchPage.from_dict(data or {})
+
+    def iter_search(
+        self,
+        query: str,
+        bundle_id: int = 0,
+        type_filter: str = "",
+        limit: int = 50,
+    ) -> Iterator[OkfNode]:
+        """Yield every search hit, following the cursor across pages.
+
+        Wraps :meth:`search` so callers do not have to hand-write the
+        cursor-follow loop. Stops when a page reports ``next_cursor == 0``.
+        """
+        cursor = 0
+        while True:
+            page = self.search(
+                query,
+                bundle_id=bundle_id,
+                type_filter=type_filter,
+                limit=limit,
+                cursor=cursor,
+            )
+            yield from page.nodes
+            cursor = page.next_cursor
+            if not cursor:
+                return
 
     # --- Graph queries ---
 
@@ -204,6 +232,24 @@ class _WikiAPI(BaseAPI):
             params={"cursor": cursor or None, "limit": limit or None},
         )
         return BrokenLinksPage.from_dict(data or {})
+
+    def iter_broken_links(
+        self,
+        bundle_id: int,
+        limit: int = 50,
+    ) -> Iterator[BrokenLink]:
+        """Yield every broken link in a bundle, following the cursor across pages.
+
+        Wraps :meth:`list_broken_links` so callers do not hand-write the
+        cursor-follow loop. Stops when a page reports ``next_cursor == 0``.
+        """
+        cursor = 0
+        while True:
+            page = self.list_broken_links(bundle_id, cursor=cursor, limit=limit)
+            yield from page.links
+            cursor = page.next_cursor
+            if not cursor:
+                return
 
     def regenerate_index(self, bundle_id: int) -> IndexRegenResult:
         """POST /okf/bundles/:id/regenerate-index — rebuild root index.md."""
@@ -308,6 +354,29 @@ class _AsyncWikiAPI(AsyncBaseAPI):
         )
         return SearchPage.from_dict(data or {})
 
+    async def iter_search(
+        self,
+        query: str,
+        bundle_id: int = 0,
+        type_filter: str = "",
+        limit: int = 50,
+    ) -> AsyncIterator[OkfNode]:
+        """Async variant of :meth:`iter_search` — async-yields every hit."""
+        cursor = 0
+        while True:
+            page = await self.search(
+                query,
+                bundle_id=bundle_id,
+                type_filter=type_filter,
+                limit=limit,
+                cursor=cursor,
+            )
+            for node in page.nodes:
+                yield node
+            cursor = page.next_cursor
+            if not cursor:
+                return
+
     # --- Graph queries ---
 
     async def neighbors(
@@ -396,6 +465,21 @@ class _AsyncWikiAPI(AsyncBaseAPI):
             params={"cursor": cursor or None, "limit": limit or None},
         )
         return BrokenLinksPage.from_dict(data or {})
+
+    async def iter_broken_links(
+        self,
+        bundle_id: int,
+        limit: int = 50,
+    ) -> AsyncIterator[BrokenLink]:
+        """Async variant of :meth:`iter_broken_links` — async-yields every link."""
+        cursor = 0
+        while True:
+            page = await self.list_broken_links(bundle_id, cursor=cursor, limit=limit)
+            for link in page.links:
+                yield link
+            cursor = page.next_cursor
+            if not cursor:
+                return
 
     async def regenerate_index(self, bundle_id: int) -> IndexRegenResult:
         data = await self._request("POST", f"/okf/bundles/{bundle_id}/regenerate-index")

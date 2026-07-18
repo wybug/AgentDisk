@@ -42,6 +42,7 @@ export default defineConfig({
             { text: '标签搜索', link: '/guide/tags' },
             { text: '版本回溯', link: '/guide/file-versions' },
             { text: '权限管理', link: '/guide/permissions' },
+            { text: 'OKF 知识库', link: '/guide/okf-wiki' },
             { text: '管理后台', link: '/guide/admin-panel' },
           ],
         },

@@ -22,6 +22,7 @@ from .api import (
 
 if TYPE_CHECKING:
     import builtins
+    from collections.abc import AsyncIterator
 
     from .models.file import DiskFile, DownloadByTokenResponse, FileDetailResponse
     from .models.folder import DiskFolder
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from .models.space import UserDisk
     from .models.version import DiskFileVersion
     from .models.wiki import (
+        BrokenLink,
         BrokenLinksPage,
         BundleStats,
         IndexRegenResult,
@@ -419,6 +421,21 @@ class AsyncAgentDiskClient:
             cursor=cursor,
         )
 
+    def iter_search(
+        self,
+        query: str,
+        bundle_id: int = 0,
+        type_filter: str = "",
+        limit: int = 50,
+    ) -> AsyncIterator[OkfNode]:
+        """Async-yield every search hit, following the cursor across pages."""
+        return self._wiki.iter_search(
+            query,
+            bundle_id=bundle_id,
+            type_filter=type_filter,
+            limit=limit,
+        )
+
     async def neighbors(
         self,
         node_id: int,
@@ -472,6 +489,10 @@ class AsyncAgentDiskClient:
         limit: int = 50,
     ) -> BrokenLinksPage:
         return await self._wiki.list_broken_links(bundle_id, cursor=cursor, limit=limit)
+
+    def iter_broken_links(self, bundle_id: int, limit: int = 50) -> AsyncIterator[BrokenLink]:
+        """Async-yield every broken link, following the cursor across pages."""
+        return self._wiki.iter_broken_links(bundle_id, limit=limit)
 
     async def regenerate_index(self, bundle_id: int) -> IndexRegenResult:
         return await self._wiki.regenerate_index(bundle_id)

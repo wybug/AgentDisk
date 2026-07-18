@@ -272,6 +272,45 @@ for d in dirs:
 > 注：当前 SDK 仅暴露 `list_public_directories()`；按 ID 获取单个公共目录的便捷方法
 > 尚未提供，可从列表结果中按 id 取用。
 
+### OKF 知识库
+
+OKF 把公共目录物化为「节点 + 边」的知识图谱。读取（搜索/图谱/列表）可用 JWT 或 API
+Key；**写入节点需 API Key**。完整概念见 [OKF 知识库指南](/guide/okf-wiki)。
+
+```python
+# 注册 bundle（公共目录需已含 index.md，frontmatter 含 okf_version）
+bundle = client.register_bundle(public_directory_id=7)
+
+# 写节点（frontmatter 的 type 必填；API Key 鉴权）
+client.write_markdown(
+    public_directory_id=7,
+    rel_path="concepts/attention.md",
+    content=b"---\ntype: concept\ntitle: 自注意力机制\n---\n正文……",
+)
+
+# 全文搜索（命中标题/描述/正文，按相关性排序）
+page = client.search_okf("注意力", bundle_id=bundle.bundle_id)
+
+# 分页迭代器：自动跟随游标翻完所有结果，无需手写翻页循环
+for node in client.iter_search("注意力", bundle_id=bundle.bundle_id):
+    print(node.title)
+
+# 图谱查询
+client.neighbors(node_id, direction="out")
+client.reachable(node_id, depth=2)
+client.shortest_path(src_id, dst_id)
+```
+
+| 方法 | 说明 |
+|------|------|
+| `register_bundle(pd_id)` | 注册公共目录为 bundle |
+| `write_markdown(pd_id, rel_path, content)` | 写入/更新一个节点（API Key） |
+| `refresh_bundle(bundle_id)` / `regenerate_index(bundle_id)` | 重扫节点索引 / 重建 index.md |
+| `search_okf(query, bundle_id=, type=)` | 全文搜索（分页） |
+| `iter_search(query, bundle_id=)` | 搜索分页迭代器（sync / async 对等） |
+| `neighbors` / `reachable` / `shortest_path` / `subgraph` | 图谱遍历查询 |
+| `list_broken_links(bundle_id)` / `iter_broken_links(bundle_id)` | 死链列表（分页 / 迭代器） |
+
 ### 缓存管理
 
 SDK 内部维护路径到 ID 的缓存，加快重复路径解析速度：
