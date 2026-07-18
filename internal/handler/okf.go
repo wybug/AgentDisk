@@ -20,7 +20,7 @@ type okfHandlerService interface {
 	RegisterBundle(ctx context.Context, publicDirectoryID uint64) (*model.OkfBundle, error)
 	ListBundles(userID, department string) ([]model.OkfBundle, error)
 	GetBundle(id uint64, userID, department string) (*model.OkfBundle, error)
-	ListNodesByType(bundleID uint64, typeFilter, tagFilter, userID, department string) ([]model.OkfNode, error)
+	ListNodesByType(bundleID uint64, typeFilter, tagFilter, userID, department string, limit, offset int) ([]model.OkfNode, uint64, error)
 	AggregateByType(bundleID uint64, userID, department string) ([]repository.TypeCount, error)
 	AggregateTypes(userID, department string) ([]repository.TypeCount, error)
 	RefreshBundle(ctx context.Context, id uint64) (*model.OkfBundle, error)
@@ -137,8 +137,13 @@ func (h *OkfHandler) ListNodes(c *gin.Context) {
 	}
 	typeFilter := c.Query("type")
 	tagFilter := c.Query("tag")
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(c.Query("cursor"))
 	userID, department := readUserContext(c)
-	nodes, err := h.svc.ListNodesByType(id, typeFilter, tagFilter, userID, department)
+	nodes, nextCursor, err := h.svc.ListNodesByType(id, typeFilter, tagFilter, userID, department, limit, offset)
 	if err != nil {
 		h.respondOkfError(c, err)
 		return
@@ -147,7 +152,7 @@ func (h *OkfHandler) ListNodes(c *gin.Context) {
 	for i := range nodes {
 		out = append(out, nodeToResponse(&nodes[i]))
 	}
-	response.OK(c, gin.H{"nodes": out})
+	response.OK(c, gin.H{"nodes": out, "nextCursor": nextCursor})
 }
 
 // AggregateTypes handles GET /v1/disk/okf/types.

@@ -184,15 +184,15 @@ func (r *fakeOkfNodeRepo) ListByIDs(ids []uint64) ([]model.OkfNode, error) {
 	return out, nil
 }
 
-func (r *fakeOkfNodeRepo) ListByBundle(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error) {
-	return r.filterNodes(bundleID, filter), nil
+func (r *fakeOkfNodeRepo) ListByBundle(bundleID uint64, filter repository.NodeListFilter, limit, offset int) ([]model.OkfNode, error) {
+	return r.filterNodes(bundleID, filter, limit, offset), nil
 }
 
-func (r *fakeOkfNodeRepo) ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error) {
-	return r.filterNodes(bundleID, filter), nil
+func (r *fakeOkfNodeRepo) ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter, limit, offset int) ([]model.OkfNode, error) {
+	return r.filterNodes(bundleID, filter, limit, offset), nil
 }
 
-func (r *fakeOkfNodeRepo) filterNodes(bundleID uint64, filter repository.NodeListFilter) []model.OkfNode {
+func (r *fakeOkfNodeRepo) filterNodes(bundleID uint64, filter repository.NodeListFilter, limit, offset int) []model.OkfNode {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := []model.OkfNode{}
@@ -223,6 +223,15 @@ func (r *fakeOkfNodeRepo) filterNodes(bundleID uint64, filter repository.NodeLis
 	// ID is the natural one. Callers that want rel_path order can sort the
 	// result themselves.
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	if limit > 0 {
+		if offset >= len(out) {
+			return []model.OkfNode{}
+		}
+		out = out[offset:]
+		if len(out) > limit {
+			out = out[:limit]
+		}
+	}
 	return out
 }
 
@@ -996,7 +1005,7 @@ func TestOkfService_ListNodes_Filters(t *testing.T) {
 	}
 
 	// Filter by type.
-	got, err := svc.ListNodesByType(bundle.ID, "concept", "", "", "")
+	got, _, err := svc.ListNodesByType(bundle.ID, "concept", "", "", "", 0, 0)
 	if err != nil {
 		t.Fatalf("ListNodesByType concept: %v", err)
 	}
@@ -1005,7 +1014,7 @@ func TestOkfService_ListNodes_Filters(t *testing.T) {
 	}
 
 	// Filter by tag.
-	got, err = svc.ListNodesByType(bundle.ID, "", "llm", "", "")
+	got, _, err = svc.ListNodesByType(bundle.ID, "", "llm", "", "", 0, 0)
 	if err != nil {
 		t.Fatalf("ListNodesByType llm: %v", err)
 	}
@@ -1014,12 +1023,60 @@ func TestOkfService_ListNodes_Filters(t *testing.T) {
 	}
 
 	// Filter by both.
-	got, err = svc.ListNodesByType(bundle.ID, "concept", "llm", "", "")
+	got, _, err = svc.ListNodesByType(bundle.ID, "concept", "llm", "", "", 0, 0)
 	if err != nil {
 		t.Fatalf("ListNodesByType concept+llm: %v", err)
 	}
 	if len(got) != 1 {
 		t.Errorf("type=concept,tag=llm: got %d, want 1", len(got))
+	}
+}
+
+func TestOkfService_ListNodesByType_Pagination(t *testing.T) {
+	bundles := newFakeOkfBundleRepo()
+	nodes := newFakeOkfNodeRepo()
+	pd := &model.DiskPublicDirectory{ID: 7, FolderID: 100, FixedPath: "/public/kb"}
+	pub := newFakeOkfPublicDir(pd)
+	pub.seedContent("index.md", mustIndexMD(t, "0.1", ""))
+	svc := NewOkfServiceFromRepo(bundles, nodes, newFakeOkfEdgeRepo(nodes), pub, "sqlite")
+
+	bundle, err := svc.RegisterBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RegisterBundle: %v", err)
+	}
+	// Seed 5 nodes (the fake orders by ID, so the page walk is deterministic).
+	for _, rel := range []string{"a.md", "b.md", "c.md", "d.md", "e.md"} {
+		if err := nodes.Upsert(nil, &model.OkfNode{BundleID: bundle.ID, RelPath: rel, Type: "concept"}); err != nil {
+			t.Fatalf("Upsert %s: %v", rel, err)
+		}
+	}
+
+	// RegisterBundle materializes index.md as a node too, so the bundle has
+	// 1 (index) + 5 seeded = 6 nodes. The fake orders by ID, deterministic.
+	const limit = 4
+	// Page 1 (offset 0): 4 nodes, nextCursor = 4.
+	page1, next, err := svc.ListNodesByType(bundle.ID, "", "", "", "", limit, 0)
+	if err != nil {
+		t.Fatalf("page1: %v", err)
+	}
+	if len(page1) != 4 || next != 4 {
+		t.Fatalf("page1: len=%d nextCursor=%d, want 4 / 4", len(page1), next)
+	}
+	// Page 2 (offset 4): the remaining 2, nextCursor = 0 (last page).
+	page2, next, err := svc.ListNodesByType(bundle.ID, "", "", "", "", limit, limit)
+	if err != nil {
+		t.Fatalf("page2: %v", err)
+	}
+	if len(page2) != 2 || next != 0 {
+		t.Fatalf("page2: len=%d nextCursor=%d, want 2 / 0", len(page2), next)
+	}
+	// Unpaginated (limit 0) returns the full set of 6.
+	all, _, err := svc.ListNodesByType(bundle.ID, "", "", "", "", 0, 0)
+	if err != nil {
+		t.Fatalf("unpaginated: %v", err)
+	}
+	if len(all) != 6 {
+		t.Errorf("unpaginated len=%d, want 6", len(all))
 	}
 }
 
@@ -1132,7 +1189,7 @@ func TestOkfService_ReaderACL_RejectsCrossUser(t *testing.T) {
 		t.Errorf("GetBundle: expected ErrOkfForbidden, got %v", err)
 	}
 	// ListNodesByType rejects.
-	if _, err := svc.ListNodesByType(1, "", "", "alice", "eng"); !errors.Is(err, ErrOkfForbidden) {
+	if _, _, err := svc.ListNodesByType(1, "", "", "alice", "eng", 0, 0); !errors.Is(err, ErrOkfForbidden) {
 		t.Errorf("ListNodesByType: expected ErrOkfForbidden, got %v", err)
 	}
 	// AggregateByType rejects.
@@ -1161,7 +1218,7 @@ func TestOkfService_ReaderACL_AllowsGrantedUser(t *testing.T) {
 	if _, err := svc.GetBundle(1, "alice", "eng"); err != nil {
 		t.Errorf("GetBundle granted: %v", err)
 	}
-	if _, err := svc.ListNodesByType(1, "", "", "alice", "eng"); err != nil {
+	if _, _, err := svc.ListNodesByType(1, "", "", "alice", "eng", 0, 0); err != nil {
 		t.Errorf("ListNodesByType granted: %v", err)
 	}
 	if _, err := svc.AggregateByType(1, "alice", "eng"); err != nil {
@@ -1306,7 +1363,7 @@ func TestOkfService_GetBundle_NotFoundBranch(t *testing.T) {
 	if _, err := svc.AggregateByType(999, "", ""); !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("AggregateByType: expected ErrOkfBundleNotFound, got %v", err)
 	}
-	if _, err := svc.ListNodesByType(999, "", "", "", ""); !errors.Is(err, ErrOkfBundleNotFound) {
+	if _, _, err := svc.ListNodesByType(999, "", "", "", "", 0, 0); !errors.Is(err, ErrOkfBundleNotFound) {
 		t.Errorf("ListNodesByType: expected ErrOkfBundleNotFound, got %v", err)
 	}
 	if _, err := svc.RefreshBundle(context.Background(), 999); !errors.Is(err, ErrOkfBundleNotFound) {

@@ -118,7 +118,10 @@ func (h *OkfShareHandler) ListShareNodes(c *gin.Context) {
 		respondOkfShareError(c, err)
 		return
 	}
-	response.OK(c, gin.H{"nodes": nodeSliceToResponse(nodes)})
+	// The share recipient view does not paginate the node list (recipient
+	// bundles are small); nextCursor stays 0 so the shared OkfNodeList renders
+	// the full set in one page.
+	response.OK(c, gin.H{"nodes": nodeSliceToResponse(nodes), "nextCursor": 0})
 }
 
 // GetShareSubgraph handles GET /v1/disk/share/:code/subgraph?bundleId=...&types=...&maxNodes=...

@@ -31,8 +31,13 @@ export default function OkfShareBundleView({ code, bundleId, extractCode }: Prop
   // Stable fetcher closures so OkfNodeList/OkfGraphView effect deps stay calm.
   const nodeListFetchers = useMemo(
     () => ({
-      listNodes: (_bundleId: number, type?: string, tag?: string) =>
-        okfShareApi.listNodes(code, bundleId, type, tag, extractCode),
+      listNodes: (
+        _bundleId: number,
+        type?: string,
+        tag?: string,
+        cursor?: number,
+        limit?: number,
+      ) => okfShareApi.listNodes(code, bundleId, type, tag, extractCode, cursor, limit),
     }),
     [code, bundleId, extractCode],
   );

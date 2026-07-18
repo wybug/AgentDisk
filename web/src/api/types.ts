@@ -236,6 +236,9 @@ export interface OkfSubgraphRequest {
 
 export interface OkfNodesResult {
   nodes: OkfNode[];
+  // Offset of the next page (0 when this is the last page). The share reader
+  // always returns 0 (it does not paginate).
+  nextCursor: number;
 }
 
 export interface OkfGraphResult {

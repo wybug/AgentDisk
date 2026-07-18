@@ -17,7 +17,13 @@ import type { OkfNode, OkfNodesResult, OkfTypeCount } from '@/api/types';
 // In the authed path these default to okfApi. The share path passes
 // share-mode fetchers that route through /v1/disk/share/:code/... instead.
 export interface OkfNodeListFetchers {
-  listNodes: (bundleId: number, type?: string, tag?: string) => Promise<OkfNodesResult>;
+  listNodes: (
+    bundleId: number,
+    type?: string,
+    tag?: string,
+    cursor?: number,
+    limit?: number,
+  ) => Promise<OkfNodesResult>;
   aggregateTypes?: () => Promise<OkfTypeCount[]>;
 }
 
@@ -27,11 +33,12 @@ interface Props {
   fetchers?: OkfNodeListFetchers;
 }
 
-// OkfNodeList is the "节点" tab on the bundle detail page. It pulls the
-// bundle's nodes once (unfiltered) and lets the user filter client-side by
-// type and free-text tag. Server-side filtering is also supported via the
-// listNodes query params, but client-side keeps the UX snappy for the
-// expected < 1000-node range.
+const PAGE_SIZE = 50;
+
+// OkfNodeList is the "节点" tab on the bundle detail page. It loads nodes in
+// pages (server-side, via the cursor) and appends with a "加载更多" button — a
+// full client-side load janks on bundles with thousands of nodes. type/tag
+// filters re-run the query from page 1.
 export default function OkfNodeList({ bundleId, onNodeClick, fetchers }: Props) {
   const listNodesFn = fetchers?.listNodes ?? okfApi.listNodes;
   const aggregateTypesFn = fetchers?.aggregateTypes;
@@ -40,44 +47,60 @@ export default function OkfNodeList({ bundleId, onNodeClick, fetchers }: Props) 
   const [types, setTypes] = useState<OkfTypeCount[]>([]);
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
   const [tagFilter, setTagFilter] = useState('');
+  const [nextCursor, setNextCursor] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const loadAll = async () => {
+  // loadFirst resets to page 1 with the given filters (undefined = unfiltered).
+  const loadFirst = async (type?: string, tag?: string) => {
     setLoading(true);
     try {
-      const nodesPromise = listNodesFn(bundleId);
-      const typesPromise = aggregateTypesFn
-        ? aggregateTypesFn().catch(() => [] as OkfTypeCount[])
-        : Promise.resolve([] as OkfTypeCount[]);
-      const [nodesRes, typesRes] = await Promise.all([nodesPromise, typesPromise]);
+      const [nodesRes, typesRes] = await Promise.all([
+        listNodesFn(bundleId, type, tag, 0, PAGE_SIZE),
+        aggregateTypesFn
+          ? aggregateTypesFn().catch(() => [] as OkfTypeCount[])
+          : Promise.resolve([] as OkfTypeCount[]),
+      ]);
       setNodes(nodesRes.nodes || []);
+      setNextCursor(nodesRes.nextCursor || 0);
       setTypes(typesRes);
     } finally {
       setLoading(false);
     }
   };
 
-  // Server-side search when the user explicitly clicks search; we keep this
-  // separate from the lightweight client-side tag filter above.
-  const handleSearch = async () => {
-    if (!tagFilter.trim() && !typeFilter) {
-      loadAll();
-      return;
-    }
-    setSearching(true);
+  const loadMore = async () => {
+    if (!nextCursor) return;
+    setLoadingMore(true);
     try {
-      const res = await listNodesFn(bundleId, typeFilter, tagFilter.trim() || undefined);
-      setNodes(res.nodes || []);
+      const res = await listNodesFn(
+        bundleId,
+        typeFilter,
+        tagFilter.trim() || undefined,
+        nextCursor,
+        PAGE_SIZE,
+      );
+      setNodes((prev) => [...prev, ...(res.nodes || [])]);
+      setNextCursor(res.nextCursor || 0);
     } finally {
-      setSearching(false);
+      setLoadingMore(false);
     }
+  };
+
+  const handleSearch = () => {
+    void loadFirst(typeFilter, tagFilter.trim() || undefined);
+  };
+
+  const reset = () => {
+    setTypeFilter(undefined);
+    setTagFilter('');
+    void loadFirst();
   };
 
   useEffect(() => {
     // Defer to avoid cascading renders (react-hooks/set-state-in-effect).
     const t = setTimeout(() => {
-      void loadAll();
+      void loadFirst();
     }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,10 +178,10 @@ export default function OkfNodeList({ bundleId, onNodeClick, fetchers }: Props) 
           onChange={(e) => setTagFilter(e.target.value)}
           onPressEnter={handleSearch}
         />
-        <Button icon={<SearchOutlined />} loading={searching} onClick={handleSearch}>
+        <Button icon={<SearchOutlined />} loading={loading} onClick={handleSearch}>
           搜索
         </Button>
-        <Button icon={<ReloadOutlined />} onClick={loadAll}>
+        <Button icon={<ReloadOutlined />} onClick={reset}>
           重置
         </Button>
       </Space>
@@ -168,9 +191,16 @@ export default function OkfNodeList({ bundleId, onNodeClick, fetchers }: Props) 
         dataSource={nodes}
         loading={loading}
         size="small"
-        pagination={{ pageSize: 20, showSizeChanger: false }}
+        pagination={false}
         locale={{ emptyText: '该 bundle 没有节点' }}
       />
+      {nextCursor !== 0 && (
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <Button loading={loadingMore} onClick={loadMore}>
+            加载更多
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -169,7 +169,7 @@ type NodeListFilter struct {
 
 // ListByBundle returns nodes for a bundle, optionally narrowed by filter.
 // Results are ordered by rel_path for stable output.
-func (r *OkfNodeRepo) ListByBundle(bundleID uint64, filter NodeListFilter) ([]model.OkfNode, error) {
+func (r *OkfNodeRepo) ListByBundle(bundleID uint64, filter NodeListFilter, limit, offset int) ([]model.OkfNode, error) {
 	q := r.db.Model(&model.OkfNode{}).Where("bundle_id = ?", bundleID)
 	if filter.Type != "" {
 		q = q.Where("type = ?", filter.Type)
@@ -180,6 +180,9 @@ func (r *OkfNodeRepo) ListByBundle(bundleID uint64, filter NodeListFilter) ([]mo
 		// switching on the driver — see okf.go ListNodes for the SQLite path.
 		q = q.Where("JSON_CONTAINS(tags_json, JSON_QUOTE(?))", filter.Tag)
 	}
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var nodes []model.OkfNode
 	err := q.Order("rel_path ASC").Find(&nodes).Error
 	return nodes, err
@@ -188,7 +191,7 @@ func (r *OkfNodeRepo) ListByBundle(bundleID uint64, filter NodeListFilter) ([]mo
 // ListByBundleSQLite is the SQLite-friendly equivalent of ListByBundle. It
 // applies type as a plain equality and tag as a LIKE substring over the JSON
 // text, since SQLite lacks JSON_CONTAINS in older versions.
-func (r *OkfNodeRepo) ListByBundleSQLite(bundleID uint64, filter NodeListFilter) ([]model.OkfNode, error) {
+func (r *OkfNodeRepo) ListByBundleSQLite(bundleID uint64, filter NodeListFilter, limit, offset int) ([]model.OkfNode, error) {
 	q := r.db.Model(&model.OkfNode{}).Where("bundle_id = ?", bundleID)
 	if filter.Type != "" {
 		q = q.Where("type = ?", filter.Type)
@@ -197,6 +200,9 @@ func (r *OkfNodeRepo) ListByBundleSQLite(bundleID uint64, filter NodeListFilter)
 		// tags_json is stored as TEXT on SQLite; matching the quoted tag value
 		// is sufficient for an equality substring scan.
 		q = q.Where("tags_json LIKE ?", "%\""+filter.Tag+"\"%")
+	}
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
 	}
 	var nodes []model.OkfNode
 	err := q.Order("rel_path ASC").Find(&nodes).Error

@@ -278,9 +278,9 @@ func (s *OkfService) listNodesForScan(bundleID uint64, filter repository.NodeLis
 	// Both fake and real repos satisfy the same interface; the driver pick
 	// mirrors the public ListNodesByType path.
 	if s.dbDriver == "sqlite" {
-		return s.nodes.ListByBundleSQLite(bundleID, filter)
+		return s.nodes.ListByBundleSQLite(bundleID, filter, 0, 0)
 	}
-	return s.nodes.ListByBundle(bundleID, filter)
+	return s.nodes.ListByBundle(bundleID, filter, 0, 0)
 }
 
 // readNodeBody fetches the markdown body for a node. The reader goes through

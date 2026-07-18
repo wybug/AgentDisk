@@ -71,9 +71,9 @@ func (r *OkfShareReader) ListNodes(share *model.DiskShare, bundleID uint64, type
 	}
 	filter := repository.NodeListFilter{Type: typeFilter, Tag: tagFilter}
 	if r.dbDriver == "sqlite" {
-		return r.nodes.ListByBundleSQLite(bundleID, filter)
+		return r.nodes.ListByBundleSQLite(bundleID, filter, 0, 0)
 	}
-	return r.nodes.ListByBundle(bundleID, filter)
+	return r.nodes.ListByBundle(bundleID, filter, 0, 0)
 }
 
 // ShareSubgraphRequest is the body shape for the public subgraph endpoint.

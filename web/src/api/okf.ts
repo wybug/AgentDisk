@@ -63,10 +63,10 @@ export const okfApi = {
     unwrap<unknown>(apiClient.delete(`/v1/disk/okf/bundles/${id}`)),
 
   // Nodes
-  listNodes: (bundleId: number, type?: string, tag?: string) =>
+  listNodes: (bundleId: number, type?: string, tag?: string, cursor = 0, limit = 50) =>
     unwrap<OkfNodesResult>(
       apiClient.get(`/v1/disk/okf/bundles/${bundleId}/nodes`, {
-        params: { type, tag },
+        params: { type, tag, cursor: cursor || undefined, limit },
       }),
     ),
   aggregateTypes: () =>
@@ -126,10 +126,12 @@ export const okfShareApi = {
     type?: string,
     tag?: string,
     extractCode?: string,
+    cursor = 0,
+    limit = 50,
   ) =>
     unwrapPublic<OkfNodesResult>(
       publicClient.get(`/v1/disk/share/${code}/nodes`, {
-        params: { bundleId, type, tag, extractCode },
+        params: { bundleId, type, tag, extractCode, cursor: cursor || undefined, limit },
       }),
     ),
 

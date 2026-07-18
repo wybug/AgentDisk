@@ -411,7 +411,7 @@ func (s *OkfService) Subgraph(_ context.Context, req SubgraphRequest) (*Subgraph
 	if s.dbDriver == "sqlite" {
 		listFn = s.nodes.ListByBundleSQLite
 	}
-	all, err := listFn(bundle.ID, nodeListFilterForSubgraph(req.Types))
+	all, err := listFn(bundle.ID, nodeListFilterForSubgraph(req.Types), 0, 0)
 	if err != nil {
 		return nil, fmt.Errorf("load nodes: %w", err)
 	}

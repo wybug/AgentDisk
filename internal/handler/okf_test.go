@@ -24,7 +24,7 @@ type stubOkfSvc struct {
 	registerBundle   func(ctx context.Context, pdID uint64) (*model.OkfBundle, error)
 	listBundles      func(userID, department string) ([]model.OkfBundle, error)
 	getBundle        func(id uint64, userID, department string) (*model.OkfBundle, error)
-	listNodesByType  func(bundleID uint64, typeF, tagF, userID, department string) ([]model.OkfNode, error)
+	listNodesByType  func(bundleID uint64, typeF, tagF, userID, department string, limit, offset int) ([]model.OkfNode, uint64, error)
 	aggregateByType  func(bundleID uint64, userID, department string) ([]repository.TypeCount, error)
 	aggregateTypes   func(userID, department string) ([]repository.TypeCount, error)
 	refreshBundle    func(ctx context.Context, id uint64) (*model.OkfBundle, error)
@@ -59,11 +59,11 @@ func (s *stubOkfSvc) GetBundle(id uint64, userID, department string) (*model.Okf
 	return s.getBundle(id, userID, department)
 }
 
-func (s *stubOkfSvc) ListNodesByType(bundleID uint64, typeF, tagF, userID, department string) ([]model.OkfNode, error) {
+func (s *stubOkfSvc) ListNodesByType(bundleID uint64, typeF, tagF, userID, department string, limit, offset int) ([]model.OkfNode, uint64, error) {
 	if s.listNodesByType == nil {
-		return nil, errors.New("not stubbed")
+		return nil, 0, errors.New("not stubbed")
 	}
-	return s.listNodesByType(bundleID, typeF, tagF, userID, department)
+	return s.listNodesByType(bundleID, typeF, tagF, userID, department, limit, offset)
 }
 
 func (s *stubOkfSvc) AggregateByType(bundleID uint64, userID, department string) ([]repository.TypeCount, error) {
@@ -372,10 +372,10 @@ func TestOkfHandler_GetBundle_InvalidID(t *testing.T) {
 func TestOkfHandler_ListNodes_FiltersAndParses(t *testing.T) {
 	var seenType, seenTag string
 	stub := &stubOkfSvc{
-		listNodesByType: func(_ uint64, typeF, tagF, _, _ string) ([]model.OkfNode, error) {
+		listNodesByType: func(_ uint64, typeF, tagF, _, _ string, _, _ int) ([]model.OkfNode, uint64, error) {
 			seenType, seenTag = typeF, tagF
 			n := &model.OkfNode{ID: 3, BundleID: 1, RelPath: "a.md", Type: "concept"}
-			return []model.OkfNode{*n}, nil
+			return []model.OkfNode{*n}, 0, nil
 		},
 	}
 	r := okfHandlerWithStub(t, stub)

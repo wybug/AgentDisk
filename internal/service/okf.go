@@ -53,8 +53,8 @@ type okfNodeRepo interface {
 	GetByID(id uint64) (*model.OkfNode, error)
 	GetByBundleAndRelPath(bundleID uint64, relPath string) (*model.OkfNode, error)
 	ListByBundleAndRelPaths(bundleID uint64, relPaths []string) ([]model.OkfNode, error)
-	ListByBundle(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
-	ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter) ([]model.OkfNode, error)
+	ListByBundle(bundleID uint64, filter repository.NodeListFilter, limit, offset int) ([]model.OkfNode, error)
+	ListByBundleSQLite(bundleID uint64, filter repository.NodeListFilter, limit, offset int) ([]model.OkfNode, error)
 	ListByIDs(ids []uint64) ([]model.OkfNode, error)
 	AggregateByType(bundleID uint64) ([]repository.TypeCount, error)
 	AggregateTypesByBundles(bundleIDs []uint64) ([]repository.TypeCount, error)
@@ -730,22 +730,40 @@ func (s *OkfService) GetBundle(id uint64, userID, department string) (*model.Okf
 // ListNodesByType returns the nodes for a bundle, optionally narrowed by type
 // or tag. type and tag are exact-match filters; pass empty strings to skip.
 // Returns ErrOkfForbidden when the caller cannot see the bundle.
-func (s *OkfService) ListNodesByType(bundleID uint64, typeFilter, tagFilter, userID, department string) ([]model.OkfNode, error) {
+func (s *OkfService) ListNodesByType(bundleID uint64, typeFilter, tagFilter, userID, department string, limit, offset int) ([]model.OkfNode, uint64, error) {
 	bundle, err := s.bundles.GetByID(bundleID)
 	if err != nil {
 		if isNotFound(err) {
-			return nil, ErrOkfBundleNotFound
+			return nil, 0, ErrOkfBundleNotFound
 		}
-		return nil, err
+		return nil, 0, err
 	}
-	if err := s.requireBundleVisible(bundle, userID, department); err != nil {
-		return nil, err
+	if vErr := s.requireBundleVisible(bundle, userID, department); vErr != nil {
+		return nil, 0, vErr
 	}
+	// Fetch one extra row to detect "has more" without a separate COUNT. The
+	// returned nextCursor is the offset of the next page (0 when this is the
+	// last page), so the caller can drive a "load more" loop.
 	filter := repository.NodeListFilter{Type: typeFilter, Tag: tagFilter}
-	if s.dbDriver == "sqlite" {
-		return s.nodes.ListByBundleSQLite(bundleID, filter)
+	fetchLimit := limit
+	if limit > 0 {
+		fetchLimit = limit + 1
 	}
-	return s.nodes.ListByBundle(bundleID, filter)
+	var nodes []model.OkfNode
+	if s.dbDriver == "sqlite" {
+		nodes, err = s.nodes.ListByBundleSQLite(bundleID, filter, fetchLimit, offset)
+	} else {
+		nodes, err = s.nodes.ListByBundle(bundleID, filter, fetchLimit, offset)
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	nextCursor := uint64(0)
+	if limit > 0 && len(nodes) > limit {
+		nextCursor = uint64(offset + limit) //nolint:gosec // offset+limit is a non-negative page offset
+		nodes = nodes[:limit]
+	}
+	return nodes, nextCursor, nil
 }
 
 // AggregateByType returns per-type node counts for a bundle. Returns
