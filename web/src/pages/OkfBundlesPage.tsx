@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Button, Card, List, Space, Spin, Tag, Typography, App } from 'antd';
+import { useMemo, useState } from 'react';
+import { Button, Card, Input, List, Select, Space, Spin, Tag, Typography, App } from 'antd';
 import { ReloadOutlined, PlusOutlined, ClusterOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,29 @@ export default function OkfBundlesPage() {
     queryKey: ['okf-bundles'],
     queryFn: () => okfApi.listBundles(),
   });
+
+  // Client-side search + sort — bundle counts are small, so this stays snappy
+  // without a server query. Search matches title/description; sort by node
+  // count (default), recency, or title.
+  const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'nodes' | 'updated' | 'title'>('nodes');
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? bundles.filter(
+          (b) =>
+            (b.title || '').toLowerCase().includes(q) ||
+            (b.description || '').toLowerCase().includes(q),
+        )
+      : bundles;
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
+      if (sortBy === 'updated') {
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      }
+      return b.nodeCount - a.nodeCount; // 'nodes', most first
+    });
+  }, [bundles, query, sortBy]);
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['okf-bundles'] });
@@ -56,13 +79,32 @@ export default function OkfBundlesPage() {
           </Space>
         }
       >
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Input
+            allowClear
+            placeholder="搜索 bundle 标题 / 描述"
+            style={{ width: 260 }}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <Select
+            style={{ width: 160 }}
+            value={sortBy}
+            onChange={(v) => setSortBy(v)}
+            options={[
+              { value: 'nodes', label: '节点数最多' },
+              { value: 'updated', label: '最近更新' },
+              { value: 'title', label: '标题' },
+            ]}
+          />
+        </Space>
         {isLoading ? (
           <Spin style={{ display: 'block', margin: '80px auto' }} />
         ) : (
           <List
             grid={{ gutter: 16, column: 3, xs: 1, sm: 2, md: 3 }}
-            dataSource={bundles}
-            locale={{ emptyText: '暂无 OKF bundle，点击右上角注册一个' }}
+            dataSource={visible}
+            locale={{ emptyText: query ? '没有匹配的 bundle' : '暂无 OKF bundle，点击右上角注册一个' }}
             renderItem={(b: OkfBundle) => (
               <List.Item>
                 <Card
