@@ -77,6 +77,10 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick, fetchers }: 
   const [maxNodes, setMaxNodes] = useState(200);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>('');
+  // Distinct types currently on the canvas — drives the color legend. Updated
+  // as nodes are merged in (works in both authed and share mode, unlike the
+  // aggregate-types fetch which is authed-only).
+  const [legendTypes, setLegendTypes] = useState<string[]>([]);
   const { message } = App.useApp();
 
   // Apply current React state (nodes/edges in the cytoscape instance) and
@@ -129,10 +133,16 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick, fetchers }: 
           id,
           source: `n${e.srcNodeId}`,
           target: `n${e.dstNodeId}`,
+          label: truncate(e.linkText || '', 16),
           broken: e.dstExists ? 'false' : 'true',
         },
       });
     }
+    setLegendTypes((prev) => {
+      const set = new Set(prev);
+      for (const n of nodes) if (n.type) set.add(n.type);
+      return Array.from(set).sort();
+    });
     runLayout();
   };
 
@@ -148,6 +158,7 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick, fetchers }: 
       // Reset the canvas before applying — "load" replaces, "expand" merges.
       cyRef.current?.elements().remove();
       nodesMap.current.clear();
+      setLegendTypes([]);
       merge(res.nodes || [], res.edges || []);
       setStatus(`已加载 ${res.nodes?.length ?? 0} 个节点 / ${res.edges?.length ?? 0} 条边`);
     } catch {
@@ -173,6 +184,7 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick, fetchers }: 
   const handleClear = () => {
     cyRef.current?.elements().remove();
     nodesMap.current.clear();
+    setLegendTypes([]);
     setStatus('已清空');
   };
 
@@ -209,6 +221,17 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick, fetchers }: 
             'target-arrow-color': '#888',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
+            // Render the link text on the edge so users see *why* two nodes
+            // connect, not just that they do. Autorotate keeps the label along
+            // the edge; the white pill keeps it legible over crossings.
+            label: 'data(label)',
+            'font-size': 9,
+            color: '#666',
+            'text-rotation': 'autorotate',
+            'text-background-color': '#fff',
+            'text-background-opacity': 0.85,
+            'text-background-padding': '1',
+            'text-background-shape': 'roundrectangle',
           },
         },
         {
@@ -306,6 +329,40 @@ export default function OkfGraphView({ bundleId, onNodeDoubleClick, fetchers }: 
       </Space>
       <div style={{ position: 'relative', height: 600, border: '1px solid #d9d9d9', borderRadius: 6, overflow: 'hidden', background: '#fafafa' }}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        {legendTypes.length > 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              background: 'rgba(255,255,255,0.9)',
+              border: '1px solid #e8e8e8',
+              borderRadius: 4,
+              padding: '4px 8px',
+              fontSize: 11,
+              lineHeight: '20px',
+              maxWidth: 260,
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            {legendTypes.map((t) => (
+              <span key={t} style={{ display: 'inline-flex', alignItems: 'center', marginRight: 8 }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 10,
+                    height: 10,
+                    borderRadius: 2,
+                    background: colorForType(t),
+                    marginRight: 4,
+                  }}
+                />
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
         {loading && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.4)' }}>
             <Spin />
