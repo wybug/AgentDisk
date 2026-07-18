@@ -358,7 +358,7 @@ func (s *OkfService) ScanBundleLinksForHandler(ctx context.Context, bundleID uin
 // previous page; limit caps the page size. The handler is the only caller;
 // the method lives on the service so the visibility check is enforced here
 // rather than re-implemented in the handler.
-func (s *OkfService) ListBrokenLinks(ctx context.Context, bundleID uint64, userID, department string, cursor uint64, limit int) ([]BrokenLink, uint64, error) {
+func (s *OkfService) ListBrokenLinks(_ context.Context, bundleID uint64, userID, department string, cursor uint64, limit int) ([]BrokenLink, uint64, error) {
 	bundle, err := s.bundles.GetByID(bundleID)
 	if err != nil {
 		if isNotFound(err) {
@@ -369,40 +369,32 @@ func (s *OkfService) ListBrokenLinks(ctx context.Context, bundleID uint64, userI
 	if vErr := s.requireBundleVisible(bundle, userID, department); vErr != nil {
 		return nil, 0, vErr
 	}
-	if limit <= 0 || limit > 50 {
-		limit = 50
-	}
-
-	nodes, err := s.listNodesForScan(bundleID, repository.NodeListFilter{})
+	// Read dead bundle links from the materialized edge table instead of
+	// re-scanning every node body. The edge table is the authoritative
+	// broken-link store (kept current by every WriteMarkdown), so this is
+	// O(matches) rather than O(nodes) + a per-node OSS read per scan. The
+	// explicit ScanBundleLinks endpoint still walks bodies — it is the
+	// materializer that refreshes this table.
+	rows, nextCursor, err := s.edges.ListBrokenBundleLinks(bundle.PublicDirectoryID, cursor, limit)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list nodes: %w", err)
+		return nil, 0, fmt.Errorf("list broken bundle links: %w", err)
 	}
-	existence := s.nodeExistenceChecker()
-	out := make([]BrokenLink, 0, limit)
-	nextCursor := uint64(0)
-	for i := range nodes {
-		n := &nodes[i]
-		if cursor != 0 && n.ID <= cursor {
-			continue
-		}
-		body := s.readNodeBody(ctx, bundle, n)
-		links := ExtractLinks(body, n.RelPath)
-		for _, li := range links {
-			if li.LinkKind != LinkKindBundle {
-				continue
-			}
-			if s.bundleLinkTargetExists(bundle.ID, li.DstRelPath, existence) {
-				continue
-			}
-			li.SrcNodeID = n.ID
-			out = append(out, BrokenLink{LinkInfo: li, Reason: BrokenReasonTargetNotFound})
-			if len(out) == limit {
-				nextCursor = n.ID
-				return out, nextCursor, nil
-			}
-		}
+	out := make([]BrokenLink, 0, len(rows))
+	for i := range rows {
+		r := rows[i]
+		out = append(out, BrokenLink{
+			LinkInfo: LinkInfo{
+				SrcNodeID:  r.SrcNodeID,
+				SrcRelPath: r.SrcRelPath,
+				DstRelPath: r.DstRelPath,
+				SrcLine:    r.SrcLine,
+				LinkText:   r.LinkText,
+				LinkKind:   r.LinkKind,
+			},
+			Reason: BrokenReasonTargetNotFound,
+		})
 	}
-	return out, 0, nil
+	return out, nextCursor, nil
 }
 
 // CountBrokenLinks returns the total broken-link count for a bundle from the

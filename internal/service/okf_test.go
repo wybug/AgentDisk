@@ -481,6 +481,50 @@ func (r *fakeOkfEdgeRepo) CountBrokenByBundle(_ uint64) (int64, error) {
 	return count, nil
 }
 
+func (r *fakeOkfEdgeRepo) ListBrokenBundleLinks(publicDirID, cursor uint64, limit int) ([]repository.BrokenLinkRow, uint64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	type cand struct {
+		edgeID, srcNodeID    uint64
+		dstRelPath, linkText string
+		srcLine              int
+		linkKind             string
+	}
+	var cands []cand
+	r.mu.RLock()
+	for _, group := range r.edges {
+		for _, e := range group {
+			if e.PublicDirID != publicDirID || e.DstExists || e.LinkKind != "bundle" {
+				continue
+			}
+			if cursor > 0 && e.ID <= cursor {
+				continue
+			}
+			cands = append(cands, cand{e.ID, e.SrcNodeID, e.DstRelPath, e.LinkText, e.SrcLine, e.LinkKind})
+		}
+	}
+	r.mu.RUnlock() // release edge lock before touching the node fake (no nested locks)
+	sort.Slice(cands, func(i, j int) bool { return cands[i].edgeID < cands[j].edgeID })
+	rows := make([]repository.BrokenLinkRow, 0, len(cands))
+	for _, c := range cands {
+		srcRel := ""
+		if n, err := r.nodes.GetByID(c.srcNodeID); err == nil {
+			srcRel = n.RelPath
+		}
+		rows = append(rows, repository.BrokenLinkRow{
+			EdgeID: c.edgeID, SrcNodeID: c.srcNodeID, SrcRelPath: srcRel,
+			DstRelPath: c.dstRelPath, SrcLine: c.srcLine, LinkText: c.linkText, LinkKind: c.linkKind,
+		})
+	}
+	next := uint64(0)
+	if len(rows) > limit {
+		next = rows[limit-1].EdgeID
+		rows = rows[:limit]
+	}
+	return rows, next, nil
+}
+
 func (r *fakeOkfEdgeRepo) CountByBundle(_ *gorm.DB, _ uint64, _ uint64) (uint32, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

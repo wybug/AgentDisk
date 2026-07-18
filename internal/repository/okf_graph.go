@@ -224,6 +224,49 @@ func (r *OkfEdgeRepo) CountBrokenByBundle(publicDirID uint64) (int64, error) {
 	return count, nil
 }
 
+// BrokenLinkRow is a dead bundle-relative edge joined with its source node's
+// rel_path, in the shape the service projects onto its BrokenLink type. EdgeID
+// is the cursor key (the edge primary key); it is not part of the wire response.
+type BrokenLinkRow struct {
+	EdgeID     uint64
+	SrcNodeID  uint64
+	SrcRelPath string
+	DstRelPath string
+	SrcLine    int
+	LinkText   string
+	LinkKind   string
+}
+
+// ListBrokenBundleLinks returns the dead bundle-relative edges (dst_exists=false
+// AND link_kind='bundle') for a bundle, paged by edge id, joining the source
+// node for its rel_path. It replaces the per-node OSS body scan ListBrokenLinks
+// used to run — the materialized edge table is the authoritative broken-link
+// store (kept current by every WriteMarkdown), so reading it is O(matches)
+// instead of O(nodes). cursor is the last edge id of the previous page; pass 0
+// for the first page. The returned nextCursor is 0 when fully enumerated.
+func (r *OkfEdgeRepo) ListBrokenBundleLinks(publicDirID, cursor uint64, limit int) ([]BrokenLinkRow, uint64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	q := r.db.Table("disk_okf_edge AS e").
+		Select("e.id AS edge_id, e.src_node_id, n.rel_path AS src_rel_path, e.dst_rel_path, e.src_line, e.link_text, e.link_kind").
+		Joins("JOIN disk_okf_node n ON n.id = e.src_node_id").
+		Where("e.public_dir_id = ? AND e.dst_exists = ? AND e.link_kind = ?", publicDirID, false, "bundle")
+	if cursor > 0 {
+		q = q.Where("e.id > ?", cursor)
+	}
+	var rows []BrokenLinkRow
+	if err := q.Order("e.id ASC").Limit(limit + 1).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	next := uint64(0)
+	if len(rows) > limit {
+		next = rows[limit-1].EdgeID
+		rows = rows[:limit]
+	}
+	return rows, next, nil
+}
+
 // CountByBundle returns the total edge count for a bundle. The bundleID arg
 // is accepted for symmetry with OkfNodeRepo.CountByBundle but the lookup goes
 // through public_dir_id (the edge table's clustering key). tx is the caller's

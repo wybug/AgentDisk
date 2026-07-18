@@ -74,6 +74,7 @@ type okfEdgeRepo interface {
 	ListInByDstBatch(publicDirID uint64, dstIDs []uint64, limit int) ([]model.OkfEdge, error)
 	ListBrokenByBundle(publicDirID uint64, cursor uint64, limit int) ([]model.OkfEdge, uint64, error)
 	CountBrokenByBundle(publicDirID uint64) (int64, error)
+	ListBrokenBundleLinks(publicDirID, cursor uint64, limit int) ([]repository.BrokenLinkRow, uint64, error)
 	CountByBundle(tx *gorm.DB, bundleID, publicDirID uint64) (uint32, error)
 	StatsByBundle(bundleID, publicDirID uint64) (repository.EdgeStats, error)
 	DeleteByBundle(tx *gorm.DB, publicDirID uint64) error
