@@ -1,9 +1,13 @@
 package response
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -131,5 +135,28 @@ func TestInternalError(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Message != "internal error" {
 		t.Errorf("sensitive info should not be exposed, got %s", resp.Message)
+	}
+}
+
+// TestInternalError_LogsDetail verifies the real error detail is logged (with
+// request context) even though the response body stays generic — the T1.6 fix.
+// Before this the detail argument was discarded, making 500s untraceable.
+func TestInternalError_LogsDetail(t *testing.T) {
+	var buf bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	defer slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	r := setupRouter()
+	r.GET("/x", func(c *gin.Context) { InternalError(c, "boom: db connection refused") })
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/x", nil)
+	r.ServeHTTP(w, req)
+
+	logged := buf.String()
+	if !strings.Contains(logged, "boom: db connection refused") {
+		t.Errorf("log missing detail: %q", logged)
+	}
+	if !strings.Contains(logged, "path=/x") {
+		t.Errorf("log missing request path: %q", logged)
 	}
 }

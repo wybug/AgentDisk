@@ -1,6 +1,7 @@
 package response
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -59,7 +60,16 @@ func NotFound(c *gin.Context, msg string) {
 	Fail(c, http.StatusNotFound, 404, msg)
 }
 
-// InternalError responds with a 500 status code.
-func InternalError(c *gin.Context, _ string) {
+// InternalError responds with a 500 and logs the real detail (with request
+// context) for diagnosis. The response body stays the generic "internal error"
+// so internals never leak to the client. Before this the detail argument was
+// discarded entirely, making 500s impossible to trace — the first slice of the
+// Tier-3 observability track (full slog/metrics/tracing plumbing continues).
+func InternalError(c *gin.Context, detail string) {
+	slog.Error("internal error",
+		slog.String("method", c.Request.Method),
+		slog.String("path", c.Request.URL.Path),
+		slog.String("detail", detail),
+	)
 	Fail(c, http.StatusInternalServerError, 500, "internal error")
 }
