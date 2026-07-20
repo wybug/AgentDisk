@@ -98,6 +98,26 @@ func newBFSServiceRepos(tb testing.TB) (*OkfService, *fakeOkfBundleRepo, *fakeOk
 	return svc, bundles, nodes, edges
 }
 
+// TestFilterNodesByBundle_DropsCrossBundle verifies the defensive cross-bundle
+// guard: nodes outside the start bundle are dropped (a stray cross-bundle edge
+// must not leak a node the caller's visibility check never authorized).
+func TestFilterNodesByBundle_DropsCrossBundle(t *testing.T) {
+	in := []model.OkfNode{
+		{ID: 1, BundleID: 7},
+		{ID: 2, BundleID: 99}, // cross-bundle — must be dropped
+		{ID: 3, BundleID: 7},
+	}
+	got := filterNodesByBundle(in, 7, "test")
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (cross-bundle node dropped)", len(got))
+	}
+	for _, n := range got {
+		if n.BundleID != 7 {
+			t.Errorf("node %d has BundleID %d, want 7", n.ID, n.BundleID)
+		}
+	}
+}
+
 // recordingGraphCache records GetAdj calls so a test can prove the BFS read
 // path consults the graph cache once one is wired via SetGraphCache. It always
 // misses (returns nil) so the walk still falls through to the fake edge repo.

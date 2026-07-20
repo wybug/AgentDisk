@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 
 	"github.com/agentdisk/agent-disk/internal/model"
@@ -162,6 +163,7 @@ func (s *OkfService) Neighbors(_ context.Context, req NeighborsRequest) (*Neighb
 	if err != nil {
 		return nil, fmt.Errorf("load neighbors: %w", err)
 	}
+	loaded = filterNodesByBundle(loaded, bundle.ID, "neighbors")
 	loaded = filterNodesByType(loaded, req.TypeFilter)
 	return &NeighborsResponse{Nodes: loaded, Edges: append(out, in...)}, nil
 }
@@ -231,14 +233,14 @@ func (s *OkfService) Reachable(ctx context.Context, req ReachableRequest) (*Reac
 				visited[dstID] = true
 				reachable = append(reachable, dstID)
 				if len(reachable) >= req.MaxNodes {
-					return s.buildReachableResponse(reachable, typeFilter)
+					return s.buildReachableResponse(reachable, typeFilter, bundle.ID)
 				}
 				next = append(next, dstID)
 			}
 		}
 		frontier = next
 	}
-	return s.buildReachableResponse(reachable, typeFilter)
+	return s.buildReachableResponse(reachable, typeFilter, bundle.ID)
 }
 
 // reachableBoth unions a BFSOut walk and a BFSIn walk from the same start
@@ -566,10 +568,32 @@ func reconstructPath(meet uint64, fwdVisited, bwdVisited map[uint64]*uint64) []u
 	return append(fwd, bwd...)
 }
 
-// buildReachableResponse loads the reachable node rows and applies the type
-// filter. Returns a response with non-nil slices so the JSON encoder always
-// emits an array (never null).
-func (s *OkfService) buildReachableResponse(ids []uint64, typeFilter map[string]bool) (*ReachableResponse, error) {
+// filterNodesByBundle drops any node whose BundleID differs from bundleID — a
+// defensive guard against stray cross-bundle edges. The writer keeps edges
+// bundle-scoped, but a bug or manual DB edit could otherwise let a BFS reach a
+// node the caller's bundle-visibility check never authorized. Dropped nodes are
+// logged so the leak is observable. op labels which query produced the set.
+func filterNodesByBundle(nodes []model.OkfNode, bundleID uint64, op string) []model.OkfNode {
+	out := make([]model.OkfNode, 0, len(nodes))
+	for i := range nodes {
+		if nodes[i].BundleID != bundleID {
+			slog.Warn("okf bfs dropped cross-bundle node",
+				slog.String("op", op),
+				slog.Uint64("startBundleId", bundleID),
+				slog.Uint64("nodeBundleId", nodes[i].BundleID),
+				slog.Uint64("nodeId", nodes[i].ID),
+			)
+			continue
+		}
+		out = append(out, nodes[i])
+	}
+	return out
+}
+
+// buildReachableResponse loads the reachable node rows, drops any that escaped
+// the start bundle (cross-bundle guard), and applies the type filter. Returns a
+// response with non-nil slices so the JSON encoder always emits an array.
+func (s *OkfService) buildReachableResponse(ids []uint64, typeFilter map[string]bool, bundleID uint64) (*ReachableResponse, error) {
 	if len(ids) == 0 {
 		return &ReachableResponse{Nodes: []model.OkfNode{}}, nil
 	}
@@ -577,6 +601,7 @@ func (s *OkfService) buildReachableResponse(ids []uint64, typeFilter map[string]
 	if err != nil {
 		return nil, fmt.Errorf("load reachable: %w", err)
 	}
+	loaded = filterNodesByBundle(loaded, bundleID, "reachable")
 	out := make([]model.OkfNode, 0, len(loaded))
 	for i := range loaded {
 		if typeFilter != nil && !typeFilter[loaded[i].Type] {
