@@ -13,9 +13,16 @@
 
 **Tier 2 高价值缺口 —— 主要完成**（10 项）：搜索全链路（UI 接入 + 正文入索引 + bm25 相关性排序 + offset 分页）、perf 三件套（WriteMarkdown N+1 批量化 / RefreshBundle 单遍读 / ListBrokenLinks 物化表）、节点列表分页（加载更多）、bundle 列表搜索/排序、OKF 终端指南 + SDK 分页迭代器、图谱边标签 + type 色图例。
 
-**门禁**：`go test -race ./...`（13 包）、`make lint`（0）、`make sdk-check`（53 文件）、`make web-check`、全套 28 浏览器用例 + t25 全绿。
+**门禁**：`go test -race ./...`（13 包）、`make lint`（0）、`make sdk-check`（53 文件）、`make web-check`、全套 29 浏览器用例（28 + t25 搜索）、SDK pytest 97 全绿。
 
-**剩余**：Tier 3 战略项（见下 §3）+ MySQL 搜索相关性排序（待 MySQL 测试环境）、节点列表 offset 深分页优化、图谱聚类/增量布局。
+**Tier 3 进展（2026-07-20 更新）**：
+- ✅ 可观测性地基三片：①InternalError 落盘真实详情 + 请求 ID 关联 ②静默吞掉的后台失败（AppendLogEntry/scheduleIndexRegen/bundle.Update/edges.DeleteByBundle 等）现经 logBestEffort 可见。
+- ✅ 跨 bundle 边隔离读侧守卫：BFS 结果按起点 bundle 过滤 + 日志（防 writer bug/DB 篡改导致的跨 bundle 泄露）。
+- ✅ bundle 导出（zip）：`GET /okf/bundles/:id/export` 流式 + 前端「导出 ZIP」按钮。
+
+**剩余（新会话推进）**：结构化全局审计、批量导入 API、分享访问分析、webhooks/事件、frontmatter 行内编辑、i18n、a11y、可观测性（指标 p99/缓存命中率 + tracing）、跨 bundle 边**写侧**不变量（schema：public_dir_id 入唯一键）、MySQL 搜索相关性排序（待 MySQL 测试环境）、图谱聚类/增量布局。
+
+> **交接指引**：Tier 3 剩余项在**新会话**推进；每项按模块拆分（CLAUDE.md §2 归属），完成后**合并到 `feature/okf-integration`**。当前分支 0 behind origin，全门禁绿，可随时并入主干。
 
 ---
 
