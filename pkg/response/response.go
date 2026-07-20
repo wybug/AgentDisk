@@ -67,6 +67,7 @@ func NotFound(c *gin.Context, msg string) {
 // Tier-3 observability track (full slog/metrics/tracing plumbing continues).
 func InternalError(c *gin.Context, detail string) {
 	slog.Error("internal error",
+		slog.String("requestId", c.GetString("requestId")),
 		slog.String("method", c.Request.Method),
 		slog.String("path", c.Request.URL.Path),
 		slog.String("detail", detail),

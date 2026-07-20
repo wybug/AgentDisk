@@ -33,6 +33,7 @@ func Setup(cfg *config.Config, cfgPath string) (*gin.Engine, *feature.Registry, 
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(middleware.RequestID())
 	r.Use(middleware.CORS())
 
 	// Health check

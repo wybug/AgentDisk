@@ -147,7 +147,10 @@ func TestInternalError_LogsDetail(t *testing.T) {
 	defer slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	r := setupRouter()
-	r.GET("/x", func(c *gin.Context) { InternalError(c, "boom: db connection refused") })
+	r.GET("/x", func(c *gin.Context) {
+		c.Set("requestId", "req-abc")
+		InternalError(c, "boom: db connection refused")
+	})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/x", nil)
 	r.ServeHTTP(w, req)
@@ -158,5 +161,8 @@ func TestInternalError_LogsDetail(t *testing.T) {
 	}
 	if !strings.Contains(logged, "path=/x") {
 		t.Errorf("log missing request path: %q", logged)
+	}
+	if !strings.Contains(logged, "requestId=req-abc") {
+		t.Errorf("log missing request id: %q", logged)
 	}
 }
