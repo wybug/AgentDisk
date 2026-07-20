@@ -53,6 +53,10 @@ export const okfApi = {
     unwrap<OkfBundle[]>(apiClient.get('/v1/disk/okf/bundles')),
   getBundle: (id: number) =>
     unwrap<OkfBundle>(apiClient.get(`/v1/disk/okf/bundles/${id}`)),
+  // Blob, not the JSON envelope — the response interceptor passes a Blob through
+  // unchanged (Blob.code is undefined), so we cast off the AxiosResponse type.
+  exportBundle: (id: number) =>
+    apiClient.get(`/v1/disk/okf/bundles/${id}/export`, { responseType: 'blob' }) as unknown as Promise<Blob>,
   registerBundle: (publicDirectoryId: number) =>
     unwrap<OkfBundle>(
       apiClient.post('/v1/disk/okf/bundles/register', { publicDirectoryId }),

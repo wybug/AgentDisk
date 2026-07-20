@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Breadcrumb, Button, Card, Space, Spin, Tabs, Tag, Typography, App } from 'antd';
 import {
   ArrowLeftOutlined,
+  DownloadOutlined,
   FileSearchOutlined,
   ReloadOutlined,
   ScissorOutlined,
@@ -90,6 +91,22 @@ export default function OkfBundleDetailPage() {
     navigate(`/preview/${fileId}`);
   };
 
+  const handleExport = async () => {
+    try {
+      const blob = await okfApi.exportBundle(id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `okf-bundle-${id}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      message.error('导出失败');
+    }
+  };
+
   if (isLoading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
 
   if (!bundle) {
@@ -128,6 +145,9 @@ export default function OkfBundleDetailPage() {
             </Button>
             <Button icon={<ReloadOutlined />} onClick={handleRefreshBundle}>
               刷新 Bundle
+            </Button>
+            <Button icon={<DownloadOutlined />} onClick={handleExport}>
+              导出 ZIP
             </Button>
             <Button icon={<FileSearchOutlined />} onClick={handleRegenerateIndex}>
               重建索引
