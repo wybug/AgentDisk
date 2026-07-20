@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path"
 	"strings"
 	"time"
@@ -277,7 +278,7 @@ func (s *OkfService) RegisterBundle(ctx context.Context, publicDirectoryID uint6
 	bundle.NodeCount, _ = s.nodes.CountByBundle(nil, bundle.ID)
 	// Best-effort log entry. A failure here is non-fatal: the bundle is
 	// registered, and a missing log row is preferable to a rollback.
-	_ = s.AppendLogEntry(ctx, bundle.ID, LogActionRegister, model.OkfReservedRootRelPath, s.logUserID)
+	s.logBestEffort("appendLogEntry", s.AppendLogEntry(ctx, bundle.ID, LogActionRegister, model.OkfReservedRootRelPath, s.logUserID))
 	return bundle, nil
 }
 
@@ -390,7 +391,7 @@ func (s *OkfService) WriteMarkdown(ctx context.Context, req WriteMarkdownRequest
 		if fm.OkfVersion != "" {
 			bundle.OkfVersion = fm.OkfVersion
 		}
-		_ = s.bundles.Update(bundle)
+		s.logBestEffort("bundle.update", s.bundles.Update(bundle))
 	}
 
 	// Materialize the node, recompute node_count, and persist the bundle in a
@@ -514,6 +515,17 @@ func (s *OkfService) refreshBundleCounts(tx *gorm.DB, bundle *model.OkfBundle) e
 	return tx.Save(bundle).Error
 }
 
+// logBestEffort records a best-effort operation failure at warn level. The
+// post-write/delete hooks and the async index regen intentionally swallow
+// errors (the primary op already succeeded), but a silent failure leaves the
+// bundle in a subtly inconsistent state (stale log.md / index.md / broken flag)
+// with no signal. Logging makes those failures observable.
+func (s *OkfService) logBestEffort(op string, err error) {
+	if err != nil {
+		slog.Warn("okf best-effort op failed", slog.String("op", op), slog.String("err", err.Error()))
+	}
+}
+
 // postWriteSyncHooks runs the synchronous post-write side-effects:
 //   - AppendLogEntry: records "create" / "update" so log.md stays in sync.
 //   - broken-link scan for this single node, when the edge graph is not wired.
@@ -530,7 +542,7 @@ func (s *OkfService) postWriteSyncHooks(ctx context.Context, _ *model.OkfBundle,
 	if existedBefore {
 		action = LogActionUpdate
 	}
-	_ = s.AppendLogEntry(ctx, node.BundleID, action, relPath, s.logUserID)
+	s.logBestEffort("appendLogEntry", s.AppendLogEntry(ctx, node.BundleID, action, relPath, s.logUserID))
 
 	if s.edges != nil {
 		// Edge materializer already maintained has_broken_link; skip the
@@ -538,7 +550,7 @@ func (s *OkfService) postWriteSyncHooks(ctx context.Context, _ *model.OkfBundle,
 		return
 	}
 	broken := s.nodeHasBrokenLink(node.BundleID, relPath, body)
-	_ = s.updateNodeBrokenFlag(node, broken)
+	s.logBestEffort("updateNodeBrokenFlag", s.updateNodeBrokenFlag(node, broken))
 }
 
 // nodeHasBrokenLink reports whether any bundle-relative link in body fails to
@@ -576,7 +588,8 @@ func (s *OkfService) scheduleIndexRegen(_ context.Context, bundleID uint64) {
 		if err != nil {
 			return
 		}
-		_, _, _ = s.regenerateIndexInternal(ctx, bundle)
+		_, _, err = s.regenerateIndexInternal(ctx, bundle)
+		s.logBestEffort("scheduleIndexRegen", err)
 	}()
 }
 
@@ -598,7 +611,7 @@ func (s *OkfService) OnFileDeleted(ctx context.Context, publicDirectoryID uint64
 	// Best-effort log + full broken-link rescan. The rescan is O(N) in the
 	// node count, which is acceptable because deletes are rare relative to
 	// writes.
-	_ = s.AppendLogEntry(ctx, bundle.ID, LogActionDelete, relPath, s.logUserID)
+	s.logBestEffort("appendLogEntry", s.AppendLogEntry(ctx, bundle.ID, LogActionDelete, relPath, s.logUserID))
 	_, _ = s.ScanBundleLinks(ctx, bundle.ID)
 	if s.autoIndexUpdate {
 		s.scheduleIndexRegen(ctx, bundle.ID)
@@ -884,7 +897,7 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 	}
 	// Best-effort log entry marking a refresh-as-scan. Non-fatal: a missing
 	// row does not undo the refresh.
-	_ = s.AppendLogEntry(ctx, bundle.ID, LogActionScan, "", s.logUserID)
+	s.logBestEffort("appendLogEntry", s.AppendLogEntry(ctx, bundle.ID, LogActionScan, "", s.logUserID))
 	return bundle, nil
 }
 
@@ -1027,7 +1040,7 @@ func (s *OkfService) UnregisterBundle(id uint64) error {
 	// Best-effort log entry before the bundle row goes away. After unregister
 	// the bundle row no longer exists, so AppendLogEntry cannot run after.
 	// Use context.Background() since this entry point has no request context.
-	_ = s.AppendLogEntry(context.Background(), id, LogActionUnregister, "", s.logUserID)
+	s.logBestEffort("appendLogEntry", s.AppendLogEntry(context.Background(), id, LogActionUnregister, "", s.logUserID))
 	if err := s.nodes.DeleteByBundle(nil, id); err != nil {
 		return fmt.Errorf("clear nodes: %w", err)
 	}
@@ -1036,7 +1049,7 @@ func (s *OkfService) UnregisterBundle(id uint64) error {
 	// directory. Swallow the error: a failed edge delete should not un-delete
 	// the bundle row we are about to drop.
 	if s.edges != nil {
-		_ = s.edges.DeleteByBundle(nil, bundle.PublicDirectoryID)
+		s.logBestEffort("edges.deleteByBundle", s.edges.DeleteByBundle(nil, bundle.PublicDirectoryID))
 	}
 	return s.bundles.Delete(id)
 }
