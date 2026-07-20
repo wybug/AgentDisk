@@ -6,7 +6,7 @@ feat(okf): OKF v0.1 integration — bundle API + knowledge graph + share/preview
 
 ## Summary
 
-Full OKF (Open Knowledge Format) v0.1 integration across backend, SDK, frontend, docs, and tests. 37 commits organized as 13 sub-PRs landing on `feature/okf-integration` since the last main (`bb666d9`), plus a raw → OKF initialization + batch-import + eval-suite top-up after PR-okf-eval landed.
+Full OKF (Open Knowledge Format) v0.1 integration across backend, SDK, frontend, docs, and tests. 37 commits organized as 13 sub-PRs landing on `feature/okf-integration` since the last main (`bb666d9`), plus a raw → OKF initialization + batch-import + eval-suite top-up after PR-okf-eval landed. A subsequent product-dimension review drove a **hardening & enhancement pass (Tier 1–3, +21 commits)** — see the section at the end of this body.
 
 ### What's in scope
 
@@ -41,6 +41,14 @@ Full OKF (Open Knowledge Format) v0.1 integration across backend, SDK, frontend,
 - `c67e103 test(okf): extend eval suite to cover raw-import workflow (8→14 cases)` — six new ADK eval cases targeting the raw workflow decision points. Baseline: 12/14 pass on `deepseek/deepseek-v4-flash`; the two known failures (`bundle_registration_order`, `infer_type_from_filename`) are eval-set strictness limits, not agent bugs — their rubrics still validate the real constraints. See `examples/adk_writer_agent/evals/baseline_results.md`.
 - `826e118 feat(okf): phase-2 citation links + broken-link strip for bundle 21` — `scripts/import_raw_phase2.py` (scan + apply modes) injects verified `[《XX》](./target.md)` citation links (142 candidates above the 0.78 SequenceMatcher threshold) and strips residual broken markdown links (461 instances across 41 files). End state: bundle 21 = 101 nodes / 251 live edges / 0 broken bundle-relative links per `/broken-links` endpoint. The `edgeBroken=740` stat counts external/anchor link rows, which aren't bundle-broken.
 
+### Hardening & enhancements (2026-07-15 → 07-20, +21 commits)
+
+A three-way product-dimension review (backend / frontend / SDK-docs-quality, ~60 findings) drove a follow-up pass on top of v0.1. Full backlog + completion status in `OKF v0.1 改进清单（产品维度评估 · 团队排期）.md`; all gates green throughout.
+
+- **Tier 1 hardening (5 modules)**: wired the dead Redis graph-adjacency cache (`SetGraphCache` was never called — BFS hit the DB every hop); propagated SDK credentials to the `_wiki` sub-client (a JWT→API-Key switch silently kept the old token → 401); mapped lock-held to 409 + `Retry-After` (was falling through to 500); reset the browser-test driver between cases (fixed the cascading `spawnSync ETIMEDOUT` that hung t19/t22/t23 for ~1000s each on full-suite runs); corrected non-existent SDK methods in `sdk-python.md` + enabled VitePress dead-link checking; styled + sanitized the share markdown (`.markdown-body` + URL allowlist); real broken-links `total`; fixed the vacuous Cytoscape-mount assertion; etc.
+- **Tier 2 product gaps**: search end-to-end — the search API had **zero frontend call sites** (wired a search panel + indexed node body for full-text match + bm25 relevance ranking + offset pagination); perf trio (WriteMarkdown edge-materialization N+1 → batched lookup, RefreshBundle double OSS read → single pass, ListBrokenLinks per-node body scan → materialized edge table); node-list server-side pagination ("load more"); bundle-list search/sort; OKF end-user guide + SDK pagination iterators (`iter_search`/`iter_broken_links`); graph edge labels + type→color legend.
+- **Tier 3 (started)**: observability foundation (`InternalError` now logs the real detail + a request id; silently-swallowed best-effort failures — `AppendLogEntry`, `scheduleIndexRegen`, etc. — are logged) + a defensive cross-bundle guard on BFS results.
+
 ### Wire format / ops
 
 - Config: new `features:` block in `config.yaml` (defaults to true), `cfg.Okf.Enabled` still gates boot-time registration
@@ -54,6 +62,7 @@ Full OKF (Open Knowledge Format) v0.1 integration across backend, SDK, frontend,
 - [x] `make lint` — 0 issues
 - [x] `make sdk-check` (ruff + format + mypy) — clean
 - [x] `cd test/browser && node runner.js t22 t23 t24 t11` — all pass
+- [x] Full browser suite `node runner.js` (28 auto cases) + t25 (search UI) — 29/29, no hangs (runner resets the driver between cases)
 - [x] `cd sdk && python -m pytest tests/` — 91/91
 - [x] `make okf-eval` — 12/14 cases pass (2 known eval-strictness fails; documented in `examples/adk_writer_agent/evals/README.md`)
 - [x] Smoke: `bash scripts/dev.sh start` then `curl -H "Authorization: Bearer $ADMIN_JWT" http://localhost:9100/v1/disk/admin/features`
