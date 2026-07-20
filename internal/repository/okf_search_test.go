@@ -330,3 +330,26 @@ func TestOkfNodeRepo_SearchSQLite_MatchesBody(t *testing.T) {
 		t.Errorf("matched title = %q, want the Quantum primer (body contains 'fox')", out[0].Title)
 	}
 }
+
+// TestOkfNodeRepo_SearchSQLite_RanksByRelevance verifies results come back in
+// bm25 relevance order: a node where the query term is prominent (title +
+// description + repeated in body) outranks one where it appears once.
+func TestOkfNodeRepo_SearchSQLite_RanksByRelevance(t *testing.T) {
+	db := newSearchDB(t)
+	repo := NewOkfNodeRepo(db)
+	bundleID := seedSearchBundle(t, db, 7, []*model.OkfNode{
+		{Title: "Glossary", Description: "miscellaneous terms", Body: "the word gemma appears here only once"},
+		{Title: "Gemma deep dive", Description: "all about the Gemma model", Body: "gemma gemma gemma architecture details"},
+	})
+
+	out, _, err := repo.SearchSQLite("gemma", SearchFilter{BundleIDs: []uint64{bundleID}}, 50, 0)
+	if err != nil {
+		t.Fatalf("SearchSQLite: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("got %d rows, want 2", len(out))
+	}
+	if !strings.Contains(strings.ToLower(out[0].Title), "deep dive") {
+		t.Errorf("top result = %q, want the Gemma deep dive (more relevant by bm25)", out[0].Title)
+	}
+}
