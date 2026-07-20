@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -141,6 +142,14 @@ func (s *stubOkfSvc) Stats(ctx context.Context, req service.StatsRequest) (*serv
 		return nil, errors.New("not stubbed")
 	}
 	return s.stats(ctx, req)
+}
+
+func (s *stubOkfSvc) ExportBundle(_ context.Context, _ uint64, _, _ string, w io.Writer, onStart func()) error {
+	if onStart != nil {
+		onStart()
+	}
+	_, _ = w.Write([]byte("stub-zip"))
+	return nil
 }
 
 // TestRefreshBundle_LockHeldReturns409WithRetryAfter verifies the writer path
@@ -366,6 +375,33 @@ func TestOkfHandler_GetBundle_InvalidID(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != 400 {
 		t.Errorf("status = %d, want 400 (invalid id)", w.Code)
+	}
+}
+
+func TestOkfHandler_ExportBundle(t *testing.T) {
+	stub := &stubOkfSvc{}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("userId", "user001"); c.Next() })
+	h := &OkfHandler{svc: stub}
+	r.GET("/x/:id/export", h.ExportBundle)
+
+	req, _ := http.NewRequest("GET", "/x/7/export", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if got := w.Header().Get("Content-Type"); got != "application/zip" {
+		t.Errorf("Content-Type = %q, want application/zip", got)
+	}
+	cd := w.Header().Get("Content-Disposition")
+	if !bytes.Contains([]byte(cd), []byte("okf-bundle-7.zip")) {
+		t.Errorf("Content-Disposition = %q, want okf-bundle-7.zip", cd)
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("stub-zip")) {
+		t.Errorf("body = %q, want stub-zip", w.Body.String())
 	}
 }
 

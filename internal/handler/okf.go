@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"io"
 	"sort"
 	"strconv"
 
@@ -32,6 +33,7 @@ type okfHandlerService interface {
 	ShortestPath(ctx context.Context, req service.ShortestPathRequest) (*service.ShortestPathResponse, error)
 	Subgraph(ctx context.Context, req service.SubgraphRequest) (*service.SubgraphResponse, error)
 	Stats(ctx context.Context, req service.StatsRequest) (*service.StatsResponse, error)
+	ExportBundle(ctx context.Context, bundleID uint64, userID, department string, w io.Writer, onStart func()) error
 }
 
 // OkfHandler exposes OKF v0.1 bundle reader/writer endpoints. All routes are
@@ -230,6 +232,26 @@ func (h *OkfHandler) UnregisterBundle(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"message": "bundle unregistered"})
+}
+
+// ExportBundle handles GET /v1/disk/okf/bundles/:id/export.
+//
+// Streams the bundle's public-directory files as a zip download (offline backup
+// / external consumption). The Content-Disposition/Type headers are set only
+// after the bundle + visibility checks pass (via onStart), so not-found /
+// forbidden still return a clean error response rather than a half zip.
+func (h *OkfHandler) ExportBundle(c *gin.Context) {
+	id, err := parseIDParam(c)
+	if err != nil {
+		return
+	}
+	userID, department := readUserContext(c)
+	if err := h.svc.ExportBundle(c.Request.Context(), id, userID, department, c.Writer, func() {
+		c.Header("Content-Disposition", "attachment; filename=\"okf-bundle-"+strconv.FormatUint(id, 10)+".zip\"")
+		c.Header("Content-Type", "application/zip")
+	}); err != nil {
+		h.respondOkfError(c, err)
+	}
 }
 
 // respondOkfError maps service-layer OKF errors onto HTTP responses. Client

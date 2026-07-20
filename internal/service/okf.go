@@ -1,11 +1,13 @@
 package service
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"path"
 	"strings"
@@ -899,6 +901,95 @@ func (s *OkfService) RefreshBundle(ctx context.Context, id uint64) (*model.OkfBu
 	// row does not undo the refresh.
 	s.logBestEffort("appendLogEntry", s.AppendLogEntry(ctx, bundle.ID, LogActionScan, "", s.logUserID))
 	return bundle, nil
+}
+
+// ExportBundle writes a zip of the bundle's public-directory files to w. The
+// archive path of each file is its bundle-relative path (matching the OKF node
+// relPath convention), so the zip round-trips back into a public directory.
+//
+// onStart (if non-nil) is invoked once the bundle + visibility checks pass but
+// before any zip byte is written, so the caller can set streaming response
+// headers only on success. If the checks fail, onStart is not called and the
+// returned error is suitable for a clean error response.
+func (s *OkfService) ExportBundle(ctx context.Context, bundleID uint64, userID, department string, w io.Writer, onStart func()) error {
+	bundle, err := s.bundles.GetByID(bundleID)
+	if err != nil {
+		if isNotFound(err) {
+			return ErrOkfBundleNotFound
+		}
+		return fmt.Errorf("lookup bundle: %w", err)
+	}
+	if vErr := s.requireBundleVisible(bundle, userID, department); vErr != nil {
+		return vErr
+	}
+	pdSvc, ok := s.pdSvc.(*PublicDirectoryService)
+	if !ok {
+		// In tests with a stub pdSvc we cannot walk the folder tree.
+		return errors.New("okf: export requires the public directory service")
+	}
+	pd, err := pdSvc.GetPublicDirectory(bundle.PublicDirectoryID)
+	if err != nil {
+		return fmt.Errorf("public directory not found: %w", err)
+	}
+
+	// Checks passed — commit to streaming.
+	if onStart != nil {
+		onStart()
+	}
+	zw := zip.NewWriter(w)
+	root := &model.DiskFolder{ID: pd.FolderID, FolderName: "", FullPath: pd.FixedPath}
+	walkErr := s.writeFolderToZip(ctx, pdSvc, zw, root, "")
+	if cerr := zw.Close(); cerr != nil && walkErr == nil {
+		walkErr = cerr
+	}
+	return walkErr
+}
+
+// writeFolderToZip walks one folder, writes each file into the zip under
+// relPrefix, then recurses into non-deleted sub-folders. Unreadable files are
+// skipped (mirroring walkAndMaterialize's tolerance) so one bad file does not
+// abort the export.
+func (s *OkfService) writeFolderToZip(ctx context.Context, pdSvc *PublicDirectoryService, zw *zip.Writer, folder *model.DiskFolder, relPrefix string) error {
+	files, err := pdSvc.ListFilesInFolder(folder.ID)
+	if err != nil {
+		return fmt.Errorf("list files in folder %s: %w", folder.FolderName, err)
+	}
+	for i := range files {
+		f := files[i]
+		rel := f.FileName
+		if relPrefix != "" {
+			rel = relPrefix + "/" + f.FileName
+		}
+		body, rErr := pdSvc.ReadFileContent(ctx, f.ID)
+		if rErr != nil {
+			continue
+		}
+		entry, cErr := zw.Create(rel)
+		if cErr != nil {
+			return cErr
+		}
+		if _, wErr := entry.Write(body); wErr != nil {
+			return wErr
+		}
+	}
+	children, err := pdSvc.ListSubFoldersByParent(folder.ID)
+	if err != nil {
+		return fmt.Errorf("list sub folders of %s: %w", folder.FolderName, err)
+	}
+	for i := range children {
+		child := children[i]
+		if child.IsDeleted {
+			continue
+		}
+		subRel := child.FolderName
+		if relPrefix != "" {
+			subRel = relPrefix + "/" + child.FolderName
+		}
+		if err := s.writeFolderToZip(ctx, pdSvc, zw, &child, subRel); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // walkAndMaterialize scans the public directory for markdown files and

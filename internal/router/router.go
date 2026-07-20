@@ -372,6 +372,7 @@ func Setup(cfg *config.Config, cfgPath string) (*gin.Engine, *feature.Registry, 
 		okfReader.GET("/bundles", okfH.ListBundles)
 		okfReader.GET("/bundles/:id", okfH.GetBundle)
 		okfReader.GET("/bundles/:id/nodes", okfH.ListNodes)
+		okfReader.GET("/bundles/:id/export", okfH.ExportBundle)
 		okfReader.GET("/types", okfH.AggregateTypes)
 		okfReader.POST("/bundles/:id/scan", okfScanH.ScanBundle)
 		okfReader.GET("/bundles/:id/broken-links", okfScanH.ListBrokenLinks)
