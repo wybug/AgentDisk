@@ -797,6 +797,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResponseBase"
 
+  /v1/disk/shares/{id}/stats:
+    get:
+      summary: Share access analytics (owner-only)
+      operationId: getShareStats
+      tags: [Share]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResponseBase"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ShareStats"
+        "400":
+          description: Invalid share id
+        "403":
+          description: Caller is not the share owner
+        "404":
+          description: Share not found
+
   /v1/disk/share/{code}:
     get:
       summary: Get share info (public, no auth)
@@ -1804,6 +1835,41 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ShareAccessLog:
+      type: object
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+        visitorIP:
+          type: string
+          description: Visitor IP, masked (last IPv4 octet / IPv6 group zeroed)
+        userAgent:
+          type: string
+        action:
+          type: string
+          description: Currently always "access"
+
+    ShareStats:
+      type: object
+      properties:
+        visitCount:
+          type: integer
+        uniqueIPs:
+          type: integer
+          format: uint64
+          description: Distinct visitor-IP count (computed on raw IPs)
+        lastAccessAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Most-recent access time; null when never accessed
+        recentLogs:
+          type: array
+          description: Up to 50 most-recent access logs, newest first
+          items:
+            $ref: "#/components/schemas/ShareAccessLog"
 
     DiskRecycleBin:
       type: object

@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { Table, Button, Popconfirm, message, Space, Tag } from 'antd';
-import { DeleteOutlined, CopyOutlined } from '@ant-design/icons';
+import { DeleteOutlined, CopyOutlined, BarChartOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { shareApi } from '@/api/share';
 import { formatDate } from '@/utils/format';
 import type { DiskShare } from '@/api/types';
+import ShareStatsDrawer from '@/components/share/ShareStatsDrawer';
 
 export default function SharesPage() {
   const queryClient = useQueryClient();
+  const [statsShareId, setStatsShareId] = useState<number | null>(null);
 
   const { data: shares = [], isLoading } = useQuery({
     queryKey: ['shares'],
@@ -81,18 +84,28 @@ export default function SharesPage() {
           },
           {
             title: '操作',
-            width: 80,
+            width: 150,
             render: (_: unknown, record: DiskShare) => (
-              <Popconfirm
-                title="确定撤销此分享？"
-                onConfirm={() => handleRevoke(record.id)}
-              >
-                <Button size="small" danger icon={<DeleteOutlined />}>撤销</Button>
-              </Popconfirm>
+              <Space>
+                <Button
+                  size="small"
+                  icon={<BarChartOutlined />}
+                  onClick={() => setStatsShareId(record.id)}
+                >
+                  访问记录
+                </Button>
+                <Popconfirm
+                  title="确定撤销此分享？"
+                  onConfirm={() => handleRevoke(record.id)}
+                >
+                  <Button size="small" danger icon={<DeleteOutlined />}>撤销</Button>
+                </Popconfirm>
+              </Space>
             ),
           },
         ]}
       />
+      <ShareStatsDrawer shareId={statsShareId} onClose={() => setStatsShareId(null)} />
     </div>
   );
 }

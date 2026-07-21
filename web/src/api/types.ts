@@ -70,6 +70,20 @@ export interface DiskShare {
   createdAt: string;
 }
 
+export interface ShareAccessLog {
+  createdAt: string;
+  visitorIP: string;
+  userAgent: string;
+  action: string;
+}
+
+export interface DiskShareStats {
+  visitCount: number;
+  uniqueIPs: number;
+  lastAccessAt: string | null;
+  recentLogs: ShareAccessLog[];
+}
+
 export interface DiskRecycleBin {
   id: number;
   userId: string;

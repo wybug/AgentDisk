@@ -163,6 +163,83 @@ curl -X GET http://localhost:9100/v1/disk/shares \
 
 ---
 
+## 分享访问统计
+
+获取某个分享的访问统计（**仅分享创建者可查**）。返回累计访问次数、独立访客数（按 IP 去重）、最近访问时间，以及最近 50 条访问记录。访问日志在每次公开访问 `POST /v1/disk/share/access` 时写入。
+
+```
+GET /v1/disk/shares/:id/stats
+```
+
+### 认证方式
+
+需要 JWT Bearer Token 或 API Key 认证。
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `uint64` | 分享记录 ID |
+
+### 响应示例
+
+**HTTP 200 OK**
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "visitCount": 24,
+    "uniqueIPs": 7,
+    "lastAccessAt": "2026-07-21T06:30:00Z",
+    "recentLogs": [
+      {
+        "createdAt": "2026-07-21T06:30:00Z",
+        "visitorIP": "192.168.1.0",
+        "userAgent": "Mozilla/5.0 ...",
+        "action": "access"
+      }
+    ]
+  }
+}
+```
+
+### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `visitCount` | `int` | 累计访问次数 |
+| `uniqueIPs` | `uint64` | 独立访客数（按 visitor IP 去重） |
+| `lastAccessAt` | `string\|null` | 最近一次访问时间（RFC 3339），从未被访问时为 `null` |
+| `recentLogs` | `array` | 最近访问记录，最多 50 条，按时间倒序 |
+| `recentLogs[].createdAt` | `string` | 访问时间（RFC 3339） |
+| `recentLogs[].visitorIP` | `string` | 访问者 IP（**已脱敏**，IPv4 末段 / IPv6 末组置 0） |
+| `recentLogs[].userAgent` | `string` | 访问者 User-Agent |
+| `recentLogs[].action` | `string` | 访问动作，当前恒为 `access` |
+
+::: tip 出于隐私保护，`visitorIP` 在返回前已脱敏（末段置 0）；`uniqueIPs` 基于原始 IP 统计，不受脱敏影响。
+:::
+
+### curl 示例
+
+```bash
+curl -X GET http://localhost:9100/v1/disk/shares/1/stats \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### 错误场景
+
+| HTTP 状态码 | 场景说明 |
+|------------|---------|
+| 400 | `id` 不是合法数字 |
+| 401 | Token 无效或已过期 |
+| 403 | 当前用户不是该分享的创建者 |
+| 404 | 分享不存在 |
+| 500 | 查询失败 |
+
+---
+
 ## 撤销分享
 
 手动撤销一个分享链接，撤销后该分享立即失效。

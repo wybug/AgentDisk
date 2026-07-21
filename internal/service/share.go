@@ -2,11 +2,20 @@ package service
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/agentdisk/agent-disk/internal/model"
 	"github.com/agentdisk/agent-disk/internal/repository"
+)
+
+// Sentinel errors for the share service. Handlers map these to HTTP statuses
+// (404 / 403) via errors.Is so clients get graded responses (CLAUDE.md §4.4).
+var (
+	ErrShareNotFound         = errors.New("share not found")
+	ErrSharePermissionDenied = errors.New("permission denied")
 )
 
 type shareRepo interface {
@@ -17,6 +26,8 @@ type shareRepo interface {
 	RevokeByID(id uint64) error
 	ListByUser(userID string) ([]model.DiskShare, error)
 	LogAccess(log *model.ShareAccessLog) error
+	ListAccessLogsByShare(shareID uint64, limit int) ([]model.ShareAccessLog, error)
+	ShareAccessStats(shareID uint64) (repository.ShareAccessStatsRow, error)
 }
 
 type fileResourceRepo interface {
@@ -183,6 +194,93 @@ func (s *ShareService) RevokeShare(userID string, shareID uint64) error {
 // ListShares handles the request.
 func (s *ShareService) ListShares(userID string) ([]model.DiskShare, error) {
 	return s.repo.ListByUser(userID)
+}
+
+// shareStatsRecentLimit caps how many recent access-log rows ShareStats
+// returns in one response. The full log is not paginated today; this window
+// covers the "who accessed my share lately" use case. A follow-up can add a
+// cursor-based /shares/:id/access-logs endpoint for full history.
+const shareStatsRecentLimit = 50
+
+// shareAccessLogRow is a single masked access-log entry in ShareStatsResponse.
+type shareAccessLogRow struct {
+	CreatedAt time.Time `json:"createdAt"`
+	VisitorIP string    `json:"visitorIP"`
+	UserAgent string    `json:"userAgent"`
+	Action    string    `json:"action"`
+}
+
+// ShareStatsResponse summarizes a share's access activity for its owner.
+// LastAccessAt is nil (→ JSON null) when the share has never been accessed.
+type ShareStatsResponse struct {
+	VisitCount   int                 `json:"visitCount"`
+	UniqueIPs    uint64              `json:"uniqueIPs"`
+	LastAccessAt *time.Time          `json:"lastAccessAt"`
+	RecentLogs   []shareAccessLogRow `json:"recentLogs"`
+}
+
+// ShareStats returns aggregated access activity for a share, owner-only. The
+// distinct-IP count and last-access time come from a SQL aggregate (accurate
+// across the full log); the recent-logs window is capped at
+// shareStatsRecentLimit. Visitor IPs are masked before return (CLAUDE.md §4.6
+// 脱敏) so owners see access trends without the service exposing raw IPs.
+func (s *ShareService) ShareStats(userID string, shareID uint64) (*ShareStatsResponse, error) {
+	share, err := s.repo.GetByID(shareID)
+	if err != nil {
+		return nil, ErrShareNotFound
+	}
+	if share.UserID != userID {
+		return nil, ErrSharePermissionDenied
+	}
+	stats, err := s.repo.ShareAccessStats(shareID)
+	if err != nil {
+		return nil, fmt.Errorf("share access stats: %w", err)
+	}
+	logs, err := s.repo.ListAccessLogsByShare(shareID, shareStatsRecentLimit)
+	if err != nil {
+		return nil, fmt.Errorf("list access logs: %w", err)
+	}
+	rows := make([]shareAccessLogRow, 0, len(logs))
+	for i := range logs {
+		rows = append(rows, shareAccessLogRow{
+			CreatedAt: logs[i].CreatedAt,
+			VisitorIP: maskVisitorIP(logs[i].VisitorIP),
+			UserAgent: logs[i].UserAgent,
+			Action:    logs[i].Action,
+		})
+	}
+	// logs come back newest-first, so the first row is the most-recent access.
+	var lastAccess *time.Time
+	if len(logs) > 0 {
+		t := logs[0].CreatedAt
+		lastAccess = &t
+	}
+	return &ShareStatsResponse{
+		VisitCount:   share.VisitCount,
+		UniqueIPs:    stats.UniqueIPs,
+		LastAccessAt: lastAccess,
+		RecentLogs:   rows,
+	}, nil
+}
+
+// maskVisitorIP zeroes the last IPv4 octet (192.0.2.42 → 192.0.2.0) or the
+// last IPv6 group (2001:db8::1 → 2001:db8::0). Empty or non-IP strings are
+// returned as-is (they are already non-identifying).
+func maskVisitorIP(ip string) string {
+	if ip == "" {
+		return ""
+	}
+	if strings.Contains(ip, ":") {
+		if i := strings.LastIndex(ip, ":"); i >= 0 {
+			return ip[:i+1] + "0"
+		}
+	}
+	if strings.Contains(ip, ".") {
+		if i := strings.LastIndex(ip, "."); i >= 0 {
+			return ip[:i+1] + "0"
+		}
+	}
+	return ip
 }
 
 func generateShareCode() (string, error) {

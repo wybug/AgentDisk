@@ -3,12 +3,21 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/agentdisk/agent-disk/internal/model"
+	"github.com/agentdisk/agent-disk/internal/repository"
+	"github.com/agentdisk/agent-disk/internal/service"
 	"github.com/agentdisk/agent-disk/pkg/response"
 	"github.com/gin-gonic/gin"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // setupShareRouter creates a test router with share handler endpoints.
@@ -520,5 +529,121 @@ func TestShareDownload_ValidBinding(t *testing.T) {
 	resp := w.Body.String()
 	if !bytes.Contains([]byte(resp), []byte("42")) {
 		t.Errorf("response should contain resourceId 42, got %s", resp)
+	}
+}
+
+// ── GetShareStats (real repo→service→handler stack via in-memory SQLite) ──
+
+// sanitizeShareDSN strips SQLite DSN-illegal characters from the test name so
+// each test gets its own cache=shared in-memory database.
+func sanitizeShareDSN(s string) string {
+	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "'", "_")
+	return r.Replace(s)
+}
+
+// newShareStatsTestHandler builds a real ShareHandler over an in-memory SQLite
+// DB so the full stack — including the 404/403/500 error mapping in the
+// handler — is exercised. ShareStats only touches the share + access-log
+// tables, so we migrate just those. Returns the DB so callers can seed rows.
+func newShareStatsTestHandler(t *testing.T) (*ShareHandler, *gorm.DB) {
+	t.Helper()
+	dsn := fmt.Sprintf("file:sharestats_%s?mode=memory&cache=shared", sanitizeShareDSN(t.Name()))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&model.DiskShare{}, &model.ShareAccessLog{}); err != nil {
+		t.Fatalf("automigrate: %v", err)
+	}
+	repo := repository.NewShareRepo(db)
+	svc := service.NewShareService(repo, nil, nil)
+	return NewShareHandler(svc, "", 0), db
+}
+
+func TestGetShareStats_HappyPath(t *testing.T) {
+	h, db := newShareStatsTestHandler(t)
+	share := &model.DiskShare{UserID: "u1", ResourceID: 10, ResType: "file", ShareCode: "c1", VisitCount: 2, IsActive: true}
+	if err := db.Create(share).Error; err != nil {
+		t.Fatalf("seed share: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := db.Create(&model.ShareAccessLog{ShareID: share.ID, VisitorIP: "1.2.3.4", UserAgent: "curl", Action: "access", CreatedAt: now.Add(-time.Hour)}).Error; err != nil {
+		t.Fatalf("seed log: %v", err)
+	}
+	if err := db.Create(&model.ShareAccessLog{ShareID: share.ID, VisitorIP: "5.6.7.8", UserAgent: "mozilla", Action: "access", CreatedAt: now}).Error; err != nil {
+		t.Fatalf("seed log: %v", err)
+	}
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("userId", "u1"); c.Next() })
+	r.GET("/shares/:id/stats", h.GetShareStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", fmt.Sprintf("/shares/%d/stats", share.ID), nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{"visitCount", "uniqueIPs", "recentLogs", "1.2.3.0"} {
+		if !bytes.Contains([]byte(body), []byte(want)) {
+			t.Errorf("response missing %q: %s", want, body)
+		}
+	}
+	// raw visitor IP must NOT leak — only the masked form is returned.
+	if bytes.Contains([]byte(body), []byte("1.2.3.4")) {
+		t.Errorf("raw visitor IP leaked into response: %s", body)
+	}
+}
+
+func TestGetShareStats_InvalidID(t *testing.T) {
+	h, _ := newShareStatsTestHandler(t)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("userId", "u1"); c.Next() })
+	r.GET("/shares/:id/stats", h.GetShareStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/shares/abc/stats", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-numeric id, got %d", w.Code)
+	}
+}
+
+func TestGetShareStats_NotFound(t *testing.T) {
+	h, _ := newShareStatsTestHandler(t)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("userId", "u1"); c.Next() })
+	r.GET("/shares/:id/stats", h.GetShareStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/shares/9999/stats", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for missing share, got %d", w.Code)
+	}
+}
+
+func TestGetShareStats_NonOwnerForbidden(t *testing.T) {
+	h, db := newShareStatsTestHandler(t)
+	share := &model.DiskShare{UserID: "owner", ResourceID: 10, ResType: "file", ShareCode: "c1", IsActive: true}
+	if err := db.Create(share).Error; err != nil {
+		t.Fatalf("seed share: %v", err)
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("userId", "intruder"); c.Next() })
+	r.GET("/shares/:id/stats", h.GetShareStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", fmt.Sprintf("/shares/%d/stats", share.ID), nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for non-owner, got %d", w.Code)
 	}
 }

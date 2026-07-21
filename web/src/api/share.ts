@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { ApiResponse, DiskShare, CreateShareRequest, DownloadTokenResult } from './types';
+import type { ApiResponse, DiskShare, DiskShareStats, CreateShareRequest, DownloadTokenResult } from './types';
 
 export const shareApi = {
   create: (data: CreateShareRequest) =>
@@ -7,6 +7,9 @@ export const shareApi = {
 
   list: () =>
     apiClient.get<never, ApiResponse<DiskShare[]>>('/v1/disk/shares').then(r => r.data),
+
+  stats: (shareId: number) =>
+    apiClient.get<never, ApiResponse<DiskShareStats>>(`/v1/disk/shares/${shareId}/stats`).then(r => r.data),
 
   revoke: (shareId: number) =>
     apiClient.delete('/v1/disk/shares', { data: { shareId } }),

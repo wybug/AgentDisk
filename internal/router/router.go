@@ -322,6 +322,7 @@ func Setup(cfg *config.Config, cfgPath string) (*gin.Engine, *feature.Registry, 
 	// Shares
 	private.POST("/shares", shareH.CreateShare)
 	private.GET("/shares", shareH.ListShares)
+	private.GET("/shares/:id/stats", shareH.GetShareStats)
 	private.DELETE("/shares", shareH.RevokeShare)
 
 	// Preview

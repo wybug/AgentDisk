@@ -19,8 +19,9 @@
 - ✅ 可观测性地基三片：①InternalError 落盘真实详情 + 请求 ID 关联 ②静默吞掉的后台失败（AppendLogEntry/scheduleIndexRegen/bundle.Update/edges.DeleteByBundle 等）现经 logBestEffort 可见。
 - ✅ 跨 bundle 边隔离读侧守卫：BFS 结果按起点 bundle 过滤 + 日志（防 writer bug/DB 篡改导致的跨 bundle 泄露）。
 - ✅ bundle 导出（zip）：`GET /okf/bundles/:id/export` 流式 + 前端「导出 ZIP」按钮。
+- ✅ 分享访问分析（2026-07-21）：`GET /v1/disk/shares/:id/stats`（owner-only，404/403 分级 + visitor IP 末段脱敏）+ repo 读路径（`ListAccessLogsByShare` / `ShareAccessStats`）+ 前端「访问记录」抽屉（磁贴 + 最近 50 条日志）。`ShareAccessLog` 此前只写不读，现已点亮读路径（T5 §5.6 访问日志溯源）。
 
-**剩余（新会话推进）**：结构化全局审计、批量导入 API、分享访问分析、webhooks/事件、frontmatter 行内编辑、i18n、a11y、可观测性（指标 p99/缓存命中率 + tracing）、跨 bundle 边**写侧**不变量（schema：public_dir_id 入唯一键）、MySQL 搜索相关性排序（待 MySQL 测试环境）、图谱聚类/增量布局。
+**剩余（新会话推进）**：结构化全局审计、批量导入 API、webhooks/事件、frontmatter 行内编辑、i18n、a11y、可观测性（指标 p99/缓存命中率 + tracing）、跨 bundle 边**写侧**不变量（schema：public_dir_id 入唯一键）、MySQL 搜索相关性排序（待 MySQL 测试环境）、图谱聚类/增量布局。
 
 > **交接指引**：Tier 3 剩余项在**新会话**推进；每项按模块拆分（CLAUDE.md §2 归属），完成后**合并到 `feature/okf-integration`**。当前分支 0 behind origin，全门禁绿，可随时并入主干。
 

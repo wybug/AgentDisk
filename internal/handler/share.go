@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/agentdisk/agent-disk/internal/service"
@@ -113,6 +114,33 @@ func (h *ShareHandler) ListShares(c *gin.Context) {
 		return
 	}
 	response.OK(c, shares)
+}
+
+// GetShareStats handles GET /v1/disk/shares/:id/stats.
+//
+// Returns the owner's share-access analytics: visit count, distinct visitor
+// IPs, last access time, and a recent access-log window. Owner-only — a non-
+// owner gets 403, a missing share 404 (CLAUDE.md §4.4 error grading). Visitor
+// IPs are masked by the service before return.
+func (h *ShareHandler) GetShareStats(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid share id")
+		return
+	}
+	out, err := h.svc.ShareStats(c.GetString("userId"), id)
+	switch {
+	case errors.Is(err, service.ErrShareNotFound):
+		response.NotFound(c, "share not found")
+		return
+	case errors.Is(err, service.ErrSharePermissionDenied):
+		response.Forbidden(c, "permission denied")
+		return
+	case err != nil:
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, out)
 }
 
 // ShareDownloadReq represents a public share download request.

@@ -1,11 +1,14 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/agentdisk/agent-disk/internal/model"
+	"github.com/agentdisk/agent-disk/internal/repository"
 )
 
 // ── Mock repositories ──
@@ -93,6 +96,30 @@ func (m *mockShareRepo) ListByUser(userID string) ([]model.DiskShare, error) {
 func (m *mockShareRepo) LogAccess(log *model.ShareAccessLog) error {
 	m.access = append(m.access, log)
 	return nil
+}
+
+func (m *mockShareRepo) ListAccessLogsByShare(shareID uint64, limit int) ([]model.ShareAccessLog, error) {
+	var rows []model.ShareAccessLog
+	for _, l := range m.access {
+		if l.ShareID == shareID {
+			rows = append(rows, *l)
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].CreatedAt.After(rows[j].CreatedAt) })
+	if limit > 0 && len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows, nil
+}
+
+func (m *mockShareRepo) ShareAccessStats(shareID uint64) (repository.ShareAccessStatsRow, error) {
+	seen := make(map[string]struct{})
+	for _, l := range m.access {
+		if l.ShareID == shareID && l.VisitorIP != "" {
+			seen[l.VisitorIP] = struct{}{}
+		}
+	}
+	return repository.ShareAccessStatsRow{UniqueIPs: uint64(len(seen))}, nil
 }
 
 type mockFileResourceRepo struct {
@@ -680,5 +707,109 @@ func TestCreateShare_BundleNoGrantChecker(t *testing.T) {
 	_, err := svc.CreateShare("user001", 7, "bundle", "", -1, 72)
 	if err == nil {
 		t.Error("expected error when grantChecker is nil")
+	}
+}
+
+// ── ShareStats tests ──
+
+func TestShareStats_OwnerSeesAggregatesAndLogs(t *testing.T) {
+	svc, sr, _, _ := newTestShareService()
+	sr.addShare(&model.DiskShare{ID: 1, UserID: "u1", ShareCode: "c1", VisitCount: 3})
+	base := time.Now().UTC()
+	sr.access = append(sr.access,
+		&model.ShareAccessLog{ShareID: 1, VisitorIP: "10.0.0.1", UserAgent: "curl/8", Action: "access", CreatedAt: base.Add(-2 * time.Hour)},
+		&model.ShareAccessLog{ShareID: 1, VisitorIP: "10.0.0.2", UserAgent: "Mozilla", Action: "access", CreatedAt: base.Add(-1 * time.Hour)},
+		&model.ShareAccessLog{ShareID: 1, VisitorIP: "10.0.0.1", UserAgent: "curl/8", Action: "access", CreatedAt: base},
+	)
+
+	out, err := svc.ShareStats("u1", 1)
+	if err != nil {
+		t.Fatalf("ShareStats: %v", err)
+	}
+	if out.VisitCount != 3 {
+		t.Errorf("visitCount = %d, want 3", out.VisitCount)
+	}
+	// 2 distinct raw IPs (10.0.0.1 counted once), even though both mask to 10.0.0.0.
+	if out.UniqueIPs != 2 {
+		t.Errorf("uniqueIPs = %d, want 2", out.UniqueIPs)
+	}
+	if out.LastAccessAt == nil || !out.LastAccessAt.Equal(base) {
+		t.Errorf("lastAccessAt = %v, want %v", out.LastAccessAt, base)
+	}
+	if len(out.RecentLogs) != 3 {
+		t.Fatalf("recentLogs len = %d, want 3", len(out.RecentLogs))
+	}
+	if !out.RecentLogs[0].CreatedAt.Equal(base) {
+		t.Errorf("recentLogs not newest-first; [0] = %v", out.RecentLogs[0].CreatedAt)
+	}
+	for i, l := range out.RecentLogs {
+		if l.VisitorIP != "10.0.0.0" {
+			t.Errorf("recentLogs[%d].visitorIP = %q, want masked 10.0.0.0", i, l.VisitorIP)
+		}
+	}
+}
+
+func TestShareStats_NonOwnerDenied(t *testing.T) {
+	svc, sr, _, _ := newTestShareService()
+	sr.addShare(&model.DiskShare{ID: 1, UserID: "u1", ShareCode: "c1"})
+	_, err := svc.ShareStats("u2", 1)
+	if !errors.Is(err, ErrSharePermissionDenied) {
+		t.Fatalf("err = %v, want ErrSharePermissionDenied", err)
+	}
+}
+
+func TestShareStats_NotFound(t *testing.T) {
+	svc, _, _, _ := newTestShareService()
+	_, err := svc.ShareStats("u1", 999)
+	if !errors.Is(err, ErrShareNotFound) {
+		t.Fatalf("err = %v, want ErrShareNotFound", err)
+	}
+}
+
+func TestShareStats_EmptyLogs(t *testing.T) {
+	svc, sr, _, _ := newTestShareService()
+	sr.addShare(&model.DiskShare{ID: 1, UserID: "u1", ShareCode: "c1"})
+	out, err := svc.ShareStats("u1", 1)
+	if err != nil {
+		t.Fatalf("ShareStats: %v", err)
+	}
+	if out.UniqueIPs != 0 {
+		t.Errorf("uniqueIPs = %d, want 0", out.UniqueIPs)
+	}
+	if out.LastAccessAt != nil {
+		t.Errorf("lastAccessAt = %v, want nil", out.LastAccessAt)
+	}
+	if len(out.RecentLogs) != 0 {
+		t.Errorf("recentLogs len = %d, want 0", len(out.RecentLogs))
+	}
+}
+
+func TestShareStats_MasksVisitorIP(t *testing.T) {
+	svc, sr, _, _ := newTestShareService()
+	sr.addShare(&model.DiskShare{ID: 1, UserID: "u1", ShareCode: "c1"})
+	sr.access = append(sr.access, &model.ShareAccessLog{
+		ShareID: 1, VisitorIP: "192.168.1.42", UserAgent: "ua", Action: "access", CreatedAt: time.Now(),
+	})
+	out, err := svc.ShareStats("u1", 1)
+	if err != nil {
+		t.Fatalf("ShareStats: %v", err)
+	}
+	if len(out.RecentLogs) != 1 || out.RecentLogs[0].VisitorIP != "192.168.1.0" {
+		t.Fatalf("masked visitorIP = %q, want 192.168.1.0", out.RecentLogs[0].VisitorIP)
+	}
+}
+
+func TestMaskVisitorIP(t *testing.T) {
+	cases := map[string]string{
+		"192.168.1.42": "192.168.1.0",
+		"10.0.0.1":     "10.0.0.0",
+		"2001:db8::1":  "2001:db8::0",
+		"":             "",
+		"unknown":      "unknown",
+	}
+	for in, want := range cases {
+		if got := maskVisitorIP(in); got != want {
+			t.Errorf("maskVisitorIP(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
